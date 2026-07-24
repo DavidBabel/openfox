@@ -143,6 +143,49 @@ export function DisplayTab() {
           />
         </label>
       </div>
+
+      <div className="border-t border-border pt-4">
+        <h3 className="text-sm font-medium text-text-primary mb-2">Custom CSS</h3>
+        <p className="text-xs text-text-muted mb-3">
+          Inject custom CSS to override any styles. Useful for scrollbar tweaks, fonts, or hiding elements. Changes
+          apply immediately.
+        </p>
+        <CustomCssEditor />
+      </div>
     </div>
+  )
+}
+
+function CustomCssEditor() {
+  const { settings, getSetting, setSetting } = useSettingsStoreState()
+  const savedCss = settings[SETTINGS_KEYS.DISPLAY_CUSTOM_CSS] ?? ''
+  const [localCss, setLocalCss] = useState(savedCss)
+
+  useEffect(() => {
+    getSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS)
+  }, [getSetting])
+
+  useEffect(() => {
+    setLocalCss(savedCss)
+  }, [savedCss])
+
+  const handleSave = () => {
+    setSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS, localCss)
+  }
+
+  return (
+    <textarea
+      value={localCss}
+      onChange={(e) => setLocalCss(e.target.value)}
+      onBlur={handleSave}
+      placeholder={`/* Example: make Firefox scrollbar thicker */
+@-moz-document url-prefix() {
+  * {
+    scrollbar-width: auto;
+  }
+}`}
+      className="w-full h-32 px-3 py-2 text-xs font-mono text-text-primary bg-bg-tertiary border border-border rounded resize-y focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
+      spellCheck={false}
+    />
   )
 }
