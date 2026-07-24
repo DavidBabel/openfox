@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.90 - 2026-07-24
+
+### Features
+
+- **Compact sidebar summary header** — when the right sidebar is hidden, a compact bar shows workspace/branch, metadata status, token context, and dev server controls with clickable popovers for full details.
+- **Scroll-to-top button in chat feed** — hover to reveal at the top of the message list; click to scroll up and disable auto-scroll.
+- **Scrollbar preset picker with Custom CSS editor** — choose from built-in scrollbar styles or write your own CSS in the Display settings.
+
+### Enhancements
+
+- **Native browser scrollbars by default** — replaced custom scrollbar CSS with native scrollbars for better platform consistency; power users can customize via the new CSS editor.
+- **Long session names truncated at 50 characters** — header dropdown, session list, and mobile nav now cap overly long names.
+
 ## 2.0.89 - 2026-07-23
 
 ### Features
