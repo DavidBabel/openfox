@@ -79,7 +79,7 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
         <div className="mt-4">
           <button
             onClick={() => setActiveMetadataKey('criteria')}
-            className="w-full text-left cursor-pointer hover:bg-bg-tertiary rounded px-1 -mx-1 transition-colors"
+            className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
           >
             <MetadataSectionHeader entries={session?.metadataEntries?.['criteria'] ?? []} title="Acceptance Criteria" />
           </button>
@@ -98,7 +98,7 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
                   <div key={key} className="mt-6">
                     <button
                       onClick={() => setActiveMetadataKey(key)}
-                      className="w-full text-left cursor-pointer hover:bg-bg-tertiary rounded px-1 -mx-1 transition-colors"
+                      className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
                     >
                       <MetadataSectionHeader entries={all[key]!} title={formatMetadataKeyLabel(key)} />
                     </button>
@@ -211,17 +211,16 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
 
       <AutoUpdateModal isOpen={showUpdateModal} onClose={() => setShowUpdateModal(false)} versionInfo={null} />
 
-      <MetadataModal
-        isOpen={activeMetadataKey !== null}
-        onClose={() => setActiveMetadataKey(null)}
-        entries={session?.metadataEntries?.[activeMetadataKey ?? ''] ?? []}
-        sessionId={session?.id ?? ''}
-        metadataKey={activeMetadataKey ?? ''}
-        title={formatMetadataKeyLabel(activeMetadataKey ?? '')}
-      />
-
       {session && (
         <>
+          <MetadataModal
+            isOpen={activeMetadataKey !== null}
+            onClose={() => setActiveMetadataKey(null)}
+            entries={session.metadataEntries?.[activeMetadataKey ?? ''] ?? []}
+            sessionId={session.id}
+            metadataKey={activeMetadataKey ?? ''}
+            title={formatMetadataKeyLabel(activeMetadataKey ?? '')}
+          />
           <WorkspaceModal
             isOpen={showWorkspaceModal}
             onClose={() => setShowWorkspaceModal(false)}
