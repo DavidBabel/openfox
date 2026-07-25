@@ -61,7 +61,8 @@ The user approves the fix plan. The agent applies fixes in the workspace.
 
 ```bash
 # Apply fixes (agent uses write_file / edit_file tools)
-# NOTE: Do NOT commit yet — that happens in Phase 5.
+git add -A && git commit -m "review: <summary of fixes> (#<N>)"   # timeout: 120000ms
+git tag review-fixes-<N>
 ```
 
 ### Phase 4 — User Tests
@@ -101,12 +102,7 @@ When the user says **"Merge it"**, the agent runs a single unified flow. It work
 
 ```bash
 # ──────────────────────────────────────────────
-# 1. Save all review fixes as a patch
-# ──────────────────────────────────────────────
-git diff > /tmp/pr-<N>-review-fixes.patch
-
-# ──────────────────────────────────────────────
-# 2. Squash-merge the PR (original contributor code only)
+# 1. Squash-merge the PR (original contributor code only)
 #    The API operates on the remote PR branch — it ignores our
 #    local state entirely. No force-push needed.
 # ──────────────────────────────────────────────
@@ -115,46 +111,44 @@ gh api repos/co-l/openfox/pulls/<N>/merge -X PUT \
   -f commit_title="feat: description (#<N>)"
 
 # ──────────────────────────────────────────────
-# 3. Switch back to the original project
+# 2. Switch back to the original project
 # ──────────────────────────────────────────────
 workspace switch original
 
 # ──────────────────────────────────────────────
-# 4. Pull the latest develop (now includes the squash-merge)
+# 3. Pull the latest develop (now includes the squash-merge)
 # ──────────────────────────────────────────────
 git checkout develop && git pull origin develop --ff-only
 
 # ──────────────────────────────────────────────
-# 5. Apply all our fixes as ONE commit on develop
+# 4. Cherry-pick our review fixes onto develop
 # ──────────────────────────────────────────────
-git apply /tmp/pr-<N>-review-fixes.patch
-git add -A
-git commit -m "review: <summary of fixes> (#<N>)"   # timeout: 120000ms
+git cherry-pick review-fixes-<N>
 git push origin develop
 
 # ──────────────────────────────────────────────
-# 6. ✅ Verify — both commits visible on origin/develop
+# 5. ✅ Verify — both commits visible on origin/develop
 # ──────────────────────────────────────────────
 echo "=== origin/develop after merge ==="
 git log --oneline origin/develop -3
 
 # ──────────────────────────────────────────────
-# 7. Clean up
+# 6. Clean up
 # ──────────────────────────────────────────────
-rm /tmp/pr-<N>-review-fixes.patch
+git tag -d review-fixes-<N>
 workspace delete review-pr-<N>
 ```
 
 **What's happening under the hood:**
 
-- **Step 1** dumps the diff to `/tmp`. Plain text, human-readable, zero-config.
-- **Step 2** tells GitHub to squash-merge the PR's remote branch into `develop`. Our local changes don't participate.
-- **Step 5** replays the exact same diff onto develop and commits it as a single atomic fix commit.
+- **Phase 3** commits our fixes and tags them with `review-fixes-<N>`.
+- **Step 1** tells GitHub to squash-merge the PR's remote branch into `develop`. Our local tag stays in the workspace untouched.
+- **Step 4** cherry-picks the tagged commit onto develop. Unlike `git apply` (which uses fuzzy line-context matching), cherry-pick operates on committed tree objects — it's immune to context shifts from the squash.
 
 **Result on `origin/develop`:**
 
 ```
-abc1234 review: <summary> (#<N>)      ← our single fix commit
+abc1234 review: <summary> (#<N>)      ← our fix commit (cherry-picked)
 def5678 feat: description (#<N>)      ← PR squash-merge
 ghi9012 ...                            ← previous develop
 ```
@@ -184,7 +178,8 @@ npm run test:unit && npm run test:e2e
 
 # ── Fix (agent proposes → user approves) ──
 # agent applies fixes via edit_file
-# NOTE: Do NOT commit yet — that happens in the merge phase.
+git add -A && git commit -m "review: fix windows path handling in npm spawn (#103)"   # timeout: 120000ms
+git tag review-fixes-103
 
 # ── Agent starts dev server and hands off ──
 dev_server start
@@ -193,36 +188,36 @@ dev_server start
 # ── User tests, iterates if needed ──
 
 # ── Merge (user says "merge it") ──
-git diff > /tmp/pr-103-review-fixes.patch
 gh api repos/co-l/openfox/pulls/103/merge -X PUT \
   -f merge_method=squash \
   -f commit_title="feat: PDF embedded-image support (#103)"
 workspace switch original
 git checkout develop && git pull origin develop --ff-only
-git apply /tmp/pr-103-review-fixes.patch
-git add -A && git commit -m "review: fix windows path handling in npm spawn (#103)"   # timeout: 120000ms
+git cherry-pick review-fixes-103
 git push origin develop
 git log --oneline origin/develop -3
-rm /tmp/pr-103-review-fixes.patch
+git tag -d review-fixes-103
 workspace delete review-pr-103
 ```
 
 ## Common Pitfalls
 
-### Patch apply fails
+### Cherry-pick conflicts
 
-**Scenario:** `git apply /tmp/pr-<N>-review-fixes.patch` fails with "patch does not apply."
+**Scenario:** `git cherry-pick review-fixes-<N>` fails with conflicts.
 
-**Root cause:** The squash-merge changed the base code in ways that conflict with our patch (rare — usually means the PR was force-pushed between review and merge).
+**Root cause:** The PR was force-pushed between Phase 3 (fix commit) and Phase 5 (merge), causing the squash-merge to produce different code than what our fixes were based on.
 
-**Fix:** Regenerate the patch from the workspace before resetting:
+**Fix:** Re-review from Phase 2 — the PR changed under us.
 
 ```bash
-# In the workspace, after confirming the PR hasn't changed:
-git diff > /tmp/pr-<N>-review-fixes.patch
-```
+# Abort the cherry-pick
+git cherry-pick --abort
 
-If the PR did change (someone pushed new commits), re-review from Phase 2.
+# Switch back to the workspace to re-evaluate
+workspace switch review-pr-<N>
+# Continue from Phase 2
+```
 
 ### `gh pr merge` GraphQL deprecation
 
