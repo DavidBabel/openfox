@@ -102,7 +102,13 @@ When the user says **"Merge it"**, the agent runs a single unified flow. It work
 
 ```bash
 # ──────────────────────────────────────────────
-# 1. Squash-merge the PR (original contributor code only)
+# 1. Push our fix tag to origin (workspace objects
+#    aren't visible from the original repo)
+# ──────────────────────────────────────────────
+git push origin review-fixes-<N>
+
+# ──────────────────────────────────────────────
+# 2. Squash-merge the PR (original contributor code only)
 #    The API operates on the remote PR branch — it ignores our
 #    local state entirely. No force-push needed.
 # ──────────────────────────────────────────────
@@ -111,30 +117,32 @@ gh api repos/co-l/openfox/pulls/<N>/merge -X PUT \
   -f commit_title="feat: description (#<N>)"
 
 # ──────────────────────────────────────────────
-# 2. Switch back to the original project
+# 3. Switch back to the original project
 # ──────────────────────────────────────────────
 workspace switch original
 
 # ──────────────────────────────────────────────
-# 3. Pull the latest develop (now includes the squash-merge)
+# 4. Pull the latest develop (now includes the squash-merge)
 # ──────────────────────────────────────────────
 git checkout develop && git pull origin develop --ff-only
 
 # ──────────────────────────────────────────────
-# 4. Cherry-pick our review fixes onto develop
+# 5. Fetch our tag and cherry-pick the fixes onto develop
 # ──────────────────────────────────────────────
-git cherry-pick review-fixes-<N>
+git fetch origin refs/tags/review-fixes-<N>
+git cherry-pick FETCH_HEAD
 git push origin develop
 
 # ──────────────────────────────────────────────
-# 5. ✅ Verify — both commits visible on origin/develop
+# 6. ✅ Verify — both commits visible on origin/develop
 # ──────────────────────────────────────────────
 echo "=== origin/develop after merge ==="
 git log --oneline origin/develop -3
 
 # ──────────────────────────────────────────────
-# 6. Clean up
+# 7. Clean up (remote tag + local tag)
 # ──────────────────────────────────────────────
+git push origin --delete refs/tags/review-fixes-<N>
 git tag -d review-fixes-<N>
 workspace delete review-pr-<N>
 ```
@@ -142,8 +150,9 @@ workspace delete review-pr-<N>
 **What's happening under the hood:**
 
 - **Phase 3** commits our fixes and tags them with `review-fixes-<N>`.
-- **Step 1** tells GitHub to squash-merge the PR's remote branch into `develop`. Our local tag stays in the workspace untouched.
-- **Step 4** cherry-picks the tagged commit onto develop. Unlike `git apply` (which uses fuzzy line-context matching), cherry-pick operates on committed tree objects — it's immune to context shifts from the squash.
+- **Step 1** pushes the tag to origin so it's accessible from the original repo (workspaces share objects one-way via alternates — the original repo can't see workspace-local objects).
+- **Step 2** tells GitHub to squash-merge the PR's remote branch into `develop`.
+- **Step 5** fetches the tag (into `FETCH_HEAD`) and cherry-picks it. Unlike `git apply` (which uses fuzzy line-context matching), cherry-pick operates on committed tree objects — it's immune to context shifts from the squash.
 
 **Result on `origin/develop`:**
 
