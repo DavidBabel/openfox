@@ -1289,6 +1289,7 @@ async function handleClientMessage(
             subGroup?: string
             resumeFrom?: string
             stepOutput?: Record<string, string>
+            params?: Record<string, string>
           }
         | undefined
       const launchAttachments = launchPayload?.attachments as Attachment[] | undefined
@@ -1329,6 +1330,7 @@ async function handleClientMessage(
         ...(launchPayload?.subGroup ? { subGroup: launchPayload.subGroup } : {}),
         ...(isResume && launchPayload?.resumeFrom ? { resumeFromStep: launchPayload.resumeFrom } : {}),
         ...(isResume && launchPayload?.stepOutput ? { initialStepOutput: launchPayload.stepOutput } : {}),
+        ...(launchPayload?.params ? { params: launchPayload.params } : {}),
         ...(hasUserMessage
           ? {
               userMessage: {
@@ -1340,12 +1342,13 @@ async function handleClientMessage(
         signal: controller.signal,
         onMessage: (msg) => _broadcastForSession(sessionId, msg), // For path confirmation dialogs
       })
-        .catch((error) => {
+        .catch((error: unknown) => {
           // Don't create error message for controlled abort
           if (error instanceof Error && error.message === 'Aborted') {
             return
           }
-          logger.error('Runner error', { error, sessionId })
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          logger.error('Runner error', { error: errorMessage, sessionId })
           // Error events are handled inside runOrchestrator and appended to EventStore
         })
         .finally(() => {

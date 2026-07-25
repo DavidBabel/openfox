@@ -126,6 +126,7 @@ describe('step_done executor integration', () => {
       criteriaList: '- c1 [PENDING]',
       modifiedFiles: '- src/index.ts',
       stepOutput: { content: 'Previous attempt failed' },
+      params: {},
     }
 
     const resolved = resolveTemplate(nudgeTemplate, ctx)

@@ -23,7 +23,10 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
   const workflowId = options.workflowId ?? runtimeConfig.activeWorkflowId ?? 'default'
   const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
 
-  const workflows = await loadAllWorkflows(configDir)
+  // Also load project workflows so project-specific workflows are discoverable
+  const session = options.sessionManager.requireSession(options.sessionId)
+  const projectDir = session.workdir
+  const workflows = await loadAllWorkflows(configDir, projectDir)
   const workflow = findWorkflowById(workflowId, workflows)
 
   if (!workflow) {

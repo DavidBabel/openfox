@@ -93,7 +93,13 @@ export interface SessionState {
   ) => void
   stopGeneration: () => void
   continueGeneration: () => void
-  launchWorkflow: (content?: string, attachments?: Attachment[], workflowId?: string, subGroup?: string) => void
+  launchWorkflow: (
+    content?: string,
+    attachments?: Attachment[],
+    workflowId?: string,
+    subGroup?: string,
+    params?: Record<string, string>,
+  ) => void
   continueWorkflow: () => void
   switchMode: (mode: SessionMode) => void
   switchDangerLevel: (dangerLevel: 'normal' | 'dangerous') => void

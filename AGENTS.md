@@ -104,10 +104,6 @@ Precommit hooks take >40s, so always use a 120s timeout when committing:
 git commit -m "message"   # timeout: 120000ms
 ```
 
-### PR Review
-
-If user calls "/review N", read [docs/PR-REVIEW.md](PR-REVIEW.md) and instantly start the process with PR number N.
-
 ### Release
 
 Features accumulate on `develop` via squash-merges. `main` stays aligned with the latest published version.
@@ -204,7 +200,7 @@ Session state is derived from EventStore, not persisted directly:
 
 ### `.openfox/` Directory Contract
 
-Every file in `.openfox/` must be **committable** and **meaningful in the project context** — it describes how OpenFox interacts with *this repository* for any contributor.
+Every file in `.openfox/` must be **committable** and **meaningful in the project context** — it describes how OpenFox interacts with _this repository_ for any contributor.
 
 **Belongs in `.openfox/`:** `dev.json`, `workspace.json`, `commands/*`, `skills/*`, `workflows/*`, `agents/*` — anything that shapes the project's tooling, automation, or agent behavior.
 

@@ -37,7 +37,9 @@ import { loadAllWorkflows, findWorkflowById } from '../workflows/registry.js'
 import { executeWorkflow } from '../workflows/executor.js'
 
 const mockOptions: OrchestratorOptions = {
-  sessionManager: {} as any,
+  sessionManager: {
+    requireSession: vi.fn(() => ({ workdir: '/mock/project' })),
+  } as any,
   sessionId: 'test-session',
   llmClient: {} as any,
 }

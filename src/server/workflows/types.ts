@@ -10,12 +10,21 @@
 // Workflow Definition
 // ============================================================================
 
+export interface WorkflowParameter {
+  id: string
+  label: string
+  description?: string
+  position?: number
+  required?: boolean
+}
+
 export interface WorkflowMetadata {
   id: string
   name: string
   description: string
   version: string
   color?: string
+  parameters?: WorkflowParameter[]
 }
 
 export interface WorkflowSettings {

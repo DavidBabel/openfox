@@ -15,9 +15,15 @@ export function useScrolledSend(setAutoScroll: (active: boolean) => void) {
   )
 
   const launchWorkflow = useCallback(
-    (content?: string, attachments?: Attachment[], workflowId?: string, subGroup?: string) => {
+    (
+      content?: string,
+      attachments?: Attachment[],
+      workflowId?: string,
+      subGroup?: string,
+      params?: Record<string, string>,
+    ) => {
       setAutoScroll(true)
-      storeLaunchWorkflow(content, attachments, workflowId, subGroup)
+      storeLaunchWorkflow(content, attachments, workflowId, subGroup, params)
     },
     [setAutoScroll, storeLaunchWorkflow],
   )

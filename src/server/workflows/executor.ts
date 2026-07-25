@@ -45,6 +45,8 @@ export interface TemplateContext {
   criteriaList: string
   modifiedFiles: string
   stepOutput: Record<string, string>
+  /** User-supplied parameters from workflow launch (e.g. slash command args) */
+  params: Record<string, string>
 }
 
 /** Canonical list of template variables — single source of truth for resolveTemplate and the API. */
@@ -92,6 +94,7 @@ export async function formatModifiedFiles(workdir: string): Promise<string> {
 
 export function resolveTemplate(template: string, ctx: TemplateContext): string {
   let result = template
+  // Resolve built-in variables first
   for (const { name } of TEMPLATE_VARIABLES) {
     if (name === 'stepOutput' || name === 'verifierFindings' || name === 'previousStepOutput') continue
     const value = String(ctx[name as keyof TemplateContext])
@@ -100,6 +103,11 @@ export function resolveTemplate(template: string, ctx: TemplateContext): string 
   result = result.replace(/\{\{stepOutput\.(\w+)\}\}/g, (_, key) => ctx.stepOutput[key] ?? '')
   result = result.replace(/\{\{verifierFindings\}\}/g, ctx.stepOutput['content'] ?? '')
   result = result.replace(/\{\{previousStepOutput\}\}/g, ctx.stepOutput['stdout'] ?? '')
+  // Resolve user-supplied params (lower priority — can't override built-ins)
+  // Use replaceAll for literal string matching (avoids regex injection from param names)
+  for (const [key, value] of Object.entries(ctx.params)) {
+    result = result.replaceAll(`{{${key}}}`, value)
+  }
   return result
 }
 
@@ -350,6 +358,7 @@ export async function executeWorkflow(
       criteriaList: formatCriteriaList(criteriaEntries),
       modifiedFiles: await formatModifiedFiles(sessionManager.getEffectiveWorkdir(sessionId)),
       stepOutput: lastStepOutput,
+      params: options.params ?? {},
     }
 
     // Set session phase

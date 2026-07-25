@@ -11,6 +11,14 @@ export interface WorkflowCondition {
   values?: string[]
 }
 
+export interface WorkflowParameter {
+  id: string
+  label: string
+  description?: string
+  position?: number
+  required?: boolean
+}
+
 export interface WorkflowInfo {
   id: string
   name: string
@@ -19,6 +27,7 @@ export interface WorkflowInfo {
   color?: string
   startCondition?: WorkflowCondition
   subGroups?: string[]
+  parameters?: WorkflowParameter[]
 }
 
 export interface WorkflowStep {
@@ -38,7 +47,14 @@ export interface WorkflowStep {
 }
 
 export interface WorkflowFull {
-  metadata: { id: string; name: string; description: string; version: string; color?: string }
+  metadata: {
+    id: string
+    name: string
+    description: string
+    version: string
+    color?: string
+    parameters?: WorkflowParameter[]
+  }
   entryStep: string
   settings: { maxIterations: number }
   steps: WorkflowStep[]

@@ -39,6 +39,7 @@ function makeTemplateContext(overrides: Partial<TemplateContext> = {}): Template
     criteriaList: '- c1 [PASSED]: do thing',
     modifiedFiles: '- src/index.ts',
     stepOutput: { content: 'Some findings', stdout: 'exit 0' },
+    params: {},
     ...overrides,
   }
 }
@@ -320,6 +321,17 @@ describe('resolveTemplate', () => {
     const template = '{{criteriaCount}} total, {{pendingCount}} pending'
     expect(resolveTemplate(template, ctx)).toBe('5 total, 0 pending')
   })
+})
+it('resolves user-supplied params from template context', () => {
+  const ctx = makeTemplateContext({ params: { pr_number: '157', pr_title: 'Fix bug' } })
+  const template = 'PR #{{pr_number}}: {{pr_title}}'
+  expect(resolveTemplate(template, ctx)).toBe('PR #157: Fix bug')
+})
+
+it('built-in variables take precedence over user params', () => {
+  const ctx = makeTemplateContext({ workdir: '/real/path', params: { workdir: '/fake/path' } })
+  const template = '{{workdir}}'
+  expect(resolveTemplate(template, ctx)).toBe('/real/path')
 })
 
 // ============================================================================

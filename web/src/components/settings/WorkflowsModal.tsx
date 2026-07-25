@@ -2,7 +2,13 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { Button } from '../shared/Button'
 import { EditButton } from '../shared/IconButton'
-import { useWorkflowsStore, type WorkflowFull, type WorkflowStep, type WorkflowCondition } from '../../stores/workflows'
+import {
+  useWorkflowsStore,
+  type WorkflowFull,
+  type WorkflowStep,
+  type WorkflowCondition,
+  type WorkflowParameter,
+} from '../../stores/workflows'
 import { useAgentsStore } from '../../stores/agents'
 import { ArrowRightIcon, EyeIcon } from '../shared/icons'
 import { ConfirmButton, DeleteIcon, DuplicateIcon, useConfirmDialog, CRUDListHeader } from './CRUDModal'
@@ -71,6 +77,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
 
   const [formSteps, setFormSteps] = useState<WorkflowStep[]>(DEFAULT_STEPS)
   const [formStartCondition, setFormStartCondition] = useState<WorkflowCondition>({ type: 'always' })
+  const [formParameters, setFormParameters] = useState<WorkflowParameter[]>([])
   const [formError, setFormError] = useState('')
   const [_saving, setSaving] = useState(false)
   const agentDefaults = useAgentsStore((s) => s.defaults)
@@ -124,7 +131,14 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
 
   const populateForm = (
     workflow: {
-      metadata: { name: string; id: string; description: string; version: string; color?: string }
+      metadata: {
+        name: string
+        id: string
+        description: string
+        version: string
+        color?: string
+        parameters?: WorkflowParameter[]
+      }
       entryStep: string
       settings: { maxIterations: number }
       steps: import('../../stores/workflows').WorkflowStep[]
@@ -141,6 +155,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
     setFormMaxIterations(workflow.settings.maxIterations)
     setFormSteps(workflow.steps)
     setFormStartCondition(workflow.startCondition ?? { type: 'always' })
+    setFormParameters(workflow.metadata.parameters ?? [])
     setFormError('')
     if (extra?.editingId !== undefined) setEditingId(extra.editingId)
     if (extra?.isReadOnly !== undefined) setIsReadOnly(extra.isReadOnly)
@@ -165,6 +180,11 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
       setFormError('Add at least one step.')
       return false
     }
+    const invalidParam = formParameters.find((p) => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p.id))
+    if (invalidParam) {
+      setFormError(`Invalid parameter ID "${invalidParam.id}". Use letters, digits, and underscores only.`)
+      return false
+    }
     let entry = formEntryStep
     if (!entry || !formSteps.some((s) => s.id === entry)) {
       entry = formSteps.find((s) => s.id)?.id ?? ''
@@ -177,7 +197,14 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
     setSaving(true)
     setFormError('')
     const workflow: WorkflowFull = {
-      metadata: { id, name: formName, description: formDescription, version: formVersion || '1.0.0', color: formColor },
+      metadata: {
+        id,
+        name: formName,
+        description: formDescription,
+        version: formVersion || '1.0.0',
+        color: formColor,
+        ...(formParameters.length > 0 ? { parameters: formParameters } : {}),
+      },
       entryStep: entry,
       settings: { maxIterations: formMaxIterations },
       steps: formSteps,
@@ -248,6 +275,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
     setFormMaxIterations(50)
     setFormSteps(structuredClone(DEFAULT_STEPS))
     setFormStartCondition({ type: 'always' })
+    setFormParameters([])
     setFormError('')
     setSelectedNodeKey(null)
     setSelectedEdgeKey(null)
@@ -477,6 +505,119 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
           onMaxIterationsChange={setFormMaxIterations}
           onColorChange={setFormColor}
         />
+
+        {/* Parameters */}
+        {!isReadOnly && (
+          <div className="mb-3 pb-3 border-b border-border">
+            <details className="group">
+              <summary className="text-[11px] text-text-secondary uppercase tracking-wider font-medium cursor-pointer select-none hover:text-text-primary transition-colors">
+                Parameters ({formParameters.length})
+              </summary>
+              <div className="mt-2 space-y-2">
+                {formParameters.map((p, i) => (
+                  <div key={p.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      value={p.id}
+                      onChange={(e) => {
+                        const next = [...formParameters]
+                        next[i] = { ...p, id: e.target.value }
+                        setFormParameters(next)
+                      }}
+                      placeholder="ID"
+                      className="w-28 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                    />
+                    <input
+                      value={p.label}
+                      onChange={(e) => {
+                        const next = [...formParameters]
+                        next[i] = { ...p, label: e.target.value }
+                        setFormParameters(next)
+                      }}
+                      placeholder="Label"
+                      className="w-36 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                    />
+                    <input
+                      value={p.description ?? ''}
+                      onChange={(e) => {
+                        const next = [...formParameters]
+                        next[i] = { ...p, description: e.target.value || undefined }
+                        setFormParameters(next)
+                      }}
+                      placeholder="Description"
+                      className="flex-1 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                    />
+                    <label className="flex items-center gap-1 text-[10px] text-text-muted whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={p.required ?? false}
+                        onChange={(e) => {
+                          const next = [...formParameters]
+                          next[i] = { ...p, required: e.target.checked || undefined }
+                          setFormParameters(next)
+                        }}
+                        className="rounded border-border"
+                      />
+                      Req.
+                    </label>
+                    <div className="flex gap-0.5">
+                      <button
+                        onClick={() => {
+                          if (i === 0) return
+                          const next = [...formParameters]
+                          ;[next[i - 1], next[i]] = [next[i]!, next[i - 1]!]
+                          // Update positions to match new order
+                          next.forEach((param, idx) => {
+                            param.position = idx
+                          })
+                          setFormParameters(next)
+                        }}
+                        disabled={i === 0}
+                        className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
+                        title="Move up"
+                        aria-label={`Move ${p.label || p.id} up`}
+                      >
+                        ▲
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (i === formParameters.length - 1) return
+                          const next = [...formParameters]
+                          ;[next[i], next[i + 1]] = [next[i + 1]!, next[i]!]
+                          next.forEach((param, idx) => {
+                            param.position = idx
+                          })
+                          setFormParameters(next)
+                        }}
+                        disabled={i === formParameters.length - 1}
+                        className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
+                        title="Move down"
+                        aria-label={`Move ${p.label || p.id} down`}
+                      >
+                        ▼
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setFormParameters(formParameters.filter((_, j) => j !== i))}
+                      className="p-1 text-text-muted hover:text-accent-error transition-colors"
+                      title="Remove parameter"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const id = `param_${formParameters.length + 1}`
+                    setFormParameters([...formParameters, { id, label: '', description: '', required: false }])
+                  }}
+                  className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+                >
+                  + Add parameter
+                </button>
+              </div>
+            </details>
+          </div>
+        )}
 
         <div className="flex gap-3" style={{ height: 'calc(90vh - 220px)', minHeight: 300 }}>
           <div className="flex-1 min-w-0 bg-bg-primary/50 border border-border rounded-lg flex flex-col overflow-hidden">

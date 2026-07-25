@@ -579,12 +579,19 @@ export const useSessionStore = create<SessionState>((set, get) => {
       }
     },
 
-    launchWorkflow: (content?, attachments?, workflowId?, subGroup?) => {
+    launchWorkflow: (
+      content?: string,
+      attachments?: import('@shared/types.js').Attachment[],
+      workflowId?: string,
+      subGroup?: string,
+      params?: Record<string, string>,
+    ) => {
       const payload: Record<string, unknown> = {}
       if (content?.trim()) payload.content = content
       if (attachments && attachments.length > 0) payload.attachments = attachments
       if (workflowId) payload.workflowId = workflowId
       if (subGroup) payload.subGroup = subGroup
+      if (params) payload.params = params
       wsClient.send('runner.launch', payload)
     },
 

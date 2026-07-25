@@ -1,6 +1,8 @@
 import { useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { useSessionStore, useIsRunning } from '../../stores/session'
+import { useWorkflowsStore } from '../../stores/workflows'
 import { authFetch } from '../../lib/api'
+import { parseSlashCommand } from '../../lib/parse-slash-command'
 import type { Attachment } from '@shared/types.js'
 import type { PromptHistoryItem } from '../../hooks/usePromptHistory'
 import { AttachmentPreview } from '../shared/AttachmentPreview.js'
@@ -101,7 +103,7 @@ export function ChatInput({
   const currentSession = useSessionStore((state) => state.currentSession)
   const warmupSentRef = useRef(false)
 
-  const { sendMessage } = useScrolledSend(setAutoScroll)
+  const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
 
   useEffect(() => {
     if (restoredInput !== null) {
@@ -187,8 +189,9 @@ export function ChatInput({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() && attachments.length === 0) return
-    sendMessage(input, attachments.length > 0 ? attachments : undefined)
-    clearInput()
+    // Delegate to handleSend so slash commands are processed the same way
+    // whether triggered by Enter or the Send button
+    handleSend()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -304,12 +307,35 @@ export function ChatInput({
     fileInputRef.current?.click()
   }, [])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() && attachments.length === 0) return
     scrollContainerRef.current?.scrollTo({
       top: scrollContainerRef.current.scrollHeight,
       behavior: 'smooth',
     })
+
+    // Detect slash commands: /workflow-id arg1 arg2
+    const trimmed = input.trim()
+    if (trimmed.startsWith('/')) {
+      const allWorkflows = useWorkflowsStore.getState()
+      let workflows = [...allWorkflows.defaults, ...allWorkflows.userItems, ...allWorkflows.projectItems]
+      // Lazy-fetch if store is empty (e.g. first slash command before any modal opened)
+      if (workflows.length === 0) {
+        await allWorkflows.fetchWorkflows()
+        const refreshed = useWorkflowsStore.getState()
+        workflows = [...refreshed.defaults, ...refreshed.userItems, ...refreshed.projectItems]
+      }
+      const slashResult = parseSlashCommand(input, workflows)
+      if (slashResult) {
+        launchWorkflow(undefined, undefined, slashResult.workflowId, undefined, slashResult.params)
+        clearInput()
+        return
+      }
+      // Unrecognized slash command — don't send as normal message
+      clearInput()
+      return
+    }
+
     sendMessage(input, attachments)
     clearInput()
   }

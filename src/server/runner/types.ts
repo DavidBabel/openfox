@@ -38,6 +38,8 @@ export interface OrchestratorOptions {
   resumeFromStep?: string
   /** Initial step output when resuming */
   initialStepOutput?: Record<string, string>
+  /** Template parameters passed at launch (e.g. from slash commands) */
+  params?: Record<string, string>
   /** Run only steps with this sub-group label */
   subGroup?: string
   /** User-provided message to inject after workflow-started marker */
