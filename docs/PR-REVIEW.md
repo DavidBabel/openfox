@@ -6,17 +6,7 @@
 
 **All PRs must target `develop`.** The setup phase enforces this automatically. Features accumulate via squash-merges. `main` stays aligned with the latest published version (see release process in [AGENTS.md](../AGENTS.md#release)).
 
-PRs can come from **same-repo branches** or **forks**. The workflow handles both.
-
-## Detect PR origin
-
-Before starting, check whether the PR is from a fork:
-
-```bash
-gh pr view <N> --json headRepositoryOwner --jq '.headRepositoryOwner.login'
-# Output: "co-l"           → same-repo branch
-# Output: "JamesDAdams"    → fork
-```
+PRs can come from **same-repo branches** or **forks** — the workflow is identical for both. We never push to the contributor's branch. All review fixes land as a single commit directly on `develop` after the merge.
 
 ## Agent-Assisted Workflow
 
@@ -27,7 +17,7 @@ The agent drives the review. The user reviews code, confirms fixes, and does man
 The agent creates an isolated workspace and pulls in the PR branch.
 
 ```bash
-# 1. Create/switch to a review workspace (auto-creates if new)
+# 1. Create/switch to a review workspace (auto-creates if new, runs npm install)
 workspace switch review-pr-<N>
 
 # 2. Point origin to GitHub (workspaces use --shared clone, origin
@@ -50,6 +40,7 @@ if [ "$PR_BASE" != "develop" ]; then
 fi
 
 # 6. Rebase PR branch onto latest develop (ensures review is against current code)
+#    If conflicts arise, resolve them or abort with git rebase --abort.
 git rebase origin/develop
 ```
 
@@ -60,6 +51,7 @@ The agent examines the PR:
 - Read the diff: `git diff origin/develop...HEAD`
 - List changed files: `git diff --stat origin/develop...HEAD`
 - Run full test suite: `npm run test:unit && npm run test:e2e`
+- Run typecheck and lint: `npm run typecheck && npm run lint`
 - Inspect code quality, error handling, edge cases
 - Report findings to the user with specific line references
 
@@ -68,10 +60,8 @@ The agent examines the PR:
 The user approves the fix plan. The agent applies fixes in the workspace.
 
 ```bash
-# 4. Apply fixes (agent uses write_file / edit_file tools)
-#    NOTE: Do NOT commit or push yet — that happens in Phase 5 after user tests.
-#    Precommit hooks take >40s; if you do commit later, use a 120s timeout:
-#    git commit -m "message"   # timeout: 120000ms
+# Apply fixes (agent uses write_file / edit_file tools)
+# NOTE: Do NOT commit yet — that happens in Phase 5.
 ```
 
 ### Phase 4 — User Tests
@@ -107,49 +97,69 @@ The user opens the link and kicks the tires. Loop back to Phase 3 if adjustments
 
 ### Phase 5 — Merge
 
-When the user says **"Merge it"**, the agent:
+When the user says **"Merge it"**, the agent runs a single unified flow. It works identically for same-repo branches and forks — we never push to the contributor's branch.
 
 ```bash
-# 6. Switch back to the review workspace
-workspace switch review-pr-<N>
+# ──────────────────────────────────────────────
+# 1. Save all review fixes as a patch
+# ──────────────────────────────────────────────
+git diff > /tmp/pr-<N>-review-fixes.patch
 
-# 7. ⚠️ CRITICAL: Commit fixes before pushing!
-#    Check for uncommitted changes first — if you skip this step, your
-#    fixes won't be included in the merge.
-git status --short
-#    If there are uncommitted changes:
-git add -A && git commit -m "review: <description>"   # timeout: 120000ms
-
-# 8. Push fixes to the PR branch
-#    After rebasing in Phase 1, the local branch has diverged from the remote,
-#    so a force-push is needed. Use --force-with-lease first; fall back to
-#    --force if the remote ref has moved since we last fetched.
-#    Same-repo:
-git push origin HEAD:<remote-branch-name> --force-with-lease || git push origin HEAD:<remote-branch-name> --force
-#    Fork (maintainer_can_modify=true):
-git remote add fork-<N> git@github.com:<user>/openfox.git
-git push fork-<N> HEAD:<remote-branch-name> --force-with-lease || git push fork-<N> HEAD:<remote-branch-name> --force
-git remote remove fork-<N>
-
-# 9. Safety net — ensure PR targets develop (should already be develop from Phase 1)
-gh api repos/co-l/openfox/pulls/<N> -X PATCH -f base=develop
-
-# 10. Squash-merge via API
+# ──────────────────────────────────────────────
+# 2. Squash-merge the PR (original contributor code only)
+#    The API operates on the remote PR branch — it ignores our
+#    local state entirely. No force-push needed.
+# ──────────────────────────────────────────────
 gh api repos/co-l/openfox/pulls/<N>/merge -X PUT \
   -f merge_method=squash \
   -f commit_title="feat: description (#<N>)"
 
-# 11. Return to main project
+# ──────────────────────────────────────────────
+# 3. Switch back to the original project
+# ──────────────────────────────────────────────
 workspace switch original
 
-# 12. Update develop locally
+# ──────────────────────────────────────────────
+# 4. Pull the latest develop (now includes the squash-merge)
+# ──────────────────────────────────────────────
 git checkout develop && git pull origin develop --ff-only
 
-# 13. Clean up the review workspace
+# ──────────────────────────────────────────────
+# 5. Apply all our fixes as ONE commit on develop
+# ──────────────────────────────────────────────
+git apply /tmp/pr-<N>-review-fixes.patch
+git add -A
+git commit -m "review: <summary of fixes> (#<N>)"   # timeout: 120000ms
+git push origin develop
+
+# ──────────────────────────────────────────────
+# 6. ✅ Verify — both commits visible on origin/develop
+# ──────────────────────────────────────────────
+echo "=== origin/develop after merge ==="
+git log --oneline origin/develop -3
+
+# ──────────────────────────────────────────────
+# 7. Clean up
+# ──────────────────────────────────────────────
+rm /tmp/pr-<N>-review-fixes.patch
 workspace delete review-pr-<N>
 ```
 
-## Full Example (Fork PR)
+**What's happening under the hood:**
+
+- **Step 1** dumps the diff to `/tmp`. Plain text, human-readable, zero-config.
+- **Step 2** tells GitHub to squash-merge the PR's remote branch into `develop`. Our local changes don't participate.
+- **Step 5** replays the exact same diff onto develop and commits it as a single atomic fix commit.
+
+**Result on `origin/develop`:**
+
+```
+abc1234 review: <summary> (#<N>)      ← our single fix commit
+def5678 feat: description (#<N>)      ← PR squash-merge
+ghi9012 ...                            ← previous develop
+```
+
+## Complete Example
 
 ```bash
 # ── Setup ──
@@ -158,13 +168,14 @@ git remote set-url origin git@github.com:co-l/openfox.git
 git fetch origin && git reset --hard origin/develop
 gh pr checkout 103
 
-# Verify PR targets develop
 PR_BASE=$(gh pr view 103 --json baseRefName --jq '.baseRefName')
 if [ "$PR_BASE" != "develop" ]; then
   echo "⚠️  PR #103 targets '$PR_BASE' — retargeting to 'develop'"
   gh api repos/co-l/openfox/pulls/103 -X PATCH -f base=develop
   git fetch origin
 fi
+
+git rebase origin/develop
 
 # ── Review ──
 git diff --stat origin/develop...HEAD
@@ -173,78 +184,45 @@ npm run test:unit && npm run test:e2e
 
 # ── Fix (agent proposes → user approves) ──
 # agent applies fixes via edit_file
-# NOTE: Do NOT commit or push yet — that happens after user tests.
+# NOTE: Do NOT commit yet — that happens in the merge phase.
 
 # ── Agent starts dev server and hands off ──
 dev_server start
-# "PR #103 ready at http://localhost:.... Metrics: Tests 2225→2232 (+7), Typecheck ✅, Lint ✅
+# "PR #103 ready at http://localhost:.... Metrics: ..., Typecheck ✅, Lint ✅
 #  What I fixed: ... What to test: ..."
 # ── User tests, iterates if needed ──
 
 # ── Merge (user says "merge it") ──
-workspace switch review-pr-103
-git add -A && git commit -m "review: fix windows path handling in npm spawn"   # timeout: 120000ms
-git remote add fork-103 git@github.com:RenZan/openfox.git
-git push fork-103 HEAD:feature/manage-pdf-images --force-with-lease || git push fork-103 HEAD:feature/manage-pdf-images --force
-git remote remove fork-103
-gh api repos/co-l/openfox/pulls/103 -X PATCH -f base=develop
+git diff > /tmp/pr-103-review-fixes.patch
 gh api repos/co-l/openfox/pulls/103/merge -X PUT \
   -f merge_method=squash \
   -f commit_title="feat: PDF embedded-image support (#103)"
 workspace switch original
 git checkout develop && git pull origin develop --ff-only
-workspace delete review-pr-103
-```
-
-## Fork PRs Without Push Access
-
-If the fork doesn't have `maintainer_can_modify=true`, you can't push to it directly.
-Instead, merge the PR as-is, then cherry-pick your fixes onto develop.
-
-```bash
-# 1. Fetch the PR branch
-gh pr checkout <N>
-
-# 2. Verify PR targets develop
-PR_BASE=$(gh pr view <N> --json baseRefName --jq '.baseRefName')
-if [ "$PR_BASE" != "develop" ]; then
-  echo "⚠️  PR #<N> targets '$PR_BASE' — retargeting to 'develop'"
-  gh api repos/co-l/openfox/pulls/<N> -X PATCH -f base=develop
-  git fetch origin
-fi
-
-# 3. Apply fixes, commit, and tag
-# ... agent applies fixes ...
-git add -A && git commit -m "review: fix ..."
-git tag review-fix-<N>
-
-# 4. Squash-merge the ORIGINAL PR (without your fixes)
-gh api repos/co-l/openfox/pulls/<N>/merge -X PUT \
-  -f merge_method=squash \
-  -f commit_title="feat: description (#<N>)"
-
-# 5. Update develop
-git checkout develop && git pull origin develop --ff-only
-
-# 6. Cherry-pick your fixes
-git cherry-pick review-fix-<N>
-git tag -d review-fix-<N>
+git apply /tmp/pr-103-review-fixes.patch
+git add -A && git commit -m "review: fix windows path handling in npm spawn (#103)"   # timeout: 120000ms
 git push origin develop
-
-# 7. Clean up
-workspace switch original
-workspace delete review-pr-<N>
+git log --oneline origin/develop -3
+rm /tmp/pr-103-review-fixes.patch
+workspace delete review-pr-103
 ```
 
 ## Common Pitfalls
 
-### Uncommitted fixes lost on merge
+### Patch apply fails
 
-**Scenario:** You applied fixes in Phase 3, user tested in Phase 4, then said "merge it". You pushed and merged — but the fixes never made it in.
+**Scenario:** `git apply /tmp/pr-<N>-review-fixes.patch` fails with "patch does not apply."
 
-**Root cause:** The fixes were never committed. `git push` only sends commits, not unstaged/uncommitted changes.
+**Root cause:** The squash-merge changed the base code in ways that conflict with our patch (rare — usually means the PR was force-pushed between review and merge).
 
-**Prevention:** In Phase 5 step 7, always run `git status --short` before pushing. If it shows any changes, commit them first. The doc now has a ⚠️ marker at that step — treat it as a hard gate.
+**Fix:** Regenerate the patch from the workspace before resetting:
+
+```bash
+# In the workspace, after confirming the PR hasn't changed:
+git diff > /tmp/pr-<N>-review-fixes.patch
+```
+
+If the PR did change (someone pushed new commits), re-review from Phase 2.
 
 ### `gh pr merge` GraphQL deprecation
 
@@ -264,6 +242,22 @@ If a workspace switch fails midway, clean up manually:
 workspace delete <name>          # via tool
 # or manually:
 rm -rf ~/.local/share/openfox/workspaces/<project>/<name>
+```
+
+### Rebase conflicts
+
+If `git rebase origin/develop` produces conflicts in Phase 1:
+
+```bash
+# Check status
+git status
+
+# Resolve each conflicted file, then:
+git add <file>
+git rebase --continue
+
+# Or abort entirely:
+git rebase --abort
 ```
 
 ## Squash-Merge via API
