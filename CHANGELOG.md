@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.92 - 2026-07-25
+
+### Bug Fixes
+
+- **Changelog modal now appears after npm updates** — previously the "What's New" modal only showed after in-app auto-updates; now it also triggers when updating via npm by tracking the last seen version.
+
 ## 2.0.91 - 2026-07-25
 
 ### Features
