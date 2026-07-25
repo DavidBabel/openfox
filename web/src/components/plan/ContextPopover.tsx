@@ -5,7 +5,7 @@ import { formatTokens } from '../../lib/format-stats'
 import { wsClient } from '../../lib/ws'
 import { MoreIcon } from '../shared/icons'
 import { getTextColor } from './token-utils'
-import { ApplyDynamicModal } from './ApplyDynamicModal'
+import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
 
 interface ContextPopoverProps {
   variant?: 'popover' | 'sidebar'
@@ -15,6 +15,7 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
   const contextState = useSessionStore((state) => state.contextState)
   const currentSession = useSessionStore((state) => state.currentSession)
   const compactContext = useSessionStore((state) => state.compactContext)
+  const queueUpdate = useSessionStore((state) => state.queueUpdate)
 
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -26,7 +27,11 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
   const isRunning = currentSession.isRunning
 
   const handleApplyDynamic = () => {
-    wsClient.send('context.applyDynamic', {})
+    if (isRunning) {
+      queueUpdate()
+    } else {
+      wsClient.send('context.applyDynamic', {})
+    }
     setShowApplyModal(false)
   }
 
@@ -78,9 +83,8 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
                   setMenuOpen(false)
                   setShowApplyModal(true)
                 }}
-                disabled={isRunning}
-                className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                title={isRunning ? 'Cannot apply while running' : 'Apply dynamic context'}
+                className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors"
+                title="Preview and apply system prompt changes"
               >
                 <span className="text-accent-warning">Update system prompt</span>
               </button>
@@ -92,11 +96,11 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
   )
 
   const applyModal = (
-    <ApplyDynamicModal
+    <DynamicContextPreviewModal
       isOpen={showApplyModal}
       onClose={() => setShowApplyModal(false)}
+      isRunning={isRunning}
       onApply={handleApplyDynamic}
-      disabled={isRunning}
     />
   )
 
@@ -136,9 +140,8 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
         {dynamicContextChanged && (
           <button
             onClick={() => setShowApplyModal(true)}
-            disabled={isRunning}
-            className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors disabled:opacity-40 disabled:cursor-not-allowed rounded"
-            title={isRunning ? 'Cannot apply while running' : 'Apply dynamic context'}
+            className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors rounded"
+            title="Preview and apply system prompt changes"
           >
             <span className="text-accent-warning">Update system prompt</span>
           </button>

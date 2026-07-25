@@ -3,6 +3,7 @@ import { CodeHighlight } from './CodeHighlight'
 import { getLanguageFromPath } from '../../lib/syntax-highlighter'
 export { getLanguageFromPath, wrappedCodeStyle } from '../../lib/syntax-highlighter'
 import type { EditContextRegion } from '@shared/types.js'
+import type { DiffLine as ProtocolDiffLine } from '@shared/protocol.js'
 import { ImageModal } from './ImageModal'
 import { Markdown } from './Markdown'
 
@@ -267,7 +268,6 @@ export const ReadFileView = memo(function ReadFileView({ result, metadata, fileP
 
 // Unified diff viewer for system prompt changes and other text diffs
 // Shows removed lines first, then added lines at each change location
-import type { DiffLine as ProtocolDiffLine } from '@shared/protocol.js'
 
 interface SimpleDiffLineProps {
   type: 'unchanged' | 'added' | 'removed'
