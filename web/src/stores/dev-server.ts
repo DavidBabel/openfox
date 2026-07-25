@@ -7,6 +7,7 @@ import { createLogBuffer } from './utils'
 interface LogChunk {
   stream: 'stdout' | 'stderr'
   content: string
+  type?: 'marker'
 }
 
 interface DevServerStore {
@@ -20,6 +21,8 @@ interface DevServerStore {
   fetchStatus: () => Promise<void>
   fetchConfig: () => Promise<void>
   fetchLogs: () => Promise<void>
+  clearLogs: () => Promise<void>
+  insertMarker: () => Promise<void>
   start: () => Promise<void>
   stop: () => Promise<void>
   restart: () => Promise<void>
@@ -88,11 +91,36 @@ export const useDevServerStore = create<DevServerStore>()((set, get) => {
       try {
         const res = await authFetch(`/api/dev-server/logs?workdir=${encodeURIComponent(workdir)}`)
         const data = await res.json()
-        const logs: LogChunk[] = (data.logs as { stream: 'stdout' | 'stderr'; content: string }[]).map((entry) => ({
-          stream: entry.stream,
-          content: entry.content,
-        }))
+        const logs: LogChunk[] = (data.logs as { stream: 'stdout' | 'stderr'; content: string; type?: 'marker' }[]).map(
+          (entry) => ({
+            stream: entry.stream,
+            content: entry.content,
+            ...(entry.type ? { type: entry.type } : {}),
+          }),
+        )
         set({ logs })
+      } catch {
+        // ignore
+      }
+    },
+
+    clearLogs: async () => {
+      const workdir = get().workdir
+      if (!workdir) return
+      try {
+        await authFetch(`/api/dev-server/clear-logs?workdir=${encodeURIComponent(workdir)}`, { method: 'POST' })
+        set({ logs: [] })
+      } catch {
+        // ignore
+      }
+    },
+
+    insertMarker: async () => {
+      const workdir = get().workdir
+      if (!workdir) return
+      try {
+        await authFetch(`/api/dev-server/insert-marker?workdir=${encodeURIComponent(workdir)}`, { method: 'POST' })
+        get().fetchLogs()
       } catch {
         // ignore
       }

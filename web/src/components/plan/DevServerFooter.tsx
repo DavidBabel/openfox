@@ -119,6 +119,14 @@ export const DevServerFooter = memo(function DevServerFooter({
   const start = useDevServerStore((s) => s.start)
   const stop = useDevServerStore((s) => s.stop)
   const fetchLogs = useDevServerStore((s) => s.fetchLogs)
+  const clearLogs = useDevServerStore((s) => s.clearLogs)
+  const insertMarker = useDevServerStore((s) => s.insertMarker)
+
+  const handleClearLogs = () => {
+    if (window.confirm('Clear all dev server logs?')) {
+      clearLogs()
+    }
+  }
 
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [showExpandModal, setShowExpandModal] = useState(false)
@@ -301,7 +309,15 @@ export const DevServerFooter = memo(function DevServerFooter({
 
       {!onConfigure && <DevServerConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} />}
 
-      {showExpandModal && <LogViewer title="Dev Server Logs" logs={logs} onClose={() => setShowExpandModal(false)} />}
+      {showExpandModal && (
+        <LogViewer
+          title="Dev Server Logs"
+          logs={logs}
+          onClose={() => setShowExpandModal(false)}
+          onClear={handleClearLogs}
+          onInsertMarker={insertMarker}
+        />
+      )}
     </div>
   )
 })

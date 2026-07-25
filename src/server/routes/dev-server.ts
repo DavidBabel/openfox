@@ -68,6 +68,30 @@ export function createDevServerRoutes(): Router {
     res.json({ logs: result.logs, total: result.total, offset, limit })
   })
 
+  // POST /clear-logs — clear log buffer
+  router.post('/clear-logs', (req, res) => {
+    const workdir = req.query['workdir'] as string
+    if (!workdir) return res.status(400).json({ error: 'workdir required' })
+    try {
+      devServerManager.clearLogs(workdir)
+      res.json({ ok: true })
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to clear logs' })
+    }
+  })
+
+  // POST /insert-marker — insert a visual marker divider into logs
+  router.post('/insert-marker', (req, res) => {
+    const workdir = req.query['workdir'] as string
+    if (!workdir) return res.status(400).json({ error: 'workdir required' })
+    try {
+      devServerManager.insertMarker(workdir)
+      res.json({ ok: true })
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to insert marker' })
+    }
+  })
+
   // GET /config — read .openfox/dev.json
   router.get('/config', async (req, res) => {
     const workdir = req.query['workdir'] as string

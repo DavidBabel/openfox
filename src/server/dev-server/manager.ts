@@ -49,6 +49,7 @@ export type StateListener = (
 interface LogEntry {
   stream: 'stdout' | 'stderr'
   content: string
+  type?: 'marker'
 }
 
 interface DevServerInstance {
@@ -366,6 +367,23 @@ class DevServerManager {
   async restart(workdir: string): Promise<DevServerStatus> {
     await this.stop(workdir)
     return this.start(workdir)
+  }
+
+  clearLogs(workdir: string): void {
+    const instance = this.getInstance(workdir)
+    instance.logs = []
+    instance.totalLogBytes = 0
+  }
+
+  insertMarker(workdir: string): void {
+    const instance = this.getInstance(workdir)
+    const entry: LogEntry = {
+      stream: 'stdout',
+      content: '─'.repeat(56),
+      type: 'marker',
+    }
+    instance.logs.push(entry)
+    instance.totalLogBytes += entry.content.length
   }
 
   getStatus(workdir: string): DevServerStatus {

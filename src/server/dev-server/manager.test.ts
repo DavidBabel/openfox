@@ -246,3 +246,87 @@ describe('instance keying by workdir', () => {
     expect(status2.state).toBe('running')
   })
 })
+
+describe('clearLogs', () => {
+  it('clears all logs for a workdir', () => {
+    const workdir = '/tmp/clear-test'
+    const instance = (devServerManager as any).getInstance(workdir)
+    instance.logs = [
+      { stream: 'stdout', content: 'line1' },
+      { stream: 'stderr', content: 'line2' },
+    ]
+    instance.totalLogBytes = 10
+
+    devServerManager.clearLogs(workdir)
+
+    expect(instance.logs).toEqual([])
+    expect(instance.totalLogBytes).toBe(0)
+  })
+
+  it('returns logs as empty array after clear', () => {
+    const workdir = '/tmp/clear-test2'
+    const instance = (devServerManager as any).getInstance(workdir)
+    instance.logs = [{ stream: 'stdout', content: 'something' }]
+    instance.totalLogBytes = 9
+
+    devServerManager.clearLogs(workdir)
+
+    expect(devServerManager.getLogs(workdir)).toEqual([])
+  })
+
+  it('is idempotent on already empty logs', () => {
+    const workdir = '/tmp/clear-test3'
+    devServerManager.clearLogs(workdir)
+    expect(devServerManager.getLogs(workdir)).toEqual([])
+  })
+})
+
+describe('insertMarker', () => {
+  it('inserts a marker entry into logs', () => {
+    const workdir = '/tmp/marker-test'
+    devServerManager.clearLogs(workdir)
+    const instance = (devServerManager as any).getInstance(workdir)
+    instance.logs = [{ stream: 'stdout', content: 'before' }]
+    instance.totalLogBytes = 6
+
+    devServerManager.insertMarker(workdir)
+
+    const logs = devServerManager.getLogs(workdir)
+    expect(logs).toHaveLength(2)
+    expect(logs[1]).toMatchObject({
+      stream: 'stdout',
+      type: 'marker',
+    })
+    expect(typeof logs[1]?.content).toBe('string')
+    expect(logs[1]?.content?.length).toBeGreaterThan(0)
+  })
+
+  it('inserts marker into empty logs', () => {
+    const workdir = '/tmp/marker-test2'
+    devServerManager.clearLogs(workdir)
+
+    devServerManager.insertMarker(workdir)
+
+    const logs = devServerManager.getLogs(workdir)
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toMatchObject({ stream: 'stdout', type: 'marker' })
+  })
+
+  it('does not affect other workdirs', () => {
+    const workdirA = '/tmp/marker-isolation-a'
+    const workdirB = '/tmp/marker-isolation-b'
+    devServerManager.clearLogs(workdirA)
+    devServerManager.clearLogs(workdirB)
+
+    const instanceA = (devServerManager as any).getInstance(workdirA)
+    instanceA.logs = [{ stream: 'stdout', content: 'only in A' }]
+    instanceA.totalLogBytes = 8
+
+    devServerManager.insertMarker(workdirA)
+
+    const logsA = devServerManager.getLogs(workdirA)
+    const logsB = devServerManager.getLogs(workdirB)
+    expect(logsA).toHaveLength(2)
+    expect(logsB).toHaveLength(0)
+  })
+})
