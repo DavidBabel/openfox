@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.91 - 2026-07-25
+
+### Features
+
+- **System prompt diff preview** — see what changed before applying a system prompt update, with mid-turn queueing support for running sessions.
+- **Per-session and per-project MCP server toggles** — enable or disable MCP servers at the session or project level, with global → project → session resolution.
+
+### Bug Fixes
+
+- **MCP override cache properly invalidated** — changes to disabled MCP servers now take effect immediately without requiring a restart.
+- **Sidebar popover modals no longer close on interaction** — clicking "Configure dev server", "Update system prompt", or workspace/branch "Edit" from the compact sidebar header now opens the modal without the popover interfering.
+
 ## 2.0.90 - 2026-07-24
 
 ### Features
