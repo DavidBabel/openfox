@@ -12,6 +12,8 @@ interface WorkspaceBranchSectionProps {
   showEditorLink: boolean
   sessionId: string
   projectId: string
+  onEditWorkspace?: () => void
+  onEditBranch?: () => void
 }
 
 export function WorkspaceBranchSection({
@@ -21,6 +23,8 @@ export function WorkspaceBranchSection({
   showEditorLink,
   sessionId,
   projectId,
+  onEditWorkspace,
+  onEditBranch,
 }: WorkspaceBranchSectionProps) {
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false)
   const [showBranchModal, setShowBranchModal] = useState(false)
@@ -49,7 +53,10 @@ export function WorkspaceBranchSection({
             </>
           )}
           <button
-            onClick={() => setShowWorkspaceModal(true)}
+            onClick={() => {
+              if (onEditWorkspace) onEditWorkspace()
+              else setShowWorkspaceModal(true)
+            }}
             className="ml-auto px-2 py-0.5 text-xs rounded bg-bg-tertiary text-text-secondary hover:bg-bg-secondary transition-colors"
           >
             Edit
@@ -60,7 +67,10 @@ export function WorkspaceBranchSection({
           <BranchIcon />
           <span className="truncate text-text-secondary">{branch}</span>
           <button
-            onClick={() => setShowBranchModal(true)}
+            onClick={() => {
+              if (onEditBranch) onEditBranch()
+              else setShowBranchModal(true)
+            }}
             className="ml-auto px-2 py-0.5 text-xs rounded bg-bg-tertiary text-text-secondary hover:bg-bg-secondary transition-colors"
           >
             Edit
@@ -70,15 +80,19 @@ export function WorkspaceBranchSection({
 
       <DiffViewer />
 
-      <WorkspaceModal
-        isOpen={showWorkspaceModal}
-        onClose={() => setShowWorkspaceModal(false)}
-        projectId={projectId}
-        sessionId={sessionId}
-        currentWorkspace={workspaceName}
-        currentBranch={branch}
-      />
-      <BranchModal isOpen={showBranchModal} onClose={() => setShowBranchModal(false)} sessionId={sessionId} />
+      {!onEditWorkspace && (
+        <WorkspaceModal
+          isOpen={showWorkspaceModal}
+          onClose={() => setShowWorkspaceModal(false)}
+          projectId={projectId}
+          sessionId={sessionId}
+          currentWorkspace={workspaceName}
+          currentBranch={branch}
+        />
+      )}
+      {!onEditBranch && (
+        <BranchModal isOpen={showBranchModal} onClose={() => setShowBranchModal(false)} sessionId={sessionId} />
+      )}
     </>
   )
 }

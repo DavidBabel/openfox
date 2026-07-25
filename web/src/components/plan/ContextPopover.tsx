@@ -9,9 +9,10 @@ import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
 
 interface ContextPopoverProps {
   variant?: 'popover' | 'sidebar'
+  onUpdateSystemPrompt?: () => void
 }
 
-export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
+export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: ContextPopoverProps) {
   const contextState = useSessionStore((state) => state.contextState)
   const currentSession = useSessionStore((state) => state.currentSession)
   const compactContext = useSessionStore((state) => state.compactContext)
@@ -81,7 +82,8 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
               <button
                 onClick={() => {
                   setMenuOpen(false)
-                  setShowApplyModal(true)
+                  if (onUpdateSystemPrompt) onUpdateSystemPrompt()
+                  else setShowApplyModal(true)
                 }}
                 className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors"
                 title="Preview and apply system prompt changes"
@@ -95,14 +97,14 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
     </div>
   )
 
-  const applyModal = (
+  const applyModal = !onUpdateSystemPrompt ? (
     <DynamicContextPreviewModal
       isOpen={showApplyModal}
       onClose={() => setShowApplyModal(false)}
       isRunning={isRunning}
       onApply={handleApplyDynamic}
     />
-  )
+  ) : null
 
   if (isSidebar) {
     return (
@@ -139,7 +141,10 @@ export function ContextPopover({ variant = 'popover' }: ContextPopoverProps) {
         </button>
         {dynamicContextChanged && (
           <button
-            onClick={() => setShowApplyModal(true)}
+            onClick={() => {
+              if (onUpdateSystemPrompt) onUpdateSystemPrompt()
+              else setShowApplyModal(true)
+            }}
             className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors rounded"
             title="Preview and apply system prompt changes"
           >

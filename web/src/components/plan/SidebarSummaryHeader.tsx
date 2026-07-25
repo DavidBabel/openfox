@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { LogViewer } from './LogViewer'
 import { createPortal } from 'react-dom'
 import { useSessionStore } from '../../stores/session'
@@ -10,11 +10,17 @@ import { MetadataSectionHeader } from '../shared/MetadataEntries'
 import { MetadataStatusIcon, statusOrder } from '../shared/MetadataStatusIcon'
 import { CriteriaEditor } from './CriteriaEditor'
 import { DevServerFooter } from './DevServerFooter'
+import { DevServerConfigModal } from './DevServerConfigModal'
+import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
 import { WorkspaceBranchSection } from './WorkspaceBranchSection'
+import { WorkspaceModal } from './WorkspaceModal'
+import { BranchModal } from './BranchModal'
 import { ContextPopover } from './ContextPopover'
 import { FolderIcon, BranchIcon, ChevronDownIcon, OpenExternalIcon, PlayIcon } from '../shared/icons'
 import { MetadataEntries } from '../shared/MetadataEntries'
+import { MetadataModal } from '../shared/MetadataModal'
 import { formatMetadataKeyLabel } from '../../lib/metadata-keys'
+import { wsClient } from '../../lib/ws'
 
 const POPOVER_Z_INDEX = 9999
 
@@ -26,7 +32,14 @@ interface SidebarSummaryHeaderProps {
 /*  Popover — lightweight click-to-open popup via portal              */
 /* ------------------------------------------------------------------ */
 
-function Popover({ trigger, children }: { trigger: React.ReactNode; children: React.ReactNode }) {
+interface PopoverHandle {
+  close: () => void
+}
+
+const Popover = forwardRef<PopoverHandle, { trigger: React.ReactNode; children: React.ReactNode }>(function Popover(
+  { trigger, children },
+  ref,
+) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLSpanElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -35,6 +48,8 @@ function Popover({ trigger, children }: { trigger: React.ReactNode; children: Re
   const close = useCallback(() => {
     setOpen(false)
   }, [])
+
+  useImperativeHandle(ref, () => ({ close }), [close])
 
   const handleTriggerKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -132,7 +147,7 @@ function Popover({ trigger, children }: { trigger: React.ReactNode; children: Re
         )}
     </>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  Metadata helpers                                                  */
@@ -169,9 +184,19 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
   const devServerConfig = useDevServerStore((s) => s.config)
   const devServerStart = useDevServerStore((s) => s.start)
   const contextState = useSessionStore((state) => state.contextState)
+  const queueUpdate = useSessionStore((state) => state.queueUpdate)
   const devServerLogs = useDevServerStore((s) => s.logs)
   const { branch, diff } = useGitStatus()
   const [showLogModal, setShowLogModal] = useState(false)
+  const [showDevServerConfig, setShowDevServerConfig] = useState(false)
+  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false)
+  const [activeMetadataKey, setActiveMetadataKey] = useState<string | null>(null)
+  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false)
+  const [showBranchModal, setShowBranchModal] = useState(false)
+  const devServerPopoverRef = useRef<PopoverHandle>(null)
+  const contextPopoverRef = useRef<PopoverHandle>(null)
+  const metadataPopoverRef = useRef<PopoverHandle>(null)
+  const workspacePopoverRef = useRef<PopoverHandle>(null)
   const showEditorLink = useSettingsStore((s) => s.settings[SETTINGS_KEYS.DISPLAY_SHOW_OPEN_IN_EDITOR]) === 'true'
   if (!visible || !session) return null
 
@@ -228,7 +253,7 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
           ) : (
             <span className="shrink-0" />
           )}
-          <Popover trigger={<ChevronDownIcon className="w-3 h-3" />}>
+          <Popover ref={workspacePopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
             <WorkspaceBranchSection
               workspaceName={workspaceName}
               branch={branch}
@@ -236,6 +261,14 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
               showEditorLink={showEditorLink}
               sessionId={session.id}
               projectId={session.projectId}
+              onEditWorkspace={() => {
+                workspacePopoverRef.current?.close()
+                setShowWorkspaceModal(true)
+              }}
+              onEditBranch={() => {
+                workspacePopoverRef.current?.close()
+                setShowBranchModal(true)
+              }}
             />
           </Popover>
         </div>
@@ -254,17 +287,33 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
               +{otherCount}
             </span>
           )}
-          <Popover trigger={<ChevronDownIcon className="w-3 h-3" />}>
+          <Popover ref={metadataPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
             <div className="space-y-3">
               <div>
-                <MetadataSectionHeader entries={criteriaEntries} title="Acceptance Criteria" />
+                <button
+                  onClick={() => {
+                    metadataPopoverRef.current?.close()
+                    setActiveMetadataKey('criteria')
+                  }}
+                  className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
+                >
+                  <MetadataSectionHeader entries={criteriaEntries} title="Acceptance Criteria" />
+                </button>
                 <CriteriaEditor entries={criteriaEntries} sessionId={session.id} />
               </div>
               {[...extraKeys, ...customKeys].map((key) => {
                 const entries = allEntries[key]!
                 return (
                   <div key={key}>
-                    <MetadataSectionHeader entries={entries} title={formatMetadataKeyLabel(key)} />
+                    <button
+                      onClick={() => {
+                        metadataPopoverRef.current?.close()
+                        setActiveMetadataKey(key)
+                      }}
+                      className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
+                    >
+                      <MetadataSectionHeader entries={entries} title={formatMetadataKeyLabel(key)} />
+                    </button>
                     <MetadataEntries entries={entries} />
                   </div>
                 )
@@ -293,8 +342,13 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
                 dangerZone={contextState.dangerZone}
                 size="sm"
               />
-              <Popover trigger={<ChevronDownIcon className="w-3 h-3" />}>
-                <ContextPopover />
+              <Popover ref={contextPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
+                <ContextPopover
+                  onUpdateSystemPrompt={() => {
+                    contextPopoverRef.current?.close()
+                    setShowSystemPromptModal(true)
+                  }}
+                />
               </Popover>
             </>
           )}
@@ -338,14 +392,66 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
             <span className="text-text-muted text-xs">No config</span>
           )}
 
-          <Popover trigger={<ChevronDownIcon className="w-3 h-3" />}>
-            <DevServerFooter workdir={workdir} compact onExpand={() => setShowLogModal(true)} />
+          <Popover ref={devServerPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
+            <DevServerFooter
+              workdir={workdir}
+              compact
+              onExpand={() => setShowLogModal(true)}
+              onConfigure={() => {
+                devServerPopoverRef.current?.close()
+                setShowDevServerConfig(true)
+              }}
+            />
           </Popover>
         </div>
       </div>
 
       {showLogModal && (
         <LogViewer title="Dev Server Logs" logs={devServerLogs} onClose={() => setShowLogModal(false)} />
+      )}
+
+      {showDevServerConfig && <DevServerConfigModal isOpen={true} onClose={() => setShowDevServerConfig(false)} />}
+
+      {activeMetadataKey && session && (
+        <MetadataModal
+          isOpen={true}
+          onClose={() => setActiveMetadataKey(null)}
+          entries={allEntries[activeMetadataKey] ?? []}
+          sessionId={session.id}
+          metadataKey={activeMetadataKey}
+          title={formatMetadataKeyLabel(activeMetadataKey)}
+        />
+      )}
+
+      {showWorkspaceModal && (
+        <WorkspaceModal
+          isOpen={true}
+          onClose={() => setShowWorkspaceModal(false)}
+          projectId={session.projectId}
+          sessionId={session.id}
+          currentWorkspace={workspaceName}
+          currentBranch={branch}
+        />
+      )}
+
+      {showBranchModal && (
+        <BranchModal isOpen={true} onClose={() => setShowBranchModal(false)} sessionId={session.id} />
+      )}
+
+      {showSystemPromptModal && contextState && (
+        <DynamicContextPreviewModal
+          isOpen={true}
+          onClose={() => setShowSystemPromptModal(false)}
+          isRunning={session.isRunning}
+          onApply={() => {
+            if (session.isRunning) {
+              queueUpdate()
+            } else {
+              wsClient.send('context.applyDynamic', {})
+            }
+            setShowSystemPromptModal(false)
+          }}
+        />
       )}
     </div>
   )

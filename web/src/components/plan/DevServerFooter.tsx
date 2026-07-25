@@ -13,6 +13,7 @@ interface DevServerFooterProps {
   workdir?: string
   compact?: boolean
   onExpand?: () => void
+  onConfigure?: () => void
 }
 
 const LogHoverExpand = memo(function LogHoverExpand({
@@ -105,7 +106,12 @@ const LogHoverExpand = memo(function LogHoverExpand({
   )
 })
 
-export const DevServerFooter = memo(function DevServerFooter({ workdir, compact, onExpand }: DevServerFooterProps) {
+export const DevServerFooter = memo(function DevServerFooter({
+  workdir,
+  compact,
+  onExpand,
+  onConfigure,
+}: DevServerFooterProps) {
   const setWorkdir = useDevServerStore((s) => s.setWorkdir)
   const status = useDevServerStore((s) => s.status)
   const config = useDevServerStore((s) => s.config)
@@ -177,7 +183,10 @@ export const DevServerFooter = memo(function DevServerFooter({ workdir, compact,
           <h3 className="text-sm font-semibold text-text-primary">Dev Server</h3>
         </div>
         <button
-          onClick={() => setShowConfigModal(true)}
+          onClick={() => {
+            if (onConfigure) onConfigure()
+            else setShowConfigModal(true)
+          }}
           className="p-1.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted"
           title="Configure dev server"
         >
@@ -220,7 +229,10 @@ export const DevServerFooter = memo(function DevServerFooter({ workdir, compact,
         </>
       ) : (
         <button
-          onClick={() => setShowConfigModal(true)}
+          onClick={() => {
+            if (onConfigure) onConfigure()
+            else setShowConfigModal(true)
+          }}
           className="w-full rounded font-medium text-sm px-3 py-1.5 bg-bg-tertiary text-text-muted hover:bg-border transition-colors"
         >
           Configure
@@ -287,7 +299,7 @@ export const DevServerFooter = memo(function DevServerFooter({ workdir, compact,
         )}
       </div>
 
-      <DevServerConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} />
+      {!onConfigure && <DevServerConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} />}
 
       {showExpandModal && <LogViewer title="Dev Server Logs" logs={logs} onClose={() => setShowExpandModal(false)} />}
     </div>
