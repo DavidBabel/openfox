@@ -687,13 +687,11 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     // maxTokens is no longer passed - it comes from providerManager.getCurrentModelContext() at query time
     const session = sessionManager.createSession(projectId, title, providerId ?? null, model ?? null)
 
-    // Inherit MCP overrides from project's workspace config for new sessions
+    // Inherit MCP overrides from project for new sessions
     try {
-      const { loadWorkspaceConfig } = await import('./git/workspace-config.js')
-      const wsConfig = await loadWorkspaceConfig(project.workdir)
       let disabledServers: string[] = []
-      if (wsConfig?.mcpOverrides) {
-        disabledServers = Object.entries(wsConfig.mcpOverrides)
+      if (project.mcpOverrides) {
+        disabledServers = Object.entries(project.mcpOverrides)
           .filter(([, override]) => override.disabled)
           .map(([name]) => name)
       } else {
@@ -1088,6 +1086,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       return res.status(400).json({ error: 'disabledServers must be an array of strings' })
     }
     setSessionDisabledServers(sessionId, disabledServers)
+    sessionManager.setDynamicContextChanged(sessionId, true)
+    const state = sessionManager.getContextState(sessionId)
+    wssExports.broadcastForSession(sessionId, createContextStateMessage(state))
     res.json({ disabledServers: getSessionDisabledServers(sessionId) })
   })
 
@@ -2498,7 +2499,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   app.use('/api/agents', createAgentRoutes(configDir, projectDir))
   app.use('/api/workflows', createWorkflowRoutes(configDir, config, projectDir))
   app.use('/api/dev-server', createDevServerRoutes())
-  app.use('/api/workspace', createWorkspaceConfigRoutes())
+  app.use('/api/workspace', createWorkspaceConfigRoutes(sessionManager))
   app.use('/api/terminals', createTerminalRoutes())
   app.use(
     '/api/auto-update',

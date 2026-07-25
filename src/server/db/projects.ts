@@ -90,6 +90,7 @@ export function updateProject(
     customInstructions?: string | null
     dangerLevel?: DangerLevel | null
     workspaceRootDir?: string | null
+    mcpOverrides?: Record<string, { disabled?: boolean; disabledTools?: string[] }> | null
   },
 ): Project | null {
   const db = getDatabase()
@@ -116,6 +117,11 @@ export function updateProject(
   if (updates.workspaceRootDir !== undefined) {
     sets.push('workspace_root_dir = ?')
     values.push(updates.workspaceRootDir)
+  }
+
+  if (updates.mcpOverrides !== undefined) {
+    sets.push('mcp_overrides = ?')
+    values.push(updates.mcpOverrides !== null ? JSON.stringify(updates.mcpOverrides) : null)
   }
 
   values.push(id)
@@ -160,6 +166,7 @@ interface ProjectRow {
   danger_level: string | null
   is_starred: number
   workspace_root_dir: string | null
+  mcp_overrides: string | null
   created_at: string
   updated_at: string
 }
@@ -173,6 +180,14 @@ function rowToProject(row: ProjectRow): Project {
     ...(row.danger_level ? { dangerLevel: row.danger_level as DangerLevel } : {}),
     isStarred: !!row.is_starred,
     ...(row.workspace_root_dir ? { workspaceRootDir: row.workspace_root_dir } : {}),
+    ...(row.mcp_overrides
+      ? {
+          mcpOverrides: JSON.parse(row.mcp_overrides) as Record<
+            string,
+            { disabled?: boolean; disabledTools?: string[] }
+          >,
+        }
+      : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

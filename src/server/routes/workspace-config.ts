@@ -5,9 +5,11 @@ import { resolve, isAbsolute, join } from 'node:path'
 import { loadWorkspaceConfig, saveWorkspaceConfig } from '../git/workspace-config.js'
 import { getGlobalDataDir } from '../git/workspace.js'
 import { getProjectByWorkdir, updateProject } from '../db/projects.js'
+import { setSessionDisabledServers } from '../mcp/session-overrides.js'
 import { logger } from '../utils/logger.js'
 import type { WorkspaceConfig } from '../../shared/workspace.js'
 import { getRootDirBlockReason } from '../../shared/workspace.js'
+import type { SessionManager } from '../session/manager.js'
 
 async function isWritable(path: string): Promise<boolean> {
   try {
@@ -60,7 +62,7 @@ async function findOrphanedWorkspaces(dir: string): Promise<{ name: string }[]> 
   return results
 }
 
-export function createWorkspaceConfigRoutes(): Router {
+export function createWorkspaceConfigRoutes(sessionManager: SessionManager): Router {
   const router = Router()
 
   router.get('/config', async (req, res) => {
@@ -69,8 +71,9 @@ export function createWorkspaceConfigRoutes(): Router {
     const config = await loadWorkspaceConfig(workdir)
     const project = getProjectByWorkdir(workdir)
     const rootDir = project?.workspaceRootDir ?? undefined
-    if (!config && !rootDir) return res.json({ config: null })
-    res.json({ config: { ...config, rootDir } })
+    const mcpOverrides = project?.mcpOverrides ?? undefined
+    if (!config && !rootDir && !mcpOverrides) return res.json({ config: null })
+    res.json({ config: { ...config, rootDir, mcpOverrides } })
   })
 
   router.post('/config', async (req, res) => {
@@ -94,13 +97,6 @@ export function createWorkspaceConfigRoutes(): Router {
     const config: WorkspaceConfig = { ...existing }
     if (Array.isArray(setup)) {
       config.setup = setup
-    }
-    if (mcpOverrides !== undefined) {
-      if (Object.keys(mcpOverrides).length > 0) {
-        config.mcpOverrides = mcpOverrides
-      } else {
-        delete config.mcpOverrides
-      }
     }
     let savedRootDir: string | null | undefined // null=clear, string=set, undefined=skip
     if (typeof rootDir === 'string') {
@@ -136,6 +132,27 @@ export function createWorkspaceConfigRoutes(): Router {
           updateProject(project.id, { workspaceRootDir: savedRootDir })
         }
       }
+
+      // Save MCP overrides to project DB and propagate to sessions
+      if (mcpOverrides !== undefined) {
+        const project = getProjectByWorkdir(workdir)
+        if (project) {
+          updateProject(project.id, {
+            mcpOverrides: Object.keys(mcpOverrides).length > 0 ? mcpOverrides : null,
+          })
+          const disabledServers = Object.entries(mcpOverrides as Record<string, { disabled?: boolean }>)
+            .filter(([, override]) => override.disabled)
+            .map(([name]) => name)
+          const allSessions = sessionManager.listSessions()
+          for (const s of allSessions) {
+            if (s.projectId === project.id) {
+              setSessionDisabledServers(s.id, disabledServers)
+              sessionManager.setDynamicContextChanged(s.id, true)
+            }
+          }
+        }
+      }
+
       res.json({ config: { ...config, rootDir: savedRootDir ?? undefined } })
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to save config' })

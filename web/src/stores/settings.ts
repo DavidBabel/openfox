@@ -31,6 +31,7 @@ export const SETTINGS_KEYS = {
   TOOLS_USE_RTK: 'tools.useRtk',
   TOOLS_SHELL: 'tools.shell',
   CONFIRM_ON_WORKSPACE_ACTIONS: 'tools.confirmOnWorkspaceActions',
+  FEATURES_PER_SESSION_MCP: 'features.perSessionMcp',
   PROXY_URL: 'network.proxyUrl',
   DEFAULT_AGENT: 'agent.defaultAgent',
 } as const

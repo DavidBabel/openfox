@@ -31,6 +31,7 @@ export const SETTINGS_KEYS = {
   TOOLS_USE_RTK: 'tools.useRtk',
   TOOLS_SHELL: 'tools.shell',
   CONFIRM_ON_WORKSPACE_ACTIONS: 'tools.confirmOnWorkspaceActions',
+  FEATURES_PER_SESSION_MCP: 'features.perSessionMcp',
   PROXY_URL: 'network.proxyUrl',
   DEFAULT_AGENT: 'agent.defaultAgent',
 } as const
@@ -64,6 +65,7 @@ export const SETTINGS_DEFAULTS: Record<string, string> = {
   [SETTINGS_KEYS.TOOLS_USE_RTK]: 'false',
   [SETTINGS_KEYS.TOOLS_SHELL]: 'cmd',
   [SETTINGS_KEYS.CONFIRM_ON_WORKSPACE_ACTIONS]: 'false',
+  [SETTINGS_KEYS.FEATURES_PER_SESSION_MCP]: 'false',
 }
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS]

@@ -18,6 +18,8 @@ import { AgentSelector } from './AgentSelector'
 import { DangerLevelSelector } from './DangerLevelSelector'
 import { ProviderSelector } from '../settings/ProviderSelector'
 import { McpSelector } from './McpSelector'
+import { SETTINGS_KEYS } from '../../stores/settings'
+import { useSettingsStore } from '../../stores/settings'
 import {
   AtMentionAutocomplete,
   type AtMentionAutocompleteHandle,
@@ -510,7 +512,7 @@ export function ChatInput({
           <DangerLevelSelector />
         </div>
         <div className="flex items-center gap-2">
-          <McpSelector />
+          {useSettingsStore((s) => s.settings)[SETTINGS_KEYS.FEATURES_PER_SESSION_MCP] === 'true' && <McpSelector />}
           <ProviderSelector />
         </div>
       </div>

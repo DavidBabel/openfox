@@ -66,7 +66,13 @@ describe('POST /api/workspace/config/validate', () => {
 
     app = express()
     app.use(express.json())
-    app.use('/api/workspace', createWorkspaceConfigRoutes())
+    app.use(
+      '/api/workspace',
+      createWorkspaceConfigRoutes({
+        listSessions: () => [],
+        setDynamicContextChanged: () => {},
+      } as any),
+    )
 
     return new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -338,7 +344,13 @@ describe('POST /api/workspace/config (existing endpoint)', () => {
 
     app = express()
     app.use(express.json())
-    app.use('/api/workspace', createWorkspaceConfigRoutes())
+    app.use(
+      '/api/workspace',
+      createWorkspaceConfigRoutes({
+        listSessions: () => [],
+        setDynamicContextChanged: () => {},
+      } as any),
+    )
 
     return new Promise<void>((resolve) => {
       server = app.listen(0, () => {

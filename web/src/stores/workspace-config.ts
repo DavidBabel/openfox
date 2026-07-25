@@ -2,9 +2,10 @@ import { create } from 'zustand'
 import type { WorkspaceConfig } from '@shared/workspace.js'
 import { authFetch } from '../lib/api'
 
-/** API response shape — includes rootDir from DB alongside file-based config */
+/** API response shape — includes rootDir and mcpOverrides from DB alongside file-based config */
 interface WorkspaceConfigResponse extends WorkspaceConfig {
   rootDir?: string
+  mcpOverrides?: Record<string, { disabled?: boolean; disabledTools?: string[] }>
 }
 
 interface WorkspaceConfigStore {

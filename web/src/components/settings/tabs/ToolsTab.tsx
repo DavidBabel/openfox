@@ -150,7 +150,7 @@ interface McpServerState {
     timeout?: number
     disabled?: boolean
   }
-  status: 'connected' | 'disconnected' | 'error' | 'disabled'
+  status: 'connected' | 'disconnected' | 'error'
   tools: McpToolInfo[]
   estimatedTokens: number
   error?: string
@@ -337,7 +337,10 @@ export function ToolsTab() {
   const toggleExpand = (name: string) => {
     setExpandedServers((prev) => {
       const next = new Set(prev)
-      if (next.has(name)) { next.delete(name); return next }
+      if (next.has(name)) {
+        next.delete(name)
+        return next
+      }
       next.add(name)
       return next
     })
@@ -737,9 +740,20 @@ export function ToolsTab() {
         <p className="text-sm text-text-muted mb-3">
           MCP servers provide external tools that extend OpenFox's capabilities.
         </p>
-        <p className="text-xs text-text-muted mb-3">
-          Changes here apply as defaults for new projects only — existing projects and conversations are not affected.
-        </p>
+        <div className="flex items-center justify-between py-2">
+          <div className="flex-1">
+            <span className="text-sm text-text-primary">Show per-conversation MCP toggle in chat bar</span>
+          </div>
+          <Toggle
+            enabled={settings[SETTINGS_KEYS.FEATURES_PER_SESSION_MCP] === 'true'}
+            onClick={() =>
+              setSetting(
+                SETTINGS_KEYS.FEATURES_PER_SESSION_MCP,
+                settings[SETTINGS_KEYS.FEATURES_PER_SESSION_MCP] === 'true' ? 'false' : 'true',
+              )
+            }
+          />
+        </div>
         {mcpError && <ErrorBanner message={mcpError} />}
 
         <CRUDListView
@@ -753,13 +767,19 @@ export function ToolsTab() {
               isConfirming(server.name, 'delete') ? (
                 <>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleRemove(server.name) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRemove(server.name)
+                    }}
                     className="px-2 py-1 rounded text-xs font-medium hover:opacity-90 transition-colors bg-accent-error/20 text-accent-error hover:bg-accent-error/30"
                   >
                     Delete
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); clearConfirm() }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      clearConfirm()
+                    }}
                     className="px-2 py-1 rounded text-xs text-text-muted hover:bg-bg-primary transition-colors"
                   >
                     Cancel
@@ -768,13 +788,19 @@ export function ToolsTab() {
               ) : (
                 <>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleEdit(server) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEdit(server)
+                    }}
                     className="px-2 py-1 rounded text-xs font-medium text-text-muted hover:text-text-primary hover:bg-bg-primary transition-colors"
                   >
                     Edit
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); requestDelete(server.name) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      requestDelete(server.name)
+                    }}
                     className="px-2 py-1 rounded text-xs font-medium text-accent-error/80 hover:text-accent-error hover:bg-accent-error/10 transition-colors"
                   >
                     Remove
@@ -783,11 +809,12 @@ export function ToolsTab() {
               )
             ) : null
 
-            const errorEl = server.status === "error" && server.error ? (
-              <span className="text-xs text-accent-error truncate max-w-[200px]" title={server.error}>
-                {server.error}
-              </span>
-            ) : null
+            const errorEl =
+              server.status === 'error' && server.error ? (
+                <span className="text-xs text-accent-error truncate max-w-[200px]" title={server.error}>
+                  {server.error}
+                </span>
+              ) : null
 
             return (
               <McpServerCard
@@ -798,10 +825,17 @@ export function ToolsTab() {
                 serverToggleEnabled={!server.config.disabled}
                 onServerToggle={() => handleToggleServer(server.name, !server.config.disabled)}
                 tools={server.tools}
-                onToolToggle={(toolName) => handleToggleTool(server.name, toolName, !server.tools.find((t) => t.name === toolName)?.enabled)}
+                onToolToggle={(toolName) =>
+                  handleToggleTool(server.name, toolName, !server.tools.find((t) => t.name === toolName)?.enabled)
+                }
                 statusDot={mcpStatusDot(server.status)}
                 statusColor={mcpStatusColor(server.status)}
-                actions={<>{errorEl}{actions}</>}
+                actions={
+                  <>
+                    {errorEl}
+                    {actions}
+                  </>
+                }
               />
             )
           })}

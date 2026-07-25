@@ -159,6 +159,11 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE projects ADD COLUMN workspace_root_dir TEXT`)
   }
 
+  if (!projectColumnNames.includes('mcp_overrides')) {
+    logger.info('Migrating projects table: adding mcp_overrides column')
+    db.exec(`ALTER TABLE projects ADD COLUMN mcp_overrides TEXT`)
+  }
+
   // Migration: Add mcp_disabled_servers column to sessions table
   if (!columnNames.includes('mcp_disabled_servers')) {
     logger.info('Migrating sessions table: adding mcp_disabled_servers column')

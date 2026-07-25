@@ -147,8 +147,8 @@ describe('ToolsTab MCP server toggle isolation', () => {
     // in the MCP section (skip RTK and confirmation toggles before it).
     const mcpSectionEl = screen.getByTestId('mcp-servers-heading').closest('div')!.parentElement!
     const toggles = mcpSectionEl.querySelectorAll('button[role="switch"]')
-    expect(toggles.length).toBe(2)
-    await user.click(toggles[0]!)
+    expect(toggles.length).toBe(3)
+    await user.click(toggles[1]!)
 
     const { authFetch } = await import('../../../lib/api')
     const mockFn = authFetch as ReturnType<typeof vi.fn>
@@ -167,8 +167,8 @@ describe('ToolsTab MCP server toggle isolation', () => {
 
     const mcpSectionEl = screen.getByTestId('mcp-servers-heading').closest('div')!.parentElement!
     const toggles = mcpSectionEl.querySelectorAll('button[role="switch"]')
-    expect(toggles.length).toBe(2)
-    await user.click(toggles[1]!)
+    expect(toggles.length).toBe(3)
+    await user.click(toggles[2]!)
 
     const { authFetch } = await import('../../../lib/api')
     const mockFn = authFetch as ReturnType<typeof vi.fn>

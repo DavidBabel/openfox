@@ -1,11 +1,5 @@
-export interface McpProjectOverride {
-  disabled?: boolean
-  disabledTools?: string[]
-}
-
 export interface WorkspaceConfig {
   setup?: string[]
-  mcpOverrides?: Record<string, McpProjectOverride>
 }
 
 /**

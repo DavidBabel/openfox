@@ -23,7 +23,7 @@ export interface McpServerConfig {
 export interface McpServerState {
   name: string
   config: McpServerConfig
-  status: 'connected' | 'disconnected' | 'error' | 'disabled'
+  status: 'connected' | 'disconnected' | 'error'
   tools: McpToolInfo[]
   estimatedTokens: number
   error?: string

@@ -142,7 +142,7 @@ export async function buildCachedPrompt(
   const { instructionContent, skills } = await loadSessionContext(sessionManager, sessionId)
 
   const { getToolRegistryForAgent } = await import('../tools/index.js')
-  const tools = getToolRegistryForAgent(agentDef).definitions
+  const tools = getToolRegistryForAgent(agentDef, sessionId).definitions
   const toolFingerprint = getToolFingerprint(tools)
 
   const allAgents = await loadAllAgentsDefault()
@@ -164,7 +164,7 @@ export async function computeSessionHash(sessionManager: SessionManager, session
   const agentDef = await resolveAgentDef(sessionManager, sessionId)
 
   const { getToolRegistryForAgent } = await import('../tools/index.js')
-  const tools = getToolRegistryForAgent(agentDef).definitions
+  const tools = getToolRegistryForAgent(agentDef, sessionId).definitions
   const toolFingerprint = getToolFingerprint(tools)
 
   return computeDynamicContextHash(instructionContent, skills, toolFingerprint)
