@@ -254,14 +254,33 @@ function App() {
   const [showChangelog, setShowChangelog] = useState(false)
 
   useEffect(() => {
-    const pending = localStorage.getItem('update_pending')
-    if (pending !== 'true') return
     const setting = useSettingsStore.getState().settings[SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE]
     if (setting === undefined) return
-    if (setting !== 'false') {
+    if (setting === 'false') return
+
+    let shouldShow = false
+
+    // Check update_pending flag (in-app auto-update)
+    const pending = localStorage.getItem('update_pending')
+    if (pending === 'true') {
+      shouldShow = true
+      localStorage.removeItem('update_pending')
+    }
+
+    // Check version change (npm / manual update)
+    if (configFetched) {
+      const currentVersion = useConfigStore.getState().version
+      const lastVersion = localStorage.getItem('openfox_last_version')
+      if (currentVersion && currentVersion !== lastVersion) {
+        shouldShow = true
+      }
+      localStorage.setItem('openfox_last_version', currentVersion ?? '')
+    }
+
+    if (shouldShow) {
       setShowChangelog(true)
     }
-  }, [displaySettings[SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE]])
+  }, [displaySettings[SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE], configFetched])
 
   const getInitialLeftSidebar = () => {
     const saved = localStorage.getItem('openfox:leftSidebar')
