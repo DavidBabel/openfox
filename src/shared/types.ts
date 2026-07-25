@@ -25,7 +25,7 @@ export type SessionMode = string
 export type ToolMode = string
 
 // Workflow phase shown to user (more granular than mode)
-export type SessionPhase = 'plan' | 'build' | 'verification' | 'blocked' | 'done'
+export type SessionPhase = 'plan' | 'build' | 'verification' | 'waiting' | 'blocked' | 'done'
 
 export type DangerLevel = 'normal' | 'dangerous'
 

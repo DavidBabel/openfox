@@ -9,6 +9,7 @@ import {
   foldContextState,
   foldSessionState,
   foldTurnEventsToSnapshotMessages,
+  foldWaitingWorkflow,
   reorderToolMessages,
 } from './folding.js'
 import type { ContextMessage, MessageWithId } from './fold-types.js'
@@ -1123,6 +1124,115 @@ describe('event folding', () => {
       const state = foldSessionState(events, 'window-1', 200000)
       expect(state.pendingConfirmations).toHaveLength(1)
       expect(state.pendingConfirmations[0]?.callId).toBe('call-2')
+    })
+  })
+
+  describe('foldWaitingWorkflow', () => {
+    it('returns undefined when no workflow.waiting events', () => {
+      const events: StoredEvent[] = [
+        {
+          ...baseEvent,
+          seq: 1,
+          type: 'session.initialized',
+          data: { projectId: 'proj-1', workdir: '/tmp', contextWindowId: 'window-1' },
+        },
+      ]
+      const result = foldWaitingWorkflow(events)
+      expect(result).toBeUndefined()
+    })
+
+    it('returns waitingWorkflow from workflow.waiting event', () => {
+      const events: StoredEvent[] = [
+        {
+          ...baseEvent,
+          seq: 1,
+          type: 'session.initialized',
+          data: { projectId: 'proj-1', workdir: '/tmp', contextWindowId: 'window-1' },
+        },
+        {
+          ...baseEvent,
+          seq: 2,
+          type: 'workflow.waiting',
+          data: {
+            workflowId: 'pr-review',
+            workflowName: 'PR Review',
+            stepId: 'user_test',
+            stepName: 'Manual Testing',
+            stepOutput: { prev: 'ok' },
+          },
+        },
+      ]
+      const result = foldWaitingWorkflow(events)
+      expect(result).toBeDefined()
+      expect(result!.workflowId).toBe('pr-review')
+      expect(result!.stepId).toBe('user_test')
+      expect(result!.stepOutput).toEqual({ prev: 'ok' })
+    })
+
+    it('clears waitingWorkflow on task.completed', () => {
+      const events: StoredEvent[] = [
+        {
+          ...baseEvent,
+          seq: 1,
+          type: 'session.initialized',
+          data: { projectId: 'proj-1', workdir: '/tmp', contextWindowId: 'window-1' },
+        },
+        {
+          ...baseEvent,
+          seq: 2,
+          type: 'workflow.waiting',
+          data: {
+            workflowId: 'pr-review',
+            workflowName: 'PR Review',
+            stepId: 'user_test',
+            stepName: 'Manual Testing',
+            stepOutput: {},
+          },
+        },
+        {
+          ...baseEvent,
+          seq: 3,
+          type: 'task.completed',
+          data: {
+            summary: null,
+            iterations: 1,
+            totalTimeSeconds: 1,
+            totalToolCalls: 0,
+            totalTokensGenerated: 0,
+            avgGenerationSpeed: 0,
+            responseCount: 0,
+            llmCallCount: 0,
+            criteria: [],
+          },
+        },
+      ]
+      const result = foldWaitingWorkflow(events)
+      expect(result).toBeUndefined()
+    })
+
+    it('uses latest workflow.waiting event when multiple exist', () => {
+      const events: StoredEvent[] = [
+        {
+          ...baseEvent,
+          seq: 1,
+          type: 'session.initialized',
+          data: { projectId: 'proj-1', workdir: '/tmp', contextWindowId: 'window-1' },
+        },
+        {
+          ...baseEvent,
+          seq: 2,
+          type: 'workflow.waiting',
+          data: { workflowId: 'first', workflowName: 'First', stepId: 's1', stepName: 'Step 1', stepOutput: {} },
+        },
+        {
+          ...baseEvent,
+          seq: 3,
+          type: 'workflow.waiting',
+          data: { workflowId: 'second', workflowName: 'Second', stepId: 's2', stepName: 'Step 2', stepOutput: {} },
+        },
+      ]
+      const result = foldWaitingWorkflow(events)
+      expect(result!.workflowId).toBe('second')
     })
   })
 

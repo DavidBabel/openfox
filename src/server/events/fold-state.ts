@@ -371,9 +371,44 @@ export function foldSessionState(
     ...(formatRetries.length > 0 && { formatRetries }),
     ...(pendingUserInput !== undefined && { pendingUserInput }),
     ...(taskStats !== undefined && { taskStats }),
+    ...computeWaitingWorkflow(events),
     ...(messageStats.length > 0 && { messageStats }),
     ...(contextWindows.length > 0 && { contextWindows }),
   }
+}
+
+/**
+ * Fold just the waitingWorkflow from events.
+ * Useful for REST endpoints that don't need the full folded state.
+ */
+export function foldWaitingWorkflow(events: EventLike[]): FoldedSessionState['waitingWorkflow'] {
+  let waitingWorkflow: FoldedSessionState['waitingWorkflow']
+  for (const event of events) {
+    if (event.type === 'workflow.waiting') {
+      const data = event.data as {
+        workflowId: string
+        workflowName: string
+        stepId: string
+        stepName: string
+        stepOutput: Record<string, string>
+      }
+      waitingWorkflow = data
+    } else if (event.type === 'task.completed') {
+      waitingWorkflow = undefined
+    }
+  }
+  return waitingWorkflow
+}
+
+/**
+ * Returns { waitingWorkflow: ... } or {} for use with spread in foldSessionState.
+ * Separate from foldWaitingWorkflow to handle exactOptionalPropertyTypes correctly.
+ */
+function computeWaitingWorkflow(
+  events: EventLike[],
+): { waitingWorkflow: NonNullable<FoldedSessionState['waitingWorkflow']> } | Record<string, never> {
+  const ww = foldWaitingWorkflow(events)
+  return ww !== undefined ? { waitingWorkflow: ww } : {}
 }
 
 export function buildSnapshot(
@@ -405,6 +440,7 @@ export function buildSnapshot(
     ...(foldedState.messageStats !== undefined && { messageStats: foldedState.messageStats }),
     ...(foldedState.pendingConfirmations !== undefined && { pendingConfirmations: foldedState.pendingConfirmations }),
     ...(foldedState.contextWindows !== undefined && { contextWindows: foldedState.contextWindows }),
+    ...(foldedState.waitingWorkflow !== undefined && { waitingWorkflow: foldedState.waitingWorkflow }),
   }
 }
 
@@ -475,5 +511,6 @@ export function buildSnapshotFromSessionState(input: {
       : foldedState.dynamicContextHash !== undefined
         ? { dynamicContextHash: foldedState.dynamicContextHash }
         : {}),
+    ...(foldedState.waitingWorkflow !== undefined && { waitingWorkflow: foldedState.waitingWorkflow }),
   }
 }

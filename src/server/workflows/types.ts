@@ -38,7 +38,12 @@ export interface WorkflowDefinition {
 // Steps
 // ============================================================================
 
-export type WorkflowStep = AgentStep | SubAgentStep | ShellStep
+/** Pause and wait for the user to click "Continue workflow" */
+export interface UserStep extends StepBase {
+  type: 'user'
+}
+
+export type WorkflowStep = AgentStep | SubAgentStep | ShellStep | UserStep
 
 interface StepBase {
   /** Unique within this workflow */

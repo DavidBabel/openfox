@@ -61,6 +61,13 @@ export interface SessionState {
   queuedMessages: QueuedMessage[]
   abortInProgress: boolean
   restoredInput: string | null
+  waitingWorkflow: {
+    workflowId: string
+    workflowName: string
+    stepId: string
+    stepName: string
+    stepOutput: Record<string, string>
+  } | null
   error: { code: string; message: string } | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
@@ -87,6 +94,7 @@ export interface SessionState {
   stopGeneration: () => void
   continueGeneration: () => void
   launchWorkflow: (content?: string, attachments?: Attachment[], workflowId?: string, subGroup?: string) => void
+  continueWorkflow: () => void
   switchMode: (mode: SessionMode) => void
   switchDangerLevel: (dangerLevel: 'normal' | 'dangerous') => void
   editCriteria: (criteria: Criterion[]) => void

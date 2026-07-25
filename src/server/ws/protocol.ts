@@ -122,6 +122,7 @@ export function createSessionStateMessage(
   gitStatus?: GitStatusPayload,
   correlationId?: string,
   hiddenCount?: number,
+  waitingWorkflow?: SessionStatePayload['waitingWorkflow'],
 ): ServerMessage<SessionStatePayload> {
   // Enrich messages so toolCalls have their results attached
   const enrichedMessages = enrichMessagesWithToolResults(messages)
@@ -134,6 +135,7 @@ export function createSessionStateMessage(
       ...(pendingQuestions ? { pendingQuestions } : {}),
       ...(gitStatus ? { gitStatus } : {}),
       ...(hiddenCount !== undefined ? { hiddenCount } : {}),
+      ...(waitingWorkflow !== undefined ? { waitingWorkflow } : {}),
     },
     correlationId,
   )
@@ -494,6 +496,11 @@ export function storedEventToServerMessage(event: StoredEvent): ServerMessage | 
     case 'task.completed': {
       const data = event.data as Extract<TurnEvent, { type: 'task.completed' }>['data']
       return createServerMessage('task.completed', data)
+    }
+
+    case 'workflow.waiting': {
+      const data = event.data as Extract<TurnEvent, { type: 'workflow.waiting' }>['data']
+      return createServerMessage('workflow.waiting', data)
     }
 
     case 'session.initialized': {

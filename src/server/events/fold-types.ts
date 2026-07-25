@@ -65,4 +65,11 @@ export interface FoldedSessionState {
   taskStats?: TaskStats
   messageStats?: MessageStatsEntry[]
   contextWindows?: CompactionRecord[]
+  waitingWorkflow?: {
+    workflowId: string
+    workflowName: string
+    stepId: string
+    stepName: string
+    stepOutput: Record<string, string>
+  }
 }

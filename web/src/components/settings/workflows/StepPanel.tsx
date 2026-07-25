@@ -107,6 +107,8 @@ export function StepPanel({
                 subAgentType: agent?.id ?? '',
                 name: agent?.name ?? 'Sub-Agent',
               })
+            } else if (newType === 'user') {
+              onUpdate({ ...step, type: newType, phase, name: 'User' })
             } else {
               onUpdate({ ...step, type: newType, phase, name: 'Shell' })
             }

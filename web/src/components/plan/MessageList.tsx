@@ -35,6 +35,8 @@ export const MessageList = memo(function MessageList({
   const error = useSessionStore((state) => state.error)
   const clearError = useSessionStore((state) => state.clearError)
   const isRunning = useIsRunning()
+  const waitingWorkflow = useSessionStore((state) => state.waitingWorkflow)
+  const continueWorkflow = useSessionStore((state) => state.continueWorkflow)
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
@@ -47,6 +49,7 @@ export const MessageList = memo(function MessageList({
   const isDone = sessionPhase === 'done'
   const hasAssistantResponse = displayItems.some((item) => item.type === 'message' && item.message.role === 'assistant')
   const showStartBuilding = isPlanning && hasCriteria && !isRunning && hasAssistantResponse && !isDone
+  const showContinueWorkflow = sessionPhase === 'waiting' && waitingWorkflow != null && !isRunning
 
   const projectId = useSessionStore((state) => state.currentSession?.projectId)
   const [popupBlocked, setPopupBlocked] = useState(false)
@@ -76,6 +79,16 @@ export const MessageList = memo(function MessageList({
       setPopupBlocked(true)
     }
   }
+
+  const [continuing, setContinuing] = useState(false)
+
+  const handleContinue = useCallback(() => {
+    if (continuing) return
+    setContinuing(true)
+    continueWorkflow()
+    // Re-enable after a timeout in case the workflow doesn't start
+    setTimeout(() => setContinuing(false), 5000)
+  }, [continuing, continueWorkflow])
 
   const scrollToTop = useCallback(() => {
     onScrollToTop?.()
@@ -139,6 +152,20 @@ export const MessageList = memo(function MessageList({
                   size="sm"
                 />
               </div>
+            </div>
+          )}
+
+          {showContinueWorkflow && waitingWorkflow && (
+            <div className="flex justify-center gap-2 feed-item">
+              <button
+                onClick={handleContinue}
+                disabled={continuing}
+                className="px-4 py-1.5 text-sm font-medium rounded bg-accent-primary/15 text-accent-primary border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {continuing
+                  ? '⏳ Continuing...'
+                  : `▶ Continue ${waitingWorkflow.workflowName} (${waitingWorkflow.stepName})`}
+              </button>
             </div>
           )}
 

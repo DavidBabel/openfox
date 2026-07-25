@@ -24,7 +24,7 @@ import { provideAnswer } from '../tools/index.js'
 import { logger } from '../utils/logger.js'
 import { devServerManager } from '../dev-server/manager.js'
 import { onProcessEvent } from '../tools/background-process/manager.js'
-import { buildMessagesFromStoredEvents, foldPendingConfirmations } from '../events/folding.js'
+import { buildMessagesFromStoredEvents, foldPendingConfirmations, foldWaitingWorkflow } from '../events/folding.js'
 import { getPendingQuestionsForSession } from '../tools/index.js'
 
 // Resolved once initial MCP connections settle — checkDynamic awaits this
@@ -634,6 +634,7 @@ export function createWebSocketServer(
       const { messages, hiddenCount } = buildMessagesFromStoredEvents(events, maxVisible || undefined)
       const pendingConfirmations = foldPendingConfirmations(events)
       const pendingQuestions = getPendingQuestionsForSession(updatedSession.id)
+      const waitingWorkflow = foldWaitingWorkflow(events)
 
       // Update activeWorkdir when workspace changed so git polling picks up the right dir
       const effectiveWorkdir = updatedSession.workspace ?? updatedSession.workdir
@@ -663,6 +664,7 @@ export function createWebSocketServer(
           undefined,
           undefined,
           hiddenCount,
+          waitingWorkflow,
         ),
       )
 
@@ -1257,13 +1259,16 @@ async function handleClientMessage(
         return
       }
 
-      // Check if there are pending criteria (skip when a specific workflow is
-      // requested — the workflow's own startCondition handles validation)
-      const launchPayloadEarly = message.payload as { workflowId?: string } | undefined
-      const pendingCriteria = session.criteria.filter((c) => c.status.type !== 'passed')
-      if (!launchPayloadEarly?.workflowId && pendingCriteria.length === 0) {
-        send(createErrorMessage('NO_WORK', 'No pending criteria to work on', message.id))
-        return
+      // Parse launch payload early to check for resume
+      const launchPayloadEarly = message.payload as { workflowId?: string; resumeFrom?: string } | undefined
+
+      // Skip criteria check when resuming from a user step
+      if (!launchPayloadEarly?.resumeFrom) {
+        const pendingCriteria = session.criteria.filter((c) => c.status.type !== 'passed')
+        if (!launchPayloadEarly?.workflowId && pendingCriteria.length === 0) {
+          send(createErrorMessage('NO_WORK', 'No pending criteria to work on', message.id))
+          return
+        }
       }
 
       const sessionId = client.activeSessionId
@@ -1277,13 +1282,21 @@ async function handleClientMessage(
 
       // Parse launch payload
       const launchPayload = message.payload as
-        | { content?: string; attachments?: unknown[]; workflowId?: string; subGroup?: string }
+        | {
+            content?: string
+            attachments?: unknown[]
+            workflowId?: string
+            subGroup?: string
+            resumeFrom?: string
+            stepOutput?: Record<string, string>
+          }
         | undefined
       const launchAttachments = launchPayload?.attachments as Attachment[] | undefined
       const hasUserContent =
         launchPayload?.content && typeof launchPayload.content === 'string' && launchPayload.content.trim()
       const hasUserAttachments = launchAttachments && launchAttachments.length > 0
       const hasUserMessage = hasUserContent || hasUserAttachments
+      const isResume = !!launchPayload?.resumeFrom
 
       // Mark session as running (emits running.changed event)
       sessionManager.setRunning(sessionId, true)
@@ -1305,7 +1318,7 @@ async function handleClientMessage(
       ensureEventStoreSubscription(sessionId)
 
       // Run orchestrator asynchronously
-      logger.info('Runner launching', { sessionId, pendingCriteria: pendingCriteria.length })
+      logger.info('Runner launching', { sessionId, isResume })
 
       runOrchestrator({
         sessionManager,
@@ -1314,6 +1327,8 @@ async function handleClientMessage(
         statsIdentity: statsForSession(sessionId),
         ...(launchPayload?.workflowId ? { workflowId: launchPayload.workflowId } : {}),
         ...(launchPayload?.subGroup ? { subGroup: launchPayload.subGroup } : {}),
+        ...(isResume && launchPayload?.resumeFrom ? { resumeFromStep: launchPayload.resumeFrom } : {}),
+        ...(isResume && launchPayload?.stepOutput ? { initialStepOutput: launchPayload.stepOutput } : {}),
         ...(hasUserMessage
           ? {
               userMessage: {

@@ -198,6 +198,20 @@ export type TurnEvent =
     }
 
   // ----------------------------------------------------------------------------
+  // Workflow waiting (user step pause)
+  // ----------------------------------------------------------------------------
+  | {
+      type: 'workflow.waiting'
+      data: {
+        workflowId: string
+        workflowName: string
+        stepId: string
+        stepName: string
+        stepOutput: Record<string, string>
+      }
+    }
+
+  // ----------------------------------------------------------------------------
   // Criteria
   // ----------------------------------------------------------------------------
   | {
@@ -414,6 +428,13 @@ export interface SessionSnapshot {
   messageStats?: MessageStatsEntry[]
   pendingConfirmations?: PendingPathConfirmation[]
   contextWindows?: CompactionRecord[]
+  waitingWorkflow?: {
+    workflowId: string
+    workflowName: string
+    stepId: string
+    stepName: string
+    stepOutput: Record<string, string>
+  }
 }
 
 /**

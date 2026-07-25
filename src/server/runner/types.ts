@@ -20,6 +20,7 @@ export type NextAction =
   | { type: 'RUN_VERIFIER'; criteriaToVerify: string[] }
   | { type: 'DONE' }
   | { type: 'BLOCKED'; reason: string; blockedCriteria: string[] }
+  | { type: 'WAITING'; reason: string; workflowId: string; stepId: string; stepOutput: Record<string, string> }
 
 // ============================================================================
 // Orchestrator Types
@@ -33,6 +34,10 @@ export interface OrchestratorOptions {
   signal?: AbortSignal
   /** Override the globally active workflow for this session */
   workflowId?: string
+  /** Resume from a specific step (used after a user step pause) */
+  resumeFromStep?: string
+  /** Initial step output when resuming */
+  initialStepOutput?: Record<string, string>
   /** Run only steps with this sub-group label */
   subGroup?: string
   /** User-provided message to inject after workflow-started marker */

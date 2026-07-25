@@ -138,6 +138,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     abortInProgress: false,
     restoredInput: null,
     error: null,
+    waitingWorkflow: null,
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
     pendingSessionCreate: false as boolean | string,
@@ -585,6 +586,17 @@ export const useSessionStore = create<SessionState>((set, get) => {
       if (workflowId) payload.workflowId = workflowId
       if (subGroup) payload.subGroup = subGroup
       wsClient.send('runner.launch', payload)
+    },
+
+    continueWorkflow: () => {
+      const state = get()
+      const ww = state.waitingWorkflow
+      if (!ww) return
+      wsClient.send('runner.launch', {
+        workflowId: ww.workflowId,
+        resumeFrom: ww.stepId,
+        stepOutput: ww.stepOutput,
+      })
     },
 
     switchMode: async (mode) => {

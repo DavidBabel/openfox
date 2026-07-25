@@ -45,6 +45,7 @@ export {
   foldIsRunning,
   foldPendingConfirmations,
   foldSessionState,
+  foldWaitingWorkflow,
   buildSnapshot,
   buildSnapshotFromSessionState,
 } from './fold-state.js'

@@ -24,7 +24,7 @@ export interface WorkflowInfo {
 export interface WorkflowStep {
   id: string
   name: string
-  type: 'agent' | 'sub_agent' | 'shell'
+  type: 'agent' | 'sub_agent' | 'shell' | 'user'
   phase: string
   transitions: Array<{ when: WorkflowCondition; goto: string; subGroup?: string }>
   agentId?: string

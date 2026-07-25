@@ -218,6 +218,134 @@ describe('executeWorkflow mode changes', () => {
     expect(setMode).toHaveBeenCalledWith('test-session', 'builder')
   })
 
+  it('does not call setMode for user steps', async () => {
+    const userStepWorkflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'pause',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'pause',
+          name: 'Pause',
+          type: 'user',
+          phase: 'verification',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    const result = await executeWorkflow(userStepWorkflow, options)
+
+    expect(setMode).not.toHaveBeenCalled()
+    expect(result.finalAction).toHaveProperty('type', 'WAITING')
+    expect(result.finalAction).toHaveProperty('workflowId', 'test')
+    expect(result.finalAction).toHaveProperty('stepId', 'pause')
+  })
+
+  it('user step sets phase to waiting', async () => {
+    const userStepWorkflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'pause',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'pause',
+          name: 'Pause',
+          type: 'user',
+          phase: 'verification',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    await executeWorkflow(userStepWorkflow, options)
+
+    expect(setPhase).toHaveBeenCalledWith('test-session', 'waiting')
+  })
+
+  it('user step returns WAITING with workflow and step info', async () => {
+    const userStepWorkflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'pause',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'pause',
+          name: 'Pause',
+          type: 'user',
+          phase: 'verification',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    const result = await executeWorkflow(userStepWorkflow, options)
+
+    expect(result.finalAction).toHaveProperty('type', 'WAITING')
+    expect(result.finalAction).toHaveProperty('workflowId', 'test')
+    expect(result.finalAction).toHaveProperty('stepId', 'pause')
+  })
+
+  it('resume from user step continues to next step', async () => {
+    const workflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'pause',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'pause',
+          name: 'Pause',
+          type: 'user',
+          phase: 'verification',
+          transitions: [{ when: { type: 'always' }, goto: 'done_step' }],
+        },
+        {
+          id: 'done_step',
+          name: 'Done',
+          type: 'agent',
+          phase: 'build',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    const result = await executeWorkflow(workflow, {
+      ...options,
+      resumeFromStep: 'pause',
+      initialStepOutput: { previous: 'output' },
+    })
+
+    // Should reach $done (not WAITING) because we resume from the user step
+    expect(result.finalAction).toHaveProperty('type', 'DONE')
+  })
+
+  it('resume from user step does not set phase to waiting', async () => {
+    const workflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'pause',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'pause',
+          name: 'Pause',
+          type: 'user',
+          phase: 'verification',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    await executeWorkflow(workflow, {
+      ...options,
+      resumeFromStep: 'pause',
+    })
+
+    // On resume, the user step should not set phase to 'waiting'
+    // setPhase should not have been called with 'waiting'
+    const waitingCalls = setPhase.mock.calls.filter((call: any[]) => call[1] === 'waiting')
+    expect(waitingCalls).toHaveLength(0)
+  })
+
   it('updates mode when transitioning between agent steps with different agentIds', async () => {
     const multiStepWorkflow: WorkflowDefinition = {
       metadata: { id: 'test', name: 'Test', description: '', version: '1' },

@@ -208,6 +208,7 @@ export function handleServerMessage(
         crossSessionConfirmations: crossCleanup,
         sessionsWithPendingConfirmations: Object.keys(crossCleanup),
         pendingQuestions: payload.pendingQuestions ?? [],
+        waitingWorkflow: payload.waitingWorkflow ?? null,
         ...(wasPendingCreate ? { pendingSessionCreate: payload.session.id } : {}),
       })
 
@@ -680,6 +681,22 @@ export function handleServerMessage(
     case 'phase.changed': {
       const payload = message.payload as PhaseChangedPayload
       updateSessionField(message, set, get, (s) => ({ ...s, phase: payload.phase }))
+      // Clear waiting state when phase moves away from 'waiting'
+      if (payload.phase !== 'waiting') {
+        set({ waitingWorkflow: null })
+      }
+      break
+    }
+
+    case 'workflow.waiting': {
+      const payload = message.payload as {
+        workflowId: string
+        workflowName: string
+        stepId: string
+        stepName: string
+        stepOutput: Record<string, string>
+      }
+      set({ waitingWorkflow: payload })
       break
     }
 

@@ -238,8 +238,15 @@ export async function executeWorkflow(
   // Filter to sub-group if specified
   const activeSteps = subGroup ? workflow.steps.filter((s) => s.subGroup === subGroup) : workflow.steps
 
-  let currentStepId = subGroup ? (activeSteps[0]?.id ?? workflow.entryStep) : workflow.entryStep
-  let lastStepOutput: Record<string, string> = {}
+  // Resume support: if resuming from a user step, start from that step with accumulated output
+  const resumeFromStep = options.resumeFromStep
+  const isResume = !!resumeFromStep
+  let currentStepId = isResume
+    ? resumeFromStep
+    : subGroup
+      ? (activeSteps[0]?.id ?? workflow.entryStep)
+      : workflow.entryStep
+  let lastStepOutput: Record<string, string> = options.initialStepOutput ?? {}
   const firstEntryForStep = new Set<string>()
 
   // Snapshot message count so we can compute workflow-scoped stats (not session-wide)
@@ -275,32 +282,34 @@ export async function executeWorkflow(
     }
   }
 
-  // Emit workflow-started marker into the feed
-  const startMsgId = crypto.randomUUID()
-  const startWindowOpts = getCurrentWindowMessageOptions(sessionId)
-  eventStore.append(
-    sessionId,
-    createMessageStartEvent(
-      startMsgId,
-      'user',
-      JSON.stringify({
-        workflowName: workflow.metadata.name,
-        workflowId: workflow.metadata.id,
-        workflowColor: workflow.metadata.color,
-      }),
-      { ...(startWindowOpts ?? {}), isSystemGenerated: true, messageKind: 'workflow-started' },
-    ),
-  )
-  eventStore.append(sessionId, { type: 'message.done', data: { messageId: startMsgId } })
+  // Emit workflow-started marker into the feed (skip on resume)
+  if (!isResume) {
+    const startMsgId = crypto.randomUUID()
+    const startWindowOpts = getCurrentWindowMessageOptions(sessionId)
+    eventStore.append(
+      sessionId,
+      createMessageStartEvent(
+        startMsgId,
+        'user',
+        JSON.stringify({
+          workflowName: workflow.metadata.name,
+          workflowId: workflow.metadata.id,
+          workflowColor: workflow.metadata.color,
+        }),
+        { ...(startWindowOpts ?? {}), isSystemGenerated: true, messageKind: 'workflow-started' },
+      ),
+    )
+    eventStore.append(sessionId, { type: 'message.done', data: { messageId: startMsgId } })
 
-  // Inject user-provided message after the workflow-started marker
-  // Both go through EventStore so ordering is preserved
-  if (options.userMessage) {
-    sessionManager.addMessage(sessionId, {
-      role: 'user',
-      content: options.userMessage.content,
-      ...(options.userMessage.attachments ? { attachments: options.userMessage.attachments } : {}),
-    })
+    // Inject user-provided message after the workflow-started marker
+    // Both go through EventStore so ordering is preserved
+    if (options.userMessage) {
+      sessionManager.addMessage(sessionId, {
+        role: 'user',
+        content: options.userMessage.content,
+        ...(options.userMessage.attachments ? { attachments: options.userMessage.attachments } : {}),
+      })
+    }
   }
 
   while (iterations < workflow.settings.maxIterations) {
@@ -344,7 +353,7 @@ export async function executeWorkflow(
     }
 
     // Set session phase
-    sessionManager.setPhase(sessionId, step.phase as 'build' | 'verification' | 'blocked' | 'done')
+    sessionManager.setPhase(sessionId, step.phase as 'build' | 'verification' | 'waiting' | 'blocked' | 'done')
 
     // Set session mode to match agent step's agentId
     if (step.type === 'agent') {
@@ -582,6 +591,43 @@ export async function executeWorkflow(
 
         stepOutcome = { result: successCodes.includes(result.exitCode) ? 'success' : 'failure', output: lastStepOutput }
         break
+      }
+
+      case 'user': {
+        // On resume for THIS specific step, skip the pause behavior
+        if (resumeFromStep === step.id) {
+          stepOutcome = { result: 'continue', output: lastStepOutput }
+          break
+        }
+
+        // Emit workflow.waiting event so the frontend knows we're paused
+        eventStore.append(sessionId, {
+          type: 'workflow.waiting',
+          data: {
+            workflowId: workflow.metadata.id,
+            workflowName: workflow.metadata.name,
+            stepId: step.id,
+            stepName: step.name,
+            stepOutput: lastStepOutput,
+          },
+        })
+
+        // Set phase to 'waiting' so the frontend shows the continue button
+        sessionManager.setPhase(sessionId, 'waiting')
+
+        logger.debug('Workflow paused at user step', { sessionId, stepId: step.id, stepName: step.name })
+
+        return {
+          finalAction: {
+            type: 'WAITING',
+            reason: `Paused at user step: ${step.name}`,
+            workflowId: workflow.metadata.id,
+            stepId: step.id,
+            stepOutput: lastStepOutput,
+          },
+          iterations,
+          totalTime: (performance.now() - startTime) / 1000,
+        }
       }
     }
 

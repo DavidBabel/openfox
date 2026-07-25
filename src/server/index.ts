@@ -788,7 +788,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   app.get('/api/sessions/:id', async (req, res) => {
     const { getEventStore, combineEventsWithSnapshot } = await import('./events/index.js')
-    const { buildMessagesFromStoredEvents, foldPendingConfirmations } = await import('./events/folding.js')
+    const { buildMessagesFromStoredEvents, foldPendingConfirmations, foldWaitingWorkflow } =
+      await import('./events/folding.js')
     const { getPendingQuestionsForSession } = await import('./tools/index.js')
     const { getMaxVisibleItems } = await import('./db/settings.js')
 
@@ -807,6 +808,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const queueState = sessionManager.getQueueState(req.params.id)
     const pendingQuestions = getPendingQuestionsForSession(req.params.id)
     const pendingConfirmations = foldPendingConfirmations(events)
+    const waitingWorkflow = foldWaitingWorkflow(events)
 
     res.json({
       session,
@@ -816,6 +818,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       queueState,
       pendingQuestions,
       pendingConfirmations,
+      waitingWorkflow,
     })
   })
 
