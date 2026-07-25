@@ -21,6 +21,7 @@ export const LogViewer = memo(function LogViewer({ title, logs, onClose, preClas
       onClose={onClose}
       title={title}
       size="full"
+      scrollable={false}
       headerRight={
         <AutoScrollToggle
           isActive={isAutoScrollActive}
@@ -29,7 +30,7 @@ export const LogViewer = memo(function LogViewer({ title, logs, onClose, preClas
         />
       }
     >
-      <div ref={scrollRef} className="h-full overflow-y-auto scrollbar-stable">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-stable -m-4 p-4">
         <LogRenderer logs={logs} preClassName={preClassName} />
       </div>
     </Modal>

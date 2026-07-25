@@ -32,10 +32,10 @@ export function GlobalSettingsModal({ isOpen, onClose }: GlobalSettingsModalProp
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Settings" size="xl" minHeight="500px">
-      <div data-global-settings className="flex flex-col h-full">
-        {/* Tab bar - horizontally scrollable on mobile */}
-        <div className="flex border-b border-border mb-4 -mt-1 overflow-x-auto scrollbar-hide">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Settings" size="xl" minHeight="500px" scrollable={false}>
+      <div data-global-settings className="flex flex-col h-full min-h-0 -m-4">
+        {/* Tab bar - always visible, horizontally scrollable on mobile */}
+        <div className="flex border-b border-border mb-4 overflow-x-auto scrollbar-hide flex-shrink-0 px-4 pt-4">
           <TabButton
             label="Instructions"
             active={activeTab === 'instructions'}
@@ -63,27 +63,17 @@ export function GlobalSettingsModal({ isOpen, onClose }: GlobalSettingsModalProp
           />
         </div>
 
-        {/* Tab content */}
-        {activeTab === 'instructions' && <InstructionsTab isOpen={isOpen} />}
-        {activeTab === 'skills' && <SkillsContent isOpen={isOpen} />}
-        {activeTab === 'plugins' && (
-          <div className="max-h-[60vh] overflow-y-auto">
-            <PluginsTab />
-          </div>
-        )}
-        {activeTab === 'notifications' && (
-          <div className="max-h-[60vh] overflow-y-auto">
-            <NotificationSettings />
-          </div>
-        )}
-        {activeTab === 'display' && <DisplayTab />}
-        {activeTab === 'keybindings' && <KeybindingsTab />}
-        {activeTab === 'tools' && (
-          <div className="max-h-[60vh] overflow-y-auto">
-            <ToolsTab />
-          </div>
-        )}
-        {activeTab === 'advanced' && <AdvancedTab onClose={onClose} />}
+        {/* Tab content - scrolls independently, scrollbar at modal edge */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
+          {activeTab === 'instructions' && <InstructionsTab isOpen={isOpen} />}
+          {activeTab === 'skills' && <SkillsContent isOpen={isOpen} />}
+          {activeTab === 'plugins' && <PluginsTab />}
+          {activeTab === 'notifications' && <NotificationSettings />}
+          {activeTab === 'display' && <DisplayTab />}
+          {activeTab === 'keybindings' && <KeybindingsTab />}
+          {activeTab === 'tools' && <ToolsTab />}
+          {activeTab === 'advanced' && <AdvancedTab onClose={onClose} />}
+        </div>
       </div>
     </Modal>
   )
