@@ -6,6 +6,7 @@ import { useWebSocket } from './hooks/useWebSocket'
 import { useSessionStore } from './stores/session'
 import { useProjectStore } from './stores/project'
 import { useConfigStore } from './stores/config'
+import { useMcpStore } from './stores/mcp'
 import { useThemeStore } from './stores/theme'
 import { useProjectLoader } from './hooks/useProjectLoader'
 import { useSessionLoader } from './hooks/useSessionLoader'
@@ -168,6 +169,8 @@ function App() {
             SETTINGS_KEYS.DISPLAY_CUSTOM_CSS,
             SETTINGS_KEYS.KEYBINDINGS,
           ])
+        // Eagerly load MCP servers for the chat MCP indicator
+        useMcpStore.getState().fetchServers()
       })
     }
   }, [connectionStatus, hasToken, fetchConfig])
