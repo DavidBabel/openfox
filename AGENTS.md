@@ -202,6 +202,16 @@ Session state is derived from EventStore, not persisted directly:
 - EventStore replays events to reconstruct state
 - Enables time-travel debugging and audit trails
 
+### `.openfox/` Directory Contract
+
+Every file in `.openfox/` must be **committable** and **meaningful in the project context** — it describes how OpenFox interacts with *this repository* for any contributor.
+
+**Belongs in `.openfox/`:** `dev.json`, `workspace.json`, `commands/*`, `skills/*`, `workflows/*`, `agents/*` — anything that shapes the project's tooling, automation, or agent behavior.
+
+**Does NOT belong:** Personal preferences (model, theme, keybindings, API keys). Those go in the **database** — globally or project-scoped per user.
+
+**Rationale:** Clean repo, no leaked personal config, reliable source of truth for CI and collaborators.
+
 ## TDD Workflow
 
 When fixing or refactoring: write/update the failing test FIRST, then make it pass.
