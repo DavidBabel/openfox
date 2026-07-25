@@ -267,11 +267,11 @@ function App() {
       localStorage.removeItem('update_pending')
     }
 
-    // Check version change (npm / manual update)
+    // Check version change (npm / manual upgrade)
     if (configFetched) {
       const currentVersion = useConfigStore.getState().version
       const lastVersion = localStorage.getItem('openfox_last_version')
-      if (currentVersion && currentVersion !== lastVersion) {
+      if (currentVersion && lastVersion && currentVersion !== lastVersion) {
         shouldShow = true
       }
       localStorage.setItem('openfox_last_version', currentVersion ?? '')
