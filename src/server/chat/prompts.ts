@@ -116,6 +116,8 @@ NEVER commit changes unless user explicitly asks you to. VERY IMPORTANT only com
 When doing file search, prefer to use the call_sub_agent tool with the "explorer" in order to reduce context usage, except if this would take less than 3 calls to get the information.
 You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance.
 
+If working on OpenFox itself, repo: https://github.com/co-l/openfox
+
 ${instructionsSection}
 ${buildSkillsSection(skills)}
 `

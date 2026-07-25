@@ -87,6 +87,11 @@ describe('buildBasePrompt', () => {
     const prompt = buildBasePrompt('/tmp/project')
     expect(prompt).not.toContain('Model:')
   })
+
+  it('includes OpenFox repo URL', () => {
+    const prompt = buildBasePrompt('/tmp/project')
+    expect(prompt).toContain('https://github.com/co-l/openfox')
+  })
 })
 
 describe('buildTopLevelSystemPrompt', () => {
