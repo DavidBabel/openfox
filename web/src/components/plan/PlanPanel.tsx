@@ -20,6 +20,7 @@ import { QuickActionModal } from '../QuickActionModal'
 import { MessageSearchModal } from './MessageSearchModal'
 import { ChatInput } from './ChatInput'
 import { WorkflowParamModal } from './WorkflowParamModal'
+import { extractTemplateParams } from '../../lib/parse-slash-command'
 import { SidebarSummaryHeader } from './SidebarSummaryHeader'
 import { shouldCaptureMessageSearchShortcut } from './message-search-shortcut'
 
@@ -119,6 +120,13 @@ export function PlanPanel({
     name: string
     subGroup?: string
   } | null>(null)
+  const [pendingCommandParams, setPendingCommandParams] = useState<{
+    prompt: string
+    paramKeys: string[]
+    agentMode?: string
+    textareaContent?: string
+    attachments?: import('@shared/types.js').Attachment[]
+  } | null>(null)
 
   const launchOrShowParams = useCallback(
     (workflowId: string, subGroup?: string, extraParams?: Record<string, string>) => {
@@ -208,6 +216,32 @@ export function PlanPanel({
     }
   }
 
+  const handleSendCommand = useCallback(
+    async (
+      content: string,
+      agentMode?: string,
+      textareaContent?: string,
+      attachments?: import('@shared/types.js').Attachment[],
+    ) => {
+      const paramKeys = extractTemplateParams(content)
+      if (paramKeys.length > 0) {
+        setPendingCommandParams({ prompt: content, paramKeys, agentMode, textareaContent, attachments })
+      } else {
+        if (agentMode && session?.mode !== agentMode) {
+          await useSessionStore.getState().switchMode(agentMode)
+        }
+        const combinedContent =
+          textareaContent && textareaContent.trim() ? `${textareaContent.trim()}\n\n${content}` : content
+        sendMessage(combinedContent, attachments?.length ? attachments : undefined, {
+          messageKind: 'command',
+          isSystemGenerated: true,
+        })
+        clearInput()
+      }
+    },
+    [sendMessage, clearInput, session],
+  )
+
   return (
     <>
       <SessionLayout
@@ -242,7 +276,6 @@ export function PlanPanel({
           setErrorMessage={setErrorMessage}
           scrollContainerRef={scrollContainerRef}
           sessionId={session?.id}
-          sessionMode={session?.mode}
           showHistory={showHistory}
           history={history}
           selectedIndex={selectedIndex}
@@ -258,6 +291,7 @@ export function PlanPanel({
           onOpenWorkflowsModal={() => setShowWorkflowsModal(true)}
           onSelectWorkflow={handleSelectWorkflow}
           onSelectWorkflowWithSubGroup={handleSelectWorkflowWithSubGroup}
+          onSendCommand={handleSendCommand}
           clearInput={clearInput}
         />
         <CommandsModal isOpen={showCommandsModal} onClose={() => setShowCommandsModal(false)} />
@@ -274,17 +308,7 @@ export function PlanPanel({
           onSelectCommand={async (commandId, textareaContent) => {
             const full = await useCommandsStore.getState().fetchCommand(commandId)
             if (full) {
-              const combinedContent = textareaContent?.trim()
-                ? `${textareaContent.trim()}\n\n${full.prompt}`
-                : full.prompt
-              if (full.metadata.agentMode) {
-                await useSessionStore.getState().switchMode(full.metadata.agentMode)
-              }
-              sendMessage(combinedContent, attachments?.length ? attachments : undefined, {
-                messageKind: 'command',
-                isSystemGenerated: true,
-              })
-              clearInput()
+              handleSendCommand(full.prompt, full.metadata.agentMode, textareaContent)
             }
           }}
           onSelectWorkflow={(workflowId) => {
@@ -306,6 +330,37 @@ export function PlanPanel({
               setPendingParamWorkflow(null)
             }}
             onCancel={() => setPendingParamWorkflow(null)}
+          />
+        )}
+
+        {pendingCommandParams && (
+          <WorkflowParamModal
+            workflowName="Command"
+            confirmLabel="Launch command"
+            parameters={pendingCommandParams.paramKeys.map((key, i) => ({
+              id: key,
+              label: key,
+              position: i,
+            }))}
+            onConfirm={(params) => {
+              let prompt = pendingCommandParams.prompt
+              for (const [key, value] of Object.entries(params)) {
+                prompt = prompt.replaceAll(`{{${key}}}`, value)
+              }
+              const { agentMode, textareaContent, attachments } = pendingCommandParams
+              if (agentMode && session?.mode !== agentMode) {
+                useSessionStore.getState().switchMode(agentMode)
+              }
+              const combinedContent =
+                textareaContent && textareaContent.trim() ? `${textareaContent.trim()}\n\n${prompt}` : prompt
+              sendMessage(combinedContent, attachments?.length ? attachments : undefined, {
+                messageKind: 'command',
+                isSystemGenerated: true,
+              })
+              clearInput()
+              setPendingCommandParams(null)
+            }}
+            onCancel={() => setPendingCommandParams(null)}
           />
         )}
       </SessionLayout>

@@ -6,41 +6,89 @@ export interface WorkflowInfo {
   parameters?: WorkflowParameter[]
 }
 
+export interface CommandInfo {
+  id: string
+  name: string
+}
+
 export interface SlashCommandResult {
-  workflowId: string
+  workflowId?: string
+  commandId?: string
   params: Record<string, string>
 }
+
+/**
+ * Extract template parameter placeholders ({{name}}) from a template string.
+ * Returns them in order of first occurrence, deduplicated.
+ */
+export function extractTemplateParams(template: string): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  const regex = /\{\{(\w+)\}\}/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(template)) !== null) {
+    const key = match[1]!
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push(key)
+    }
+  }
+  return result
+}
+
+/**
+ * Legacy alias — use extractTemplateParams instead.
+ * @deprecated
+ */
+export const extractPositionalParams = extractTemplateParams
 
 /**
  * Parse a slash command from chat input.
  * Returns null if the input is not a recognized slash command.
  */
-export function parseSlashCommand(input: string, workflows: WorkflowInfo[]): SlashCommandResult | null {
+export function parseSlashCommand(
+  input: string,
+  workflows: WorkflowInfo[],
+  commands?: CommandInfo[],
+): SlashCommandResult | null {
   const trimmed = input.trim()
   if (!trimmed.startsWith('/')) return null
 
   const parts = trimmed.slice(1).split(/\s+/)
-  const workflowId = parts[0]
-  if (!workflowId) return null
-
-  const wf = workflows.find((w) => w.id === workflowId)
-  if (!wf) return null
+  const id = parts[0]
+  if (!id) return null
 
   const args = parts.slice(1)
   const params: Record<string, string> = {}
 
-  if (wf.parameters && wf.parameters.length > 0) {
-    const sorted = [...wf.parameters].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    sorted.forEach((p, i) => {
-      if (args[i] !== undefined) {
-        params[p.id] = args[i]!
-      }
-    })
-  } else {
-    args.forEach((arg, i) => {
-      params[String(i)] = arg
-    })
+  // Try workflow first
+  const wf = workflows.find((w) => w.id === id)
+  if (wf) {
+    if (wf.parameters && wf.parameters.length > 0) {
+      const sorted = [...wf.parameters].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      sorted.forEach((p, i) => {
+        if (args[i] !== undefined) {
+          params[p.id] = args[i]!
+        }
+      })
+    } else {
+      args.forEach((arg, i) => {
+        params[String(i)] = arg
+      })
+    }
+    return { workflowId: id, params }
   }
 
-  return { workflowId, params }
+  // Then try command
+  if (commands) {
+    const cmd = commands.find((c) => c.id === id)
+    if (cmd) {
+      args.forEach((arg, i) => {
+        params[String(i)] = arg
+      })
+      return { commandId: id, params }
+    }
+  }
+
+  return null
 }

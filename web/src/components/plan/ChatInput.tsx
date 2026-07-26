@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { useSessionStore, useIsRunning } from '../../stores/session'
 import { useWorkflowsStore } from '../../stores/workflows'
+import { useCommandsStore } from '../../stores/commands'
 import { authFetch } from '../../lib/api'
 import { parseSlashCommand } from '../../lib/parse-slash-command'
 import type { Attachment } from '@shared/types.js'
@@ -39,7 +40,6 @@ interface ChatInputProps {
   setErrorMessage: (msg: string | null) => void
   scrollContainerRef: React.RefObject<HTMLDivElement | null>
   sessionId: string | undefined
-  sessionMode: string | undefined
   showHistory: boolean
   history: PromptHistoryItem[]
   selectedIndex: number
@@ -55,6 +55,7 @@ interface ChatInputProps {
   onOpenWorkflowsModal: () => void
   onSelectWorkflow: (workflowId: string) => void
   onSelectWorkflowWithSubGroup: (workflowId: string, subGroup: string) => void
+  onSendCommand: (content: string, agentMode?: string, textareaContent?: string, attachments?: Attachment[]) => void
   clearInput: () => void
 }
 
@@ -69,7 +70,6 @@ export function ChatInput({
   setErrorMessage,
   scrollContainerRef,
   sessionId,
-  sessionMode,
   showHistory,
   history,
   selectedIndex,
@@ -85,6 +85,7 @@ export function ChatInput({
   onOpenWorkflowsModal,
   onSelectWorkflow,
   onSelectWorkflowWithSubGroup,
+  onSendCommand,
   clearInput,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -329,13 +330,15 @@ export function ChatInput({
       behavior: 'smooth',
     })
 
-    // Detect slash commands: /workflow-id arg1 arg2
+    // Detect slash commands: /workflow-id arg1 arg2 or /command-name arg1 arg2
     const trimmed = input.trim()
     if (trimmed.startsWith('/')) {
       const allWorkflows = useWorkflowsStore.getState()
       const workflows = [...allWorkflows.defaults, ...allWorkflows.userItems, ...allWorkflows.projectItems]
-      const slashResult = parseSlashCommand(input, workflows)
-      if (slashResult) {
+      const allCommands = useCommandsStore.getState()
+      const commands = [...allCommands.defaults, ...allCommands.userItems, ...allCommands.projectItems]
+      const slashResult = parseSlashCommand(input, workflows, commands)
+      if (slashResult?.workflowId) {
         // Validate required params
         const wf = workflows.find((w) => w.id === slashResult.workflowId)
         const missingRequired = (wf?.parameters ?? []).filter((p) => p.required && !(p.id in slashResult.params))
@@ -345,6 +348,20 @@ export function ChatInput({
           return
         }
         launchWorkflow(undefined, undefined, slashResult.workflowId, undefined, slashResult.params)
+        clearInput()
+        return
+      }
+      if (slashResult?.commandId) {
+        // Fetch command, resolve positional params, send as message
+        allCommands.fetchCommand(slashResult.commandId).then((full) => {
+          if (full) {
+            let prompt = full.prompt
+            for (const [key, value] of Object.entries(slashResult.params)) {
+              prompt = prompt.replaceAll(`{{${key}}}`, value)
+            }
+            sendMessage(prompt, undefined)
+          }
+        })
         clearInput()
         return
       }
@@ -522,22 +539,7 @@ export function ChatInput({
               Send
             </button>
             <MoreMenu
-              onSendCommand={async (content, agentMode, textareaContent, attachments) => {
-                if (agentMode && sessionMode !== agentMode) {
-                  await useSessionStore.getState().switchMode(agentMode)
-                }
-                const combinedContent =
-                  textareaContent && textareaContent.trim() ? `${textareaContent.trim()}\n\n${content}` : content
-                scrollContainerRef.current?.scrollTo({
-                  top: scrollContainerRef.current.scrollHeight,
-                  behavior: 'smooth',
-                })
-                sendMessage(combinedContent, attachments?.length ? attachments : undefined, {
-                  messageKind: 'command',
-                  isSystemGenerated: true,
-                })
-                clearInput()
-              }}
+              onSendCommand={onSendCommand}
               onSelectWorkflow={onSelectWorkflow}
               onSelectWorkflowWithSubGroup={onSelectWorkflowWithSubGroup}
               onOpenCommandsManager={onOpenCommandsModal}

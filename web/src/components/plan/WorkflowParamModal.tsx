@@ -7,9 +7,16 @@ interface WorkflowParamModalProps {
   parameters: WorkflowParameter[]
   onConfirm: (params: Record<string, string>) => void
   onCancel: () => void
+  confirmLabel?: string
 }
 
-export function WorkflowParamModal({ workflowName, parameters, onConfirm, onCancel }: WorkflowParamModalProps) {
+export function WorkflowParamModal({
+  workflowName,
+  parameters,
+  onConfirm,
+  onCancel,
+  confirmLabel = 'Run workflow',
+}: WorkflowParamModalProps) {
   const [values, setValues] = useState<Record<string, string>>({})
 
   const sorted = [...parameters].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
@@ -57,7 +64,7 @@ export function WorkflowParamModal({ workflowName, parameters, onConfirm, onCanc
           disabled={!allRequiredFilled}
           className="px-4 py-1.5 text-sm font-medium rounded bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
-          Run workflow
+          {confirmLabel}
         </button>
       </div>
     </Modal>

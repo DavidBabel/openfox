@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
-import { parseSlashCommand } from '../../lib/parse-slash-command'
+import { parseSlashCommand, extractTemplateParams } from '../../lib/parse-slash-command'
 import { ChatInput } from './ChatInput'
-import type { WorkflowInfo } from '../../lib/parse-slash-command'
+import type { WorkflowInfo, CommandInfo } from '../../lib/parse-slash-command'
 
 // ============================================================================
 // Unit tests: parseSlashCommand
@@ -52,6 +52,56 @@ describe('parseSlashCommand', () => {
   it('handles extra args beyond defined parameters', () => {
     const result = parseSlashCommand('/pr-review 42', workflows)
     expect(result).toEqual({ workflowId: 'pr-review', params: { pr_number: '42' } })
+  })
+})
+
+// ============================================================================
+// Unit tests: extractPositionalParams
+// ============================================================================
+
+describe('extractTemplateParams', () => {
+  it('returns empty array for template without placeholders', () => {
+    expect(extractTemplateParams('Hello world')).toEqual([])
+  })
+
+  it('extracts single placeholder', () => {
+    expect(extractTemplateParams('Review PR {{pr_number}}')).toEqual(['pr_number'])
+  })
+
+  it('extracts multiple placeholders in order of appearance', () => {
+    expect(extractTemplateParams('{{title}}: {{id}} is {{status}}')).toEqual(['title', 'id', 'status'])
+  })
+
+  it('deduplicates repeated placeholders', () => {
+    expect(extractTemplateParams('{{name}} and {{name}} again')).toEqual(['name'])
+  })
+
+  it('handles numeric placeholders too', () => {
+    expect(extractTemplateParams('{{0}}: {{1}}')).toEqual(['0', '1'])
+  })
+})
+
+describe('parseSlashCommand with commands', () => {
+  const workflows: WorkflowInfo[] = []
+  const commands: CommandInfo[] = [
+    { id: 'review', name: 'Review' },
+    { id: 'summarize', name: 'Summarize' },
+  ]
+
+  it('matches a command by ID', () => {
+    const result = parseSlashCommand('/review arg1 arg2', workflows, commands)
+    expect(result).toEqual({ commandId: 'review', params: { '0': 'arg1', '1': 'arg2' } })
+  })
+
+  it('returns null for unknown command', () => {
+    expect(parseSlashCommand('/nonexistent', workflows, commands)).toBeNull()
+  })
+
+  it('workflow takes priority over command with same ID', () => {
+    const wf: WorkflowInfo[] = [{ id: 'review', name: 'Review WF' }]
+    const cmds: CommandInfo[] = [{ id: 'review', name: 'Review CMD' }]
+    const result = parseSlashCommand('/review arg', wf, cmds)
+    expect(result).toEqual({ workflowId: 'review', params: { '0': 'arg' } })
   })
 })
 
@@ -140,6 +190,7 @@ function renderChatInput(overrides: Record<string, unknown> = {}) {
     onOpenWorkflowsModal: vi.fn(),
     onSelectWorkflow: vi.fn(),
     onSelectWorkflowWithSubGroup: vi.fn(),
+    onSendCommand: vi.fn(),
     clearInput: vi.fn(),
     ...overrides,
   }
