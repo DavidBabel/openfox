@@ -67,17 +67,12 @@ export const ToolCallPreparing = memo(function ToolCallPreparing({ name, argumen
 
   return (
     <div
-      className={`border rounded overflow-hidden my-1 min-w-0 animate-pulse ${remoteProtocol ? 'border-purple-500/60 shadow-[0_0_0_1px_rgb(168_85_247_/_0.12)]' : 'border-border'}`}
+      className={`border rounded overflow-hidden my-1 min-w-0 animate-pulse ${remoteProtocol ? 'border-text-thinking/60 shadow-[0_0_0_1px_rgb(var(--color-text-thinking)_/_0.12)]' : 'border-border'}`}
     >
-      <div className={`flex items-center gap-1.5 p-2 ${remoteProtocol ? 'bg-purple-950/30' : 'bg-bg-tertiary'}`}>
+      <div className={`flex items-center gap-1.5 p-2 ${remoteProtocol ? 'bg-text-thinking/10' : 'bg-bg-tertiary'}`}>
         <span className="text-accent-warning animate-pulse">...</span>
         <ToolIcon tool={name} />
         <span className="font-mono text-accent-primary text-sm">{name}</span>
-        {remoteProtocol && (
-          <span className="shrink-0 rounded border border-purple-400/50 bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-purple-300">
-            REMOTE · {remoteProtocol}
-          </span>
-        )}
         {name === 'run_command' && args ? (
           <code className="text-text-muted text-xs flex-1 truncate">{detailText}</code>
         ) : (

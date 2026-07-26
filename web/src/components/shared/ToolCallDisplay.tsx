@@ -90,11 +90,6 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
   const [expanded, setExpanded] = useState(shouldAutoExpand)
   const config = statusConfig[status]
   const remoteProtocol = detectRemoteExecution(tool, args)
-  const remoteBadge = remoteProtocol ? (
-    <span className="shrink-0 rounded border border-purple-400/50 bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-purple-300">
-      REMOTE · {remoteProtocol}
-    </span>
-  ) : null
   const showEditorLink = useSettingsStore((s) => s.settings[SETTINGS_KEYS.DISPLAY_SHOW_OPEN_IN_EDITOR]) === 'true'
 
   const editorLine =
@@ -126,11 +121,10 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
   if (variant === 'compact') {
     return (
       <div
-        className={`flex items-center gap-1.5 text-xs rounded px-2 py-1.5 border ${remoteProtocol ? 'border-purple-500/60 bg-purple-950/30' : 'border-transparent bg-secondary'}`}
+        className={`flex items-center gap-1.5 text-xs rounded px-2 py-1.5 border ${remoteProtocol ? 'border-text-thinking/60 bg-text-thinking/10' : 'border-transparent bg-secondary'}`}
       >
         <ToolIcon tool={tool} />
         <span className="text-accent-primary font-medium">{tool}</span>
-        {remoteBadge}
         <span className="text-text-muted truncate flex-1">{formatToolArgsWithMetadata(tool, args, metadata)}</span>
         <span className={`${config.color} ${config.animate ? 'animate-pulse' : ''}`}>
           {status === 'pending' ? '...' : 'done'}
@@ -141,15 +135,14 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
 
   return (
     <div
-      className={`border rounded overflow-hidden my-1 min-w-0 ${remoteProtocol ? 'border-purple-500/60 shadow-[0_0_0_1px_rgb(168_85_247_/_0.12)]' : 'border-border'}`}
+      className={`border rounded overflow-hidden my-1 min-w-0 ${remoteProtocol ? 'border-text-thinking/60 shadow-[0_0_0_1px_rgb(var(--color-text-thinking)_/_0.12)]' : 'border-border'}`}
     >
       <button
-        className={`w-full flex items-center gap-1.5 p-2 text-left ${remoteProtocol ? 'bg-purple-950/30 hover:bg-purple-950/40' : 'bg-secondary hover:bg-secondary/80'}`}
+        className={`w-full flex items-center gap-1.5 p-2 text-left ${remoteProtocol ? 'bg-text-thinking/10 hover:bg-text-thinking/15' : 'bg-secondary hover:bg-secondary/80'}`}
         onClick={() => setExpanded(!expanded)}
       >
         <span className={`${config.color} ${config.animate ? 'animate-pulse' : ''}`}>{config.icon}</span>
         <span className="font-mono text-accent-primary text-sm">{tool}</span>
-        {remoteBadge}
         <span className="text-text-muted text-xs flex-1 truncate">
           {formatToolArgsWithMetadata(tool, args, metadata)}
         </span>
@@ -158,7 +151,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
 
       {expanded && (
         <div
-          className={`p-2 border-t space-y-2 min-w-0 ${remoteProtocol ? 'border-purple-500/40 bg-purple-950/10' : 'border-border bg-primary'}`}
+          className={`p-2 border-t space-y-2 min-w-0 ${remoteProtocol ? 'border-text-thinking/40 bg-text-thinking/5' : 'border-border bg-primary'}`}
         >
           {/* Specialized rendering for run_command with streaming output */}
           {tool === 'run_command' && (
@@ -355,24 +348,35 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
               </>
             )}
 
-          {/* Duration badge for file operations */}
-          {status === 'success' &&
-            (tool === 'edit_file' || tool === 'write_file' || tool === 'read_file') &&
-            durationMs !== undefined && (
-              <div className="text-[10px] text-text-muted flex items-center gap-2">
-                <span>Completed in {durationMs}ms</span>
-                {showEditorLink &&
-                  (tool === 'read_file' || tool === 'write_file' || tool === 'edit_file') &&
-                  String(metadata?.path ?? args.path ?? '') && (
-                    <a
-                      href={buildEditorUrl(String(metadata?.path ?? args.path), editorLine)}
-                      className="text-accent-primary hover:underline ml-auto"
-                    >
-                      Open in VSCode
-                    </a>
-                  )}
-              </div>
-            )}
+          {/* Bottom metadata bar: duration + remote badge */}
+          {(remoteProtocol ||
+            (status === 'success' &&
+              durationMs !== undefined &&
+              (tool === 'run_command' || tool === 'edit_file' || tool === 'write_file' || tool === 'read_file'))) && (
+            <div className="text-[10px] text-text-muted flex items-center gap-2">
+              {status === 'success' &&
+                durationMs !== undefined &&
+                (tool === 'run_command' || tool === 'edit_file' || tool === 'write_file' || tool === 'read_file') && (
+                  <span>Completed in {(durationMs / 1000).toFixed(2)}s</span>
+                )}
+              <span className="flex-1" />
+              {showEditorLink &&
+                (tool === 'read_file' || tool === 'write_file' || tool === 'edit_file') &&
+                String(metadata?.path ?? args.path ?? '') && (
+                  <a
+                    href={buildEditorUrl(String(metadata?.path ?? args.path), editorLine)}
+                    className="text-accent-primary hover:underline"
+                  >
+                    Open in VSCode
+                  </a>
+                )}
+              {remoteProtocol && (
+                <span className="shrink-0 rounded border border-text-thinking/50 bg-text-thinking/15 px-1.5 py-0.5 font-semibold tracking-wide text-text-thinking">
+                  REMOTE · {remoteProtocol}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Error display for non-run_command (run_command handles its own errors) */}
           {status === 'error' && error && tool !== 'run_command' && (

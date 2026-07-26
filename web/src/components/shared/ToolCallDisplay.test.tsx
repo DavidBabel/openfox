@@ -45,13 +45,13 @@ describe('ToolCallDisplay — remote execution', () => {
     ['scp file host:/tmp', 'SCP'],
     ['sftp host', 'SFTP'],
     ['mosh host', 'MOSH'],
-  ])('marks compact %s calls as remote', (command, protocol) => {
+  ])('frames compact %s calls with purple border', (command) => {
     const { container } = render(
       <ToolCallDisplay tool="run_command" args={{ command }} status="pending" variant="compact" />,
     )
 
-    expect(container.textContent).toContain(`REMOTE · ${protocol}`)
-    expect(container.firstElementChild?.className).toContain('border-purple-500')
+    expect(container.textContent).not.toContain('REMOTE')
+    expect(container.firstElementChild?.className).toContain('border-text-thinking')
   })
 
   it('wraps an associated permission request in the remote frame', () => {
@@ -69,7 +69,7 @@ describe('ToolCallDisplay — remote execution', () => {
 
     expect(container.textContent).toContain('REMOTE · SSH')
     expect(container.textContent).toContain('Allow')
-    expect(container.firstElementChild?.className).toContain('border-purple-500')
+    expect(container.firstElementChild?.className).toContain('border-text-thinking')
   })
 
   it('does not mark a local command mentioning ssh as remote', () => {
@@ -78,7 +78,7 @@ describe('ToolCallDisplay — remote execution', () => {
     )
 
     expect(container.textContent).not.toContain('REMOTE')
-    expect(container.firstElementChild?.className).not.toContain('border-purple-500')
+    expect(container.firstElementChild?.className).not.toContain('border-text-thinking')
   })
 })
 

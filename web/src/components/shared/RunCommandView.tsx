@@ -112,11 +112,6 @@ export const RunCommandView = memo(function RunCommandView({
       {status === 'error' && error && (
         <div className="text-xs text-accent-error bg-accent-error/10 p-2 rounded">{error}</div>
       )}
-
-      {/* Completion indicator */}
-      {status !== 'pending' && durationMs !== undefined && (
-        <div className="text-[10px] text-text-muted">Completed in {(durationMs / 1000).toFixed(2)}s</div>
-      )}
     </div>
   )
 })
