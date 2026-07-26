@@ -19,6 +19,9 @@ launcher/
 .env
 .env.local
 
+# Node version (developer-specific)
+.nvmrc
+
 # Local vite config (local overrides only, not committed)
 web/vite.config.local.ts
 
