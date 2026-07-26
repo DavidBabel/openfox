@@ -1159,6 +1159,7 @@ describe('event folding', () => {
             stepId: 'user_test',
             stepName: 'Manual Testing',
             stepOutput: { prev: 'ok' },
+            params: { feature: 'login' },
           },
         },
       ]
@@ -1167,6 +1168,7 @@ describe('event folding', () => {
       expect(result!.workflowId).toBe('pr-review')
       expect(result!.stepId).toBe('user_test')
       expect(result!.stepOutput).toEqual({ prev: 'ok' })
+      expect(result!.params).toEqual({ feature: 'login' })
     })
 
     it('clears waitingWorkflow on task.completed', () => {

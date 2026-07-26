@@ -37,6 +37,7 @@ export const MessageList = memo(function MessageList({
   const isRunning = useIsRunning()
   const waitingWorkflow = useSessionStore((state) => state.waitingWorkflow)
   const continueWorkflow = useSessionStore((state) => state.continueWorkflow)
+  const exitWorkflow = useSessionStore((state) => state.exitWorkflow)
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
@@ -81,6 +82,7 @@ export const MessageList = memo(function MessageList({
   }
 
   const [continuing, setContinuing] = useState(false)
+  const [exiting, setExiting] = useState(false)
 
   const handleContinue = useCallback(() => {
     if (continuing) return
@@ -89,6 +91,12 @@ export const MessageList = memo(function MessageList({
     // Re-enable after a timeout in case the workflow doesn't start
     setTimeout(() => setContinuing(false), 5000)
   }, [continuing, continueWorkflow])
+
+  const handleExitWorkflow = useCallback(() => {
+    if (exiting) return
+    setExiting(true)
+    exitWorkflow()
+  }, [exiting, exitWorkflow])
 
   const scrollToTop = useCallback(() => {
     onScrollToTop?.()
@@ -165,6 +173,13 @@ export const MessageList = memo(function MessageList({
                 {continuing
                   ? '⏳ Continuing...'
                   : `▶ Continue ${waitingWorkflow.workflowName} (${waitingWorkflow.stepName})`}
+              </button>
+              <button
+                onClick={handleExitWorkflow}
+                disabled={exiting}
+                className="px-3 py-1.5 text-sm font-medium rounded bg-text-tool-error/10 text-text-tool-error border border-text-tool-error/25 hover:bg-text-tool-error/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exiting ? 'Exiting...' : 'Exit workflow'}
               </button>
             </div>
           )}

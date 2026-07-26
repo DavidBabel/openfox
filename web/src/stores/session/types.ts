@@ -95,6 +95,7 @@ export interface SessionState {
     params?: Record<string, string>,
   ) => void
   continueWorkflow: () => void
+  exitWorkflow: () => void
   switchMode: (mode: SessionMode) => void
   switchDangerLevel: (dangerLevel: 'normal' | 'dangerous') => void
   editCriteria: (criteria: Criterion[]) => void

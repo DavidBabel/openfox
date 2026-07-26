@@ -29,6 +29,8 @@ export type ClientMessageType =
   | 'context.applyDynamic.preview' // Preview diff before applying
   // Runner (auto-loop)
   | 'runner.launch' // Start the auto-loop runner (build → verify → done)
+  // Workflow
+  | 'workflow.exit' // Exit/cancel a paused workflow
   // Path confirmation
   | 'path.confirm' // User response to path confirmation request
   // Ask user
@@ -187,6 +189,7 @@ export interface WorkflowWaitingPayload {
   stepId: string
   stepName: string
   stepOutput: Record<string, string>
+  params?: Record<string, string>
 }
 
 export interface PendingPathConfirmationPayload {

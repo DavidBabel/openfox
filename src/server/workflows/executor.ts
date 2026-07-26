@@ -645,6 +645,7 @@ export async function executeWorkflow(
             stepId: step.id,
             stepName: step.name,
             stepOutput: lastStepOutput,
+            ...(Object.keys(templateCtx.params).length > 0 ? { params: templateCtx.params } : {}),
           },
         })
 

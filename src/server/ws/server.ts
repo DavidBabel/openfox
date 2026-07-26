@@ -1447,6 +1447,51 @@ async function handleClientMessage(
       break
     }
 
+    // =========================================================================
+    // Workflow
+    // =========================================================================
+
+    case 'workflow.exit': {
+      if (!client.activeSessionId) {
+        send(createErrorMessage('NO_SESSION', 'No active session', message.id))
+        return
+      }
+
+      const exitSessionId = client.activeSessionId
+      const exitSession = sessionManager.getSession(exitSessionId)
+      if (!exitSession) {
+        send(createErrorMessage('NOT_FOUND', 'Session not found', message.id))
+        return
+      }
+
+      if (exitSession.phase !== 'waiting') {
+        send(createErrorMessage('INVALID_STATE', 'Workflow is not in a waiting state', message.id))
+        return
+      }
+
+      // Emit task.completed to clear waitingWorkflow in event folding
+      getEventStore().append(exitSessionId, {
+        type: 'task.completed',
+        data: {
+          summary: null,
+          iterations: 0,
+          totalTimeSeconds: 0,
+          totalToolCalls: 0,
+          totalTokensGenerated: 0,
+          avgGenerationSpeed: 0,
+          responseCount: 0,
+          llmCallCount: 0,
+          criteria: [],
+        },
+      })
+
+      // Change phase to 'build' — frontend's phase.changed handler clears waitingWorkflow
+      sessionManager.setPhase(exitSessionId, 'build')
+
+      send({ type: 'ack', payload: {}, id: message.id })
+      break
+    }
+
     default: {
       send(createErrorMessage('UNKNOWN_MESSAGE', `Unknown message type: ${message.type}`, message.id))
     }

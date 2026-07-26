@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { authFetch } from '../../lib/api'
 import { appUrl } from '../../lib/basePath'
 import type { SessionSummary, Message } from '@shared/types.js'
-import type { QueuedMessage, PendingQuestionPayload } from '@shared/protocol.js'
+import type { QueuedMessage, PendingQuestionPayload, WorkflowWaitingPayload } from '@shared/protocol.js'
 import { wsClient } from '../../lib/ws'
 import { useConfigStore } from '../config'
 import { useProjectStore } from '../project'
@@ -341,6 +341,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           queuedMessages: (data.queueState as QueuedMessage[] | undefined) ?? [],
           pendingPathConfirmations: (data.pendingConfirmations ?? []) as PendingPathConfirmation[],
           pendingQuestions: (data.pendingQuestions ?? []) as PendingQuestionPayload[],
+          waitingWorkflow: (data.waitingWorkflow as WorkflowWaitingPayload | undefined) ?? null,
           crossSessionConfirmations: crossCleanup,
           sessionsWithPendingConfirmations: Object.keys(crossCleanup),
         })
@@ -603,7 +604,12 @@ export const useSessionStore = create<SessionState>((set, get) => {
         workflowId: ww.workflowId,
         resumeFrom: ww.stepId,
         stepOutput: ww.stepOutput,
+        ...(ww.params && Object.keys(ww.params).length > 0 ? { params: ww.params } : {}),
       })
+    },
+
+    exitWorkflow: () => {
+      wsClient.send('workflow.exit', {})
     },
 
     switchMode: async (mode) => {

@@ -209,6 +209,7 @@ export type TurnEvent =
         stepId: string
         stepName: string
         stepOutput: Record<string, string>
+        params?: Record<string, string>
       }
     }
 

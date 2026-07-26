@@ -29,6 +29,7 @@ function buildSessionState() {
           stepId: 'user_test',
           stepName: 'Manual Testing',
           stepOutput: {} as Record<string, string>,
+          params: { feature: 'login' },
         }
       : null,
     messages: [],
@@ -36,6 +37,7 @@ function buildSessionState() {
     error: null,
     clearError: vi.fn(),
     continueWorkflow: mockContinueWorkflow,
+    exitWorkflow: vi.fn(),
   }
 }
 
