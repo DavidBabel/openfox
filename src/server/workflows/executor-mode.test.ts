@@ -387,4 +387,81 @@ describe('executeWorkflow mode changes', () => {
     expect(setMode).toHaveBeenNthCalledWith(1, 'test-session', 'builder')
     expect(setMode).toHaveBeenNthCalledWith(2, 'test-session', 'planner')
   })
+
+  it('does not cancel workflow execution on abort during agent step', async () => {
+    const abortController = new AbortController()
+
+    // Make runAgentTurn throw 'Aborted' when called, simulating user hitting Escape
+    const { runAgentTurn: runAgentTurnModule } = await import('../chat/orchestrator.js')
+    vi.mocked(runAgentTurnModule).mockImplementationOnce(async () => {
+      abortController.abort()
+      throw new Error('Aborted')
+    })
+
+    // executeWorkflow should throw 'Aborted' since we don't catch it in the executor
+    await expect(
+      executeWorkflow(workflow, {
+        ...options,
+        signal: abortController.signal,
+      }),
+    ).rejects.toThrow('Aborted')
+
+    // cancelWorkflow should NOT have been called — abort preserves the execution
+    expect(mockSessionManager.cancelWorkflow).not.toHaveBeenCalled()
+  })
+
+  it('can resume workflow after abort during agent step', async () => {
+    const abortController = new AbortController()
+
+    // Step 1: Start workflow, abort during agent step
+    const { runAgentTurn: runAgentTurnModule } = await import('../chat/orchestrator.js')
+    vi.mocked(runAgentTurnModule).mockImplementationOnce(async () => {
+      abortController.abort()
+      throw new Error('Aborted')
+    })
+
+    await expect(
+      executeWorkflow(workflow, {
+        ...options,
+        signal: abortController.signal,
+      }),
+    ).rejects.toThrow('Aborted')
+
+    // cancelWorkflow should NOT have been called
+    expect(mockSessionManager.cancelWorkflow).not.toHaveBeenCalled()
+
+    // Step 2: Resume the workflow from the aborted step
+    // The execution is still 'running' in the DB (not cancelled)
+    // Simulate what the WS server does: pass resumeFromStep
+    mockSessionManager.getActiveWorkflowExecution.mockReturnValue({
+      id: 'exec-1',
+      sessionId: 'test-session',
+      workflowId: 'test',
+      workflowName: 'Test',
+      status: 'running',
+      currentStepId: 'build',
+      currentStepName: 'Builder',
+      stepOutput: {},
+      params: {},
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+
+    // Reset the runAgentTurn mock to the default (step_done called)
+    vi.mocked(runAgentTurnModule).mockImplementation(
+      async (_opts: any, _metrics: any, _agentId: string, _append: any, extra: any) => {
+        extra?.onToolExecuted?.({ name: 'step_done', arguments: {} }, { success: true, output: '' })
+        return { returnValueResult: 'completed', returnValueContent: '' }
+      },
+    )
+
+    const result = await executeWorkflow(workflow, {
+      ...options,
+      resumeFromStep: 'build',
+      initialStepOutput: {},
+    })
+
+    // Should complete successfully (reach $done)
+    expect(result.finalAction).toHaveProperty('type', 'DONE')
+  })
 })

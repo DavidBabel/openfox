@@ -692,6 +692,7 @@ export function handleServerMessage(
         workflowName: string
         workflowColor?: string
         status: import('@shared/types.js').WorkflowExecutionStatus
+        currentStepId?: string
         currentStepName?: string
       }
       set((state) => {
@@ -706,7 +707,8 @@ export function handleServerMessage(
               workflowName: payload.workflowName,
               ...(payload.workflowColor ? { workflowColor: payload.workflowColor } : {}),
               status: payload.status,
-              currentStepName: payload.currentStepName,
+              ...(payload.currentStepId ? { currentStepId: payload.currentStepId } : {}),
+              ...(payload.currentStepName ? { currentStepName: payload.currentStepName } : {}),
               stepOutput: {},
               params: {},
               createdAt: Date.now(),
@@ -718,7 +720,8 @@ export function handleServerMessage(
           activeWorkflowExecution: {
             ...current,
             status: payload.status,
-            currentStepName: payload.currentStepName ?? current.currentStepName,
+            ...(payload.currentStepId ? { currentStepId: payload.currentStepId } : {}),
+            ...(payload.currentStepName ? { currentStepName: payload.currentStepName } : {}),
           },
         }
       })

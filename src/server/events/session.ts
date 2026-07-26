@@ -469,6 +469,7 @@ export function emitWorkflowExecutionChanged(
   workflowName: string,
   workflowColor: string | undefined,
   status: import('../../shared/types.js').WorkflowExecutionStatus,
+  currentStepId?: string,
   currentStepName?: string,
 ): void {
   const eventStore = getEventStore()
@@ -480,6 +481,7 @@ export function emitWorkflowExecutionChanged(
       workflowName,
       ...(workflowColor ? { workflowColor } : {}),
       status,
+      ...(currentStepId ? { currentStepId } : {}),
       ...(currentStepName ? { currentStepName } : {}),
     },
   })

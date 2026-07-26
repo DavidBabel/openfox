@@ -225,6 +225,7 @@ export type TurnEvent =
         workflowName: string
         workflowColor?: string
         status: WorkflowExecutionStatus
+        currentStepId?: string
         currentStepName?: string
       }
     }

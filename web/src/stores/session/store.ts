@@ -116,6 +116,23 @@ export const useSessionStore = create<SessionState>((set, get) => {
     })
   })
 
+  function buildResumePayload(
+    exec: import('@shared/types.js').WorkflowExecution,
+    content?: string,
+    attachments?: import('@shared/types.js').Attachment[],
+    messageKind?: string,
+  ): Record<string, unknown> {
+    return {
+      workflowId: exec.workflowId,
+      resumeFrom: exec.currentStepId,
+      stepOutput: exec.stepOutput,
+      ...(exec.params && Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
+      ...(content?.trim() ? { content } : {}),
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      ...(messageKind ? { messageKind } : {}),
+    }
+  }
+
   return {
     connectionStatus: 'disconnected',
     showPasswordModal: false,
@@ -523,6 +540,16 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const sessionId = get().currentSession?.id
       if (!sessionId) return
 
+      // If there's an active workflow execution that was aborted (status 'running'),
+      // route the message as a workflow resume instead of a normal chat message.
+      // This lets the user abort a misbehaving agent, type guidance, and have the
+      // workflow continue naturally in the same step.
+      const exec = get().activeWorkflowExecution
+      if (exec && exec.status === 'running') {
+        wsClient.send('runner.launch', buildResumePayload(exec, content, attachments, opts?.messageKind))
+        return
+      }
+
       try {
         const hasContent = content?.trim()
         const hasAttachments = attachments && attachments.length > 0
@@ -601,12 +628,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const state = get()
       const exec = state.activeWorkflowExecution
       if (!exec || exec.status !== 'waiting') return
-      wsClient.send('runner.launch', {
-        workflowId: exec.workflowId,
-        resumeFrom: exec.currentStepId,
-        stepOutput: exec.stepOutput,
-        ...(exec.params && Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
-      })
+      wsClient.send('runner.launch', buildResumePayload(exec))
     },
 
     exitWorkflow: () => {

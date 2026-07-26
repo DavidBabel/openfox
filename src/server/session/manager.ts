@@ -579,7 +579,16 @@ export class SessionManager {
     workflowColor: string | undefined,
   ): void {
     updateWorkflowExecutionStatus(executionId, 'running', stepId, stepName)
-    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'running', stepName)
+    emitWorkflowExecutionChanged(
+      sessionId,
+      executionId,
+      workflowId,
+      workflowName,
+      workflowColor,
+      'running',
+      stepId,
+      stepName,
+    )
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
   }
@@ -598,7 +607,16 @@ export class SessionManager {
     workflowColor: string | undefined,
   ): void {
     updateWorkflowExecutionStatus(executionId, 'waiting', stepId, stepName, stepOutput)
-    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'waiting', stepName)
+    emitWorkflowExecutionChanged(
+      sessionId,
+      executionId,
+      workflowId,
+      workflowName,
+      workflowColor,
+      'waiting',
+      stepId,
+      stepName,
+    )
     this.setPhase(sessionId, 'waiting')
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
@@ -624,6 +642,7 @@ export class SessionManager {
       workflowName,
       workflowColor,
       'running',
+      row.current_step_id ?? undefined,
       row.current_step_name ?? undefined,
     )
     const updatedSession = this.requireSession(sessionId)

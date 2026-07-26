@@ -266,7 +266,7 @@ export async function executeWorkflow(
     stepsById.set(step.id, step)
   }
 
-  // Validate resume target: must be an existing user step
+  // Validate resume target: must exist in the workflow
   if (resumeFromStep) {
     const targetStep = stepsById.get(resumeFromStep)
     if (!targetStep) {
@@ -274,17 +274,6 @@ export async function executeWorkflow(
         finalAction: {
           type: 'BLOCKED',
           reason: `Resume target step "${resumeFromStep}" not found in workflow "${workflow.metadata.id}"`,
-          blockedCriteria: [],
-        },
-        iterations: 0,
-        totalTime: (performance.now() - startTime) / 1000,
-      }
-    }
-    if (targetStep.type !== 'user') {
-      return {
-        finalAction: {
-          type: 'BLOCKED',
-          reason: `Cannot resume from step "${resumeFromStep}" (type: ${targetStep.type}): only user steps support resume`,
           blockedCriteria: [],
         },
         iterations: 0,
@@ -347,16 +336,6 @@ export async function executeWorkflow(
       workflow.metadata.color,
       options.params ?? {},
     )
-
-    // Inject user-provided message after the workflow-started marker
-    // Both go through EventStore so ordering is preserved
-    if (options.userMessage) {
-      sessionManager.addMessage(sessionId, {
-        role: 'user',
-        content: options.userMessage.content,
-        ...(options.userMessage.attachments ? { attachments: options.userMessage.attachments } : {}),
-      })
-    }
   } else {
     // On resume, get the existing execution ID from the session
     const activeExec = sessionManager.getActiveWorkflowExecution(sessionId)
@@ -365,20 +344,21 @@ export async function executeWorkflow(
     }
   }
 
+  // Inject user-provided message on resume too (e.g. after abort, user types guidance)
+  if (options.userMessage) {
+    sessionManager.addMessage(sessionId, {
+      role: 'user',
+      content: options.userMessage.content,
+      ...(options.userMessage.attachments ? { attachments: options.userMessage.attachments } : {}),
+    })
+  }
+
   while (iterations < workflow.settings.maxIterations) {
-    // Check abort
+    // Check abort — don't cancel the workflow, just stop the current turn.
+    // The workflow execution stays in the DB with status 'running' so the
+    // user can continue by sending a message (auto-resume in sendMessage).
     if (signal?.aborted) {
-      logger.debug('Workflow executor aborted', { sessionId, iterations })
-      // Clean up workflow execution if it was started
-      if (executionId) {
-        sessionManager.cancelWorkflow(
-          sessionId,
-          executionId,
-          workflow.metadata.id,
-          workflow.metadata.name,
-          workflow.metadata.color,
-        )
-      }
+      logger.debug('Workflow executor aborted — preserving execution', { sessionId, iterations })
       return {
         finalAction: { type: 'RUN_BUILDER', reason: 'Aborted' },
         iterations,
@@ -454,7 +434,12 @@ export async function executeWorkflow(
         let promptContent: string | null
         let nudgeContent: string | null
 
-        if (!firstEntryForStep.has(step.id) && agentStep.prompt) {
+        // When resuming from the same step after abort, skip re-injecting the prompt
+        // or nudge — the agent already knows what step it's in and the user's message
+        // (which triggered the resume) is already in context. Just let it continue naturally.
+        const isResumingCurrentStep = isResume && step.id === resumeFromStep
+
+        if (!firstEntryForStep.has(step.id) && agentStep.prompt && !isResumingCurrentStep) {
           const resolvedPrompt = resolveTemplate(agentStep.prompt, templateCtx)
           promptContent = resolvedPrompt + STEP_DONE_PROMPT
           const promptMsgId = crypto.randomUUID()
@@ -482,7 +467,7 @@ export async function executeWorkflow(
               }),
             )
           }
-        } else if (firstEntryForStep.has(step.id)) {
+        } else if (firstEntryForStep.has(step.id) && !isResumingCurrentStep) {
           // Build nudge: nudgePrompt first (if exists), then step_done nudge
           const parts: string[] = []
           if (agentStep.nudgePrompt) {
@@ -514,7 +499,7 @@ export async function executeWorkflow(
           agentStep.agentId ?? resolveDefaultAgentId(),
           append,
           {
-            ...(!firstEntryForStep.has(step.id) && !agentStep.prompt
+            ...(!firstEntryForStep.has(step.id) && !agentStep.prompt && !isResumingCurrentStep
               ? { injectKickoff: () => injectGenericKickoff(sessionId) }
               : {}),
             onToolExecuted: (toolCall: ToolCall, toolResult: ToolResult) => {

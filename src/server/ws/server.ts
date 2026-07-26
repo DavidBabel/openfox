@@ -1364,7 +1364,10 @@ async function handleClientMessage(
         ...(isResume
           ? (() => {
               const exec = sessionManager.getActiveWorkflowExecution(sessionId)
-              if (exec && exec.status === 'waiting') {
+              if (!exec) return {}
+
+              if (exec.status === 'waiting') {
+                // Normal resume from a user step — call resumeWorkflow to update status
                 const resumed = sessionManager.resumeWorkflow(
                   sessionId,
                   exec.id,
@@ -1380,7 +1383,14 @@ async function handleClientMessage(
                   }
                 }
               }
-              return {}
+
+              // For 'running' status (e.g. abort during agent step), use existing
+              // execution info without calling resumeWorkflow — status is already current.
+              return {
+                ...(Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
+                ...(Object.keys(exec.stepOutput).length > 0 ? { initialStepOutput: exec.stepOutput } : {}),
+                ...(exec.currentStepId ? { resumeFromStep: exec.currentStepId } : {}),
+              }
             })()
           : {}),
         ...(hasUserMessage
