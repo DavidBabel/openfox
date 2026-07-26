@@ -26,6 +26,8 @@ import { devServerManager } from '../dev-server/manager.js'
 import { onProcessEvent } from '../tools/background-process/manager.js'
 import { buildMessagesFromStoredEvents, foldPendingConfirmations, foldWaitingWorkflow } from '../events/folding.js'
 import { getPendingQuestionsForSession } from '../tools/index.js'
+import { generateSessionNameForSession, needsNameGeneration } from '../session/name-generator.js'
+import { getSessionMessageCount } from '../utils/session-utils.js'
 
 // Resolved once initial MCP connections settle — checkDynamic awaits this
 let resolveMcpReady: (() => void) | null = null
@@ -1320,6 +1322,33 @@ async function handleClientMessage(
 
       // Run orchestrator asynchronously
       logger.info('Runner launching', { sessionId, isResume })
+
+      // Generate session name if this is the first interaction (fire-and-forget)
+      if (!isResume && launchPayload?.workflowId && _providerManager) {
+        const session = sessionManager.getSession(sessionId)
+        const messageCount = getSessionMessageCount(sessionId)
+        if (session && needsNameGeneration(session.metadata?.title, messageCount)) {
+          const nameHint =
+            launchPayload.workflowId +
+            (launchPayload?.params && Object.keys(launchPayload.params).length > 0
+              ? ': ' +
+                Object.entries(launchPayload.params)
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(', ')
+              : '')
+          generateSessionNameForSession(
+            sessionId,
+            nameHint,
+            {
+              sessionManager,
+              providerManager: _providerManager,
+              broadcastForSession: _broadcastForSession,
+              eventStore: getEventStore(),
+            },
+            controller.signal,
+          )
+        }
+      }
 
       runOrchestrator({
         sessionManager,

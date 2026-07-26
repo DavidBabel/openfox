@@ -1130,6 +1130,7 @@ describe('createWebSocketServer', () => {
       mode: 'planner',
       phase: 'blocked',
       isRunning: false,
+      metadata: { title: null },
       criteria: [{ id: 'tests-pass', description: 'Tests pass', status: { type: 'pending' }, attempts: [] }],
     }
     const sessionManager = createSessionManager({
