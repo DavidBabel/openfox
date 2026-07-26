@@ -15,7 +15,7 @@ interface MessageListProps {
   displayItems: DisplayItem[]
   scrollContainerRef: RefObject<HTMLDivElement | null>
   highlightedMessageId: string | null
-  onLaunchWorkflow: (workflowId: string, subGroup?: string) => void
+  onLaunchWorkflow: (workflowId: string, subGroup?: string, params?: Record<string, string>) => void
   onScrollToTop?: () => void
   hiddenCount?: number
 }

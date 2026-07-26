@@ -1349,7 +1349,11 @@ async function handleClientMessage(
           }
           const errorMessage = error instanceof Error ? error.message : String(error)
           logger.error('Runner error', { error: errorMessage, sessionId })
-          // Error events are handled inside runOrchestrator and appended to EventStore
+          // Surface validation errors to the user (e.g. missing required params)
+          _broadcastForSession(
+            sessionId,
+            createServerMessage('chat.error', { error: errorMessage, recoverable: false }),
+          )
         })
         .finally(() => {
           try {

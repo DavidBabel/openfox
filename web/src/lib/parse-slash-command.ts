@@ -1,15 +1,9 @@
-export interface WorkflowParam {
-  id: string
-  label: string
-  description?: string
-  position?: number
-  required?: boolean
-}
+import type { WorkflowParameter } from '@shared/types.js'
 
 export interface WorkflowInfo {
   id: string
   name: string
-  parameters?: WorkflowParam[]
+  parameters?: WorkflowParameter[]
 }
 
 export interface SlashCommandResult {

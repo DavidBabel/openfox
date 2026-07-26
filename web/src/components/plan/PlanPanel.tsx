@@ -19,6 +19,7 @@ import { WorkflowsModal } from '../settings/WorkflowsModal'
 import { QuickActionModal } from '../QuickActionModal'
 import { MessageSearchModal } from './MessageSearchModal'
 import { ChatInput } from './ChatInput'
+import { WorkflowParamModal } from './WorkflowParamModal'
 import { SidebarSummaryHeader } from './SidebarSummaryHeader'
 import { shouldCaptureMessageSearchShortcut } from './message-search-shortcut'
 
@@ -113,12 +114,32 @@ export function PlanPanel({
 
   const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollContainerRef, session)
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
+  const [pendingParamWorkflow, setPendingParamWorkflow] = useState<{
+    id: string
+    name: string
+    subGroup?: string
+  } | null>(null)
 
-  const handleLaunchWorkflow = useCallback(
-    (workflowId: string, subGroup?: string) => {
-      launchWorkflow(undefined, undefined, workflowId, subGroup)
+  const launchOrShowParams = useCallback(
+    (workflowId: string, subGroup?: string, extraParams?: Record<string, string>) => {
+      const allWorkflows = useWorkflowsStore.getState()
+      const workflows = [...allWorkflows.defaults, ...allWorkflows.userItems, ...allWorkflows.projectItems]
+      const wf = workflows.find((w) => w.id === workflowId)
+      const params = (wf?.parameters ?? []).filter((p) => p.position !== undefined || p.required)
+      if (params.length > 0) {
+        setPendingParamWorkflow({ id: workflowId, name: wf?.name ?? workflowId, subGroup })
+      } else {
+        launchWorkflow(undefined, undefined, workflowId, subGroup, extraParams)
+      }
     },
     [launchWorkflow],
+  )
+
+  const handleLaunchWorkflow = useCallback(
+    (workflowId: string, subGroup?: string, params?: Record<string, string>) => {
+      launchOrShowParams(workflowId, subGroup, params)
+    },
+    [launchOrShowParams],
   )
 
   const handleTimelineNavigate = useCallback(
@@ -170,16 +191,12 @@ export function PlanPanel({
   })
 
   const handleSelectWorkflow = (workflowId: string) => {
-    const content = input.trim() ? input : undefined
-    const atts = attachments.length > 0 ? attachments : undefined
-    launchWorkflow(content, atts, workflowId)
+    launchOrShowParams(workflowId)
     clearInput()
   }
 
   const handleSelectWorkflowWithSubGroup = (workflowId: string, subGroup: string) => {
-    const content = input.trim() ? input : undefined
-    const atts = attachments.length > 0 ? attachments : undefined
-    launchWorkflow(content, atts, workflowId, subGroup)
+    launchOrShowParams(workflowId, subGroup)
     clearInput()
   }
 
@@ -271,12 +288,26 @@ export function PlanPanel({
             }
           }}
           onSelectWorkflow={(workflowId) => {
-            const content = input.trim() || undefined
-            const atts = attachments.length > 0 ? attachments : undefined
-            launchWorkflow(content, atts, workflowId)
+            launchOrShowParams(workflowId)
             clearInput()
           }}
         />
+
+        {pendingParamWorkflow && (
+          <WorkflowParamModal
+            workflowName={pendingParamWorkflow.name}
+            parameters={(() => {
+              const allWf = useWorkflowsStore.getState()
+              const all = [...allWf.defaults, ...allWf.userItems, ...allWf.projectItems]
+              return all.find((w) => w.id === pendingParamWorkflow.id)?.parameters ?? []
+            })()}
+            onConfirm={(params) => {
+              launchWorkflow(undefined, undefined, pendingParamWorkflow.id, pendingParamWorkflow.subGroup, params)
+              setPendingParamWorkflow(null)
+            }}
+            onCancel={() => setPendingParamWorkflow(null)}
+          />
+        )}
       </SessionLayout>
 
       {showMessageSearch && (

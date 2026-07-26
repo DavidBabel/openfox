@@ -33,6 +33,15 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     throw new Error(`Workflow "${workflowId}" not found`)
   }
 
+  // Validate required params
+  const requiredParams = (workflow.metadata.parameters ?? []).filter((p) => p.required)
+  const suppliedParams = options.params ?? {}
+  const missing = requiredParams.filter((p) => !(p.id in suppliedParams))
+  if (missing.length > 0) {
+    const names = missing.map((p) => p.label || p.id).join(', ')
+    throw new Error(`Missing required parameter${missing.length > 1 ? 's' : ''}: ${names}`)
+  }
+
   logger.debug('Using workflow executor', {
     sessionId: options.sessionId,
     workflow: workflow.metadata.id,

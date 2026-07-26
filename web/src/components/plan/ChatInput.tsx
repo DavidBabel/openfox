@@ -102,8 +102,23 @@ export function ChatInput({
   const workdir = useSessionStore((state) => state.currentSession?.workdir)
   const currentSession = useSessionStore((state) => state.currentSession)
   const warmupSentRef = useRef(false)
+  const workflowsFetchedRef = useRef(false)
 
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
+
+  // Eagerly load workflows so slash commands always have data — no lazy-fetch on send
+  useEffect(() => {
+    if (workflowsFetchedRef.current) return
+    workflowsFetchedRef.current = true
+    const allWorkflows = useWorkflowsStore.getState()
+    if (
+      allWorkflows.defaults.length === 0 &&
+      allWorkflows.userItems.length === 0 &&
+      allWorkflows.projectItems.length === 0
+    ) {
+      allWorkflows.fetchWorkflows()
+    }
+  }, [])
 
   useEffect(() => {
     if (restoredInput !== null) {
@@ -307,7 +322,7 @@ export function ChatInput({
     fileInputRef.current?.click()
   }, [])
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!input.trim() && attachments.length === 0) return
     scrollContainerRef.current?.scrollTo({
       top: scrollContainerRef.current.scrollHeight,
@@ -318,15 +333,17 @@ export function ChatInput({
     const trimmed = input.trim()
     if (trimmed.startsWith('/')) {
       const allWorkflows = useWorkflowsStore.getState()
-      let workflows = [...allWorkflows.defaults, ...allWorkflows.userItems, ...allWorkflows.projectItems]
-      // Lazy-fetch if store is empty (e.g. first slash command before any modal opened)
-      if (workflows.length === 0) {
-        await allWorkflows.fetchWorkflows()
-        const refreshed = useWorkflowsStore.getState()
-        workflows = [...refreshed.defaults, ...refreshed.userItems, ...refreshed.projectItems]
-      }
+      const workflows = [...allWorkflows.defaults, ...allWorkflows.userItems, ...allWorkflows.projectItems]
       const slashResult = parseSlashCommand(input, workflows)
       if (slashResult) {
+        // Validate required params
+        const wf = workflows.find((w) => w.id === slashResult.workflowId)
+        const missingRequired = (wf?.parameters ?? []).filter((p) => p.required && !(p.id in slashResult.params))
+        if (missingRequired.length > 0) {
+          const names = missingRequired.map((p) => p.label || p.id).join(', ')
+          setErrorMessage(`Missing required parameter${missingRequired.length > 1 ? 's' : ''}: ${names}`)
+          return
+        }
         launchWorkflow(undefined, undefined, slashResult.workflowId, undefined, slashResult.params)
         clearInput()
         return

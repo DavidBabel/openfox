@@ -27,6 +27,7 @@ import type {
   ContextStatePayload,
   QueueStatePayload,
   SessionCreatedPayload,
+  WorkflowWaitingPayload,
 } from '@shared/protocol.js'
 import { useDevServerStore } from '../dev-server'
 import { useBackgroundProcessesStore } from '../background-processes'
@@ -689,13 +690,7 @@ export function handleServerMessage(
     }
 
     case 'workflow.waiting': {
-      const payload = message.payload as {
-        workflowId: string
-        workflowName: string
-        stepId: string
-        stepName: string
-        stepOutput: Record<string, string>
-      }
+      const payload = message.payload as WorkflowWaitingPayload
       set({ waitingWorkflow: payload })
       break
     }

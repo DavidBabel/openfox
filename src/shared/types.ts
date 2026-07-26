@@ -27,6 +27,18 @@ export type ToolMode = string
 // Workflow phase shown to user (more granular than mode)
 export type SessionPhase = 'plan' | 'build' | 'verification' | 'waiting' | 'blocked' | 'done'
 
+// ============================================================================
+// Workflow Types
+// ============================================================================
+
+export interface WorkflowParameter {
+  id: string
+  label: string
+  description?: string
+  position?: number
+  required?: boolean
+}
+
 export type DangerLevel = 'normal' | 'dangerous'
 
 export interface Session {

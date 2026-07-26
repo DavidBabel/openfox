@@ -11,6 +11,7 @@ import type {
   SnapshotMessage,
 } from './types.js'
 import type { SessionMode, SessionPhase, ContextState, Criterion, Todo, MetadataEntry } from '../../shared/types.js'
+import type { WorkflowWaitingPayload } from '../../shared/protocol.js'
 import type { FormatRetry } from './apply-events.js'
 
 export interface ContextMessage {
@@ -65,11 +66,5 @@ export interface FoldedSessionState {
   taskStats?: TaskStats
   messageStats?: MessageStatsEntry[]
   contextWindows?: CompactionRecord[]
-  waitingWorkflow?: {
-    workflowId: string
-    workflowName: string
-    stepId: string
-    stepName: string
-    stepOutput: Record<string, string>
-  }
+  waitingWorkflow?: WorkflowWaitingPayload
 }

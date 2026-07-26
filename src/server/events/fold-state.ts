@@ -13,6 +13,7 @@ import type {
   SnapshotMessage,
 } from './types.js'
 import type { FormatRetry } from './apply-events.js'
+import type { WorkflowWaitingPayload } from '../../shared/protocol.js'
 import type { EventLike, FoldedSessionState } from './fold-types.js'
 import type { MessageStats, MetadataEntry } from '../../shared/types.js'
 import {
@@ -378,6 +379,17 @@ export function foldSessionState(
 }
 
 /**
+ * Returns { waitingWorkflow: ... } or {} for use with spread in foldSessionState.
+ * Handles exactOptionalPropertyTypes correctly.
+ */
+function computeWaitingWorkflow(
+  events: EventLike[],
+): { waitingWorkflow: NonNullable<FoldedSessionState['waitingWorkflow']> } | Record<string, never> {
+  const ww = foldWaitingWorkflow(events)
+  return ww !== undefined ? { waitingWorkflow: ww } : {}
+}
+
+/**
  * Fold just the waitingWorkflow from events.
  * Useful for REST endpoints that don't need the full folded state.
  */
@@ -385,30 +397,13 @@ export function foldWaitingWorkflow(events: EventLike[]): FoldedSessionState['wa
   let waitingWorkflow: FoldedSessionState['waitingWorkflow']
   for (const event of events) {
     if (event.type === 'workflow.waiting') {
-      const data = event.data as {
-        workflowId: string
-        workflowName: string
-        stepId: string
-        stepName: string
-        stepOutput: Record<string, string>
-      }
+      const data = event.data as WorkflowWaitingPayload
       waitingWorkflow = data
     } else if (event.type === 'task.completed') {
       waitingWorkflow = undefined
     }
   }
   return waitingWorkflow
-}
-
-/**
- * Returns { waitingWorkflow: ... } or {} for use with spread in foldSessionState.
- * Separate from foldWaitingWorkflow to handle exactOptionalPropertyTypes correctly.
- */
-function computeWaitingWorkflow(
-  events: EventLike[],
-): { waitingWorkflow: NonNullable<FoldedSessionState['waitingWorkflow']> } | Record<string, never> {
-  const ww = foldWaitingWorkflow(events)
-  return ww !== undefined ? { waitingWorkflow: ww } : {}
 }
 
 export function buildSnapshot(

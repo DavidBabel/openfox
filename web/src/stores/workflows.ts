@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { authFetch } from '../lib/api'
 import { saveEntity, duplicateEntity } from './utils'
+import type { WorkflowParameter } from '@shared/types.js'
+
+export type { WorkflowParameter }
 
 export interface WorkflowCondition {
   type: string
@@ -9,14 +12,6 @@ export interface WorkflowCondition {
   field?: string
   value?: string
   values?: string[]
-}
-
-export interface WorkflowParameter {
-  id: string
-  label: string
-  description?: string
-  position?: number
-  required?: boolean
 }
 
 export interface WorkflowInfo {

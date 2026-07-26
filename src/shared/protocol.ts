@@ -178,13 +178,7 @@ export interface SessionStatePayload {
   pendingConfirmations: PendingPathConfirmationPayload[]
   pendingQuestions?: PendingQuestionPayload[]
   gitStatus?: GitStatusPayload // Current branch and diff, embedded on session load
-  waitingWorkflow?: {
-    workflowId: string
-    workflowName: string
-    stepId: string
-    stepName: string
-    stepOutput: Record<string, string>
-  }
+  waitingWorkflow?: WorkflowWaitingPayload
 }
 
 export interface WorkflowWaitingPayload {

@@ -10,13 +10,9 @@
 // Workflow Definition
 // ============================================================================
 
-export interface WorkflowParameter {
-  id: string
-  label: string
-  description?: string
-  position?: number
-  required?: boolean
-}
+import type { WorkflowParameter } from '../../shared/types.js'
+
+export type { WorkflowParameter }
 
 export interface WorkflowMetadata {
   id: string

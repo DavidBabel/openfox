@@ -25,6 +25,7 @@ import type {
   Attachment,
   PreparingToolCall,
 } from '../../shared/types.js'
+import type { WorkflowWaitingPayload } from '../../shared/protocol.js'
 
 // ============================================================================
 // Stored Event (what goes in the database)
@@ -428,13 +429,7 @@ export interface SessionSnapshot {
   messageStats?: MessageStatsEntry[]
   pendingConfirmations?: PendingPathConfirmation[]
   contextWindows?: CompactionRecord[]
-  waitingWorkflow?: {
-    workflowId: string
-    workflowName: string
-    stepId: string
-    stepName: string
-    stepOutput: Record<string, string>
-  }
+  waitingWorkflow?: WorkflowWaitingPayload
 }
 
 /**

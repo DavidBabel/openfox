@@ -266,6 +266,33 @@ export async function executeWorkflow(
     stepsById.set(step.id, step)
   }
 
+  // Validate resume target: must be an existing user step
+  if (resumeFromStep) {
+    const targetStep = stepsById.get(resumeFromStep)
+    if (!targetStep) {
+      return {
+        finalAction: {
+          type: 'BLOCKED',
+          reason: `Resume target step "${resumeFromStep}" not found in workflow "${workflow.metadata.id}"`,
+          blockedCriteria: [],
+        },
+        iterations: 0,
+        totalTime: (performance.now() - startTime) / 1000,
+      }
+    }
+    if (targetStep.type !== 'user') {
+      return {
+        finalAction: {
+          type: 'BLOCKED',
+          reason: `Cannot resume from step "${resumeFromStep}" (type: ${targetStep.type}): only user steps support resume`,
+          blockedCriteria: [],
+        },
+        iterations: 0,
+        totalTime: (performance.now() - startTime) / 1000,
+      }
+    }
+  }
+
   logger.debug('Workflow executor starting', { sessionId, workflow: workflow.metadata.id })
 
   // Evaluate start condition if present

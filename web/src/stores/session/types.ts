@@ -8,7 +8,7 @@ import type {
   ContextState,
   Attachment,
 } from '@shared/types.js'
-import type { ServerMessage, QueuedMessage } from '@shared/protocol.js'
+import type { ServerMessage, QueuedMessage, WorkflowWaitingPayload } from '@shared/protocol.js'
 import type { ConnectionStatus } from '../../lib/ws'
 
 export interface PendingPathConfirmation {
@@ -61,13 +61,7 @@ export interface SessionState {
   queuedMessages: QueuedMessage[]
   abortInProgress: boolean
   restoredInput: string | null
-  waitingWorkflow: {
-    workflowId: string
-    workflowName: string
-    stepId: string
-    stepName: string
-    stepOutput: Record<string, string>
-  } | null
+  waitingWorkflow: WorkflowWaitingPayload | null
   error: { code: string; message: string } | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean

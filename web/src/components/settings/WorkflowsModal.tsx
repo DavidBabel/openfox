@@ -11,6 +11,7 @@ import {
 } from '../../stores/workflows'
 import { useAgentsStore } from '../../stores/agents'
 import { ArrowRightIcon, EyeIcon } from '../shared/icons'
+import { CollapsibleSection } from '../shared/CollapsibleSection'
 import {
   ConfirmButton,
   DeleteIcon,
@@ -521,113 +522,109 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
         {/* Parameters */}
         {!isReadOnly && (
           <div className="mb-3 pb-3 border-b border-border">
-            <details className="group">
-              <summary className="text-[11px] text-text-secondary uppercase tracking-wider font-medium cursor-pointer select-none hover:text-text-primary transition-colors">
-                Parameters ({formParameters.length})
-              </summary>
-              <div className="mt-2 space-y-2">
-                {formParameters.map((p, i) => (
-                  <div key={p.id} className="flex items-center gap-2 text-sm">
+            <CollapsibleSection title={`Parameters (${formParameters.length})`}>
+              {formParameters.map((p, i) => (
+                <div key={p.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    value={p.id}
+                    onChange={(e) => {
+                      const next = [...formParameters]
+                      next[i] = { ...p, id: e.target.value }
+                      setFormParameters(next)
+                    }}
+                    placeholder="ID"
+                    className="w-28 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                  />
+                  <input
+                    value={p.label}
+                    onChange={(e) => {
+                      const next = [...formParameters]
+                      next[i] = { ...p, label: e.target.value }
+                      setFormParameters(next)
+                    }}
+                    placeholder="Label"
+                    className="w-36 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                  />
+                  <input
+                    value={p.description ?? ''}
+                    onChange={(e) => {
+                      const next = [...formParameters]
+                      next[i] = { ...p, description: e.target.value || undefined }
+                      setFormParameters(next)
+                    }}
+                    placeholder="Description"
+                    className="flex-1 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                  />
+                  <label className="flex items-center gap-1 text-[10px] text-text-muted whitespace-nowrap">
                     <input
-                      value={p.id}
+                      type="checkbox"
+                      checked={p.required ?? false}
                       onChange={(e) => {
                         const next = [...formParameters]
-                        next[i] = { ...p, id: e.target.value }
+                        next[i] = { ...p, required: e.target.checked || undefined }
                         setFormParameters(next)
                       }}
-                      placeholder="ID"
-                      className="w-28 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                      className="rounded border-border"
                     />
-                    <input
-                      value={p.label}
-                      onChange={(e) => {
-                        const next = [...formParameters]
-                        next[i] = { ...p, label: e.target.value }
-                        setFormParameters(next)
-                      }}
-                      placeholder="Label"
-                      className="w-36 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
-                    />
-                    <input
-                      value={p.description ?? ''}
-                      onChange={(e) => {
-                        const next = [...formParameters]
-                        next[i] = { ...p, description: e.target.value || undefined }
-                        setFormParameters(next)
-                      }}
-                      placeholder="Description"
-                      className="flex-1 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
-                    />
-                    <label className="flex items-center gap-1 text-[10px] text-text-muted whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={p.required ?? false}
-                        onChange={(e) => {
-                          const next = [...formParameters]
-                          next[i] = { ...p, required: e.target.checked || undefined }
-                          setFormParameters(next)
-                        }}
-                        className="rounded border-border"
-                      />
-                      Req.
-                    </label>
-                    <div className="flex gap-0.5">
-                      <button
-                        onClick={() => {
-                          if (i === 0) return
-                          const next = [...formParameters]
-                          ;[next[i - 1], next[i]] = [next[i]!, next[i - 1]!]
-                          // Update positions to match new order
-                          next.forEach((param, idx) => {
-                            param.position = idx
-                          })
-                          setFormParameters(next)
-                        }}
-                        disabled={i === 0}
-                        className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
-                        title="Move up"
-                        aria-label={`Move ${p.label || p.id} up`}
-                      >
-                        ▲
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (i === formParameters.length - 1) return
-                          const next = [...formParameters]
-                          ;[next[i], next[i + 1]] = [next[i + 1]!, next[i]!]
-                          next.forEach((param, idx) => {
-                            param.position = idx
-                          })
-                          setFormParameters(next)
-                        }}
-                        disabled={i === formParameters.length - 1}
-                        className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
-                        title="Move down"
-                        aria-label={`Move ${p.label || p.id} down`}
-                      >
-                        ▼
-                      </button>
-                    </div>
+                    Req.
+                  </label>
+                  <div className="flex gap-0.5">
                     <button
-                      onClick={() => setFormParameters(formParameters.filter((_, j) => j !== i))}
-                      className="p-1 text-text-muted hover:text-accent-error transition-colors"
-                      title="Remove parameter"
+                      onClick={() => {
+                        if (i === 0) return
+                        setFormParameters(
+                          formParameters.map((p, idx) => {
+                            if (idx === i) return { ...formParameters[i - 1]!, position: idx }
+                            if (idx === i - 1) return { ...formParameters[i]!, position: idx }
+                            return { ...p, position: idx }
+                          }),
+                        )
+                      }}
+                      disabled={i === 0}
+                      className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
+                      title="Move up"
+                      aria-label={`Move ${p.label || p.id} up`}
                     >
-                      ✕
+                      ▲
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (i === formParameters.length - 1) return
+                        setFormParameters(
+                          formParameters.map((p, idx) => {
+                            if (idx === i) return { ...formParameters[i + 1]!, position: idx }
+                            if (idx === i + 1) return { ...formParameters[i]!, position: idx }
+                            return { ...p, position: idx }
+                          }),
+                        )
+                      }}
+                      disabled={i === formParameters.length - 1}
+                      className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
+                      title="Move down"
+                      aria-label={`Move ${p.label || p.id} down`}
+                    >
+                      ▼
                     </button>
                   </div>
-                ))}
-                <button
-                  onClick={() => {
-                    const id = `param_${formParameters.length + 1}`
-                    setFormParameters([...formParameters, { id, label: '', description: '', required: false }])
-                  }}
-                  className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
-                >
-                  + Add parameter
-                </button>
-              </div>
-            </details>
+                  <button
+                    onClick={() => setFormParameters(formParameters.filter((_, j) => j !== i))}
+                    className="p-1 text-text-muted hover:text-accent-error transition-colors"
+                    title="Remove parameter"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => {
+                  const id = `param_${formParameters.length + 1}`
+                  setFormParameters([...formParameters, { id, label: '', description: '', required: false }])
+                }}
+                className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+              >
+                + Add parameter
+              </button>
+            </CollapsibleSection>
           </div>
         )}
 
