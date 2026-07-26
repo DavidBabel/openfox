@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, mkdir, readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -359,5 +359,55 @@ describe('CRUD project workflows', () => {
     const result = await deleteProjectWorkflow(tempDir, 'proj_del')
     expect(result.success).toBe(true)
     expect(await loadProjectWorkflows(tempDir)).toHaveLength(0)
+  })
+
+  it('should update a project workflow when filename differs from ID', async () => {
+    const workflowsDir = join(tempDir, '.openfox', 'workflows')
+    await mkdir(workflowsDir, { recursive: true })
+
+    // Create a file with a different name than its internal ID (the bug scenario)
+    const workflow = makeWorkflow({
+      metadata: { id: 'review', name: 'PR Review', description: 'Original', version: '1.0' },
+    })
+    await writeFile(join(workflowsDir, 'pr-review.workflow.json'), JSON.stringify(workflow))
+
+    // Verify it loads as a project workflow
+    const loaded = await loadProjectWorkflows(tempDir)
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0]!.metadata.id).toBe('review')
+
+    // Save the updated workflow (should use ID 'review' as filename)
+    const updated = makeWorkflow({
+      metadata: { id: 'review', name: 'PR Review', description: 'Updated', version: '1.0' },
+    })
+    await saveWorkflowToProject(tempDir, updated)
+
+    // Should have exactly one file now (the old one cleaned up)
+    const files = await readdir(workflowsDir)
+    const workflowFiles = files.filter((f) => f.endsWith('.workflow.json'))
+    expect(workflowFiles).toHaveLength(1)
+    expect(workflowFiles[0]).toBe('review.workflow.json')
+
+    // Content should be the updated version
+    const reloaded = await loadProjectWorkflows(tempDir)
+    expect(reloaded).toHaveLength(1)
+    expect(reloaded[0]!.metadata.description).toBe('Updated')
+  })
+
+  it('should delete a project workflow when filename differs from ID', async () => {
+    const workflowsDir = join(tempDir, '.openfox', 'workflows')
+    await mkdir(workflowsDir, { recursive: true })
+
+    const workflow = makeWorkflow({
+      metadata: { id: 'my-workflow', name: 'My WF', description: 'Test', version: '1.0' },
+    })
+    await writeFile(join(workflowsDir, 'different-name.workflow.json'), JSON.stringify(workflow))
+
+    // Delete by ID
+    const result = await deleteProjectWorkflow(tempDir, 'my-workflow')
+    expect(result.success).toBe(true)
+
+    const loaded = await loadProjectWorkflows(tempDir)
+    expect(loaded).toHaveLength(0)
   })
 })

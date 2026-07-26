@@ -73,6 +73,41 @@ export async function loadItemsFromDir<T extends ItemDefinition>(
   return items
 }
 
+/**
+ * Scan a directory for a file whose internal metadata.id matches the given id.
+ * Returns the full path to the matching file, or null if not found.
+ * Uses JSON.parse for JSON files, gray-matter for markdown files with frontmatter.
+ */
+export async function findFileByInternalId(dir: string, id: string, ext: string): Promise<string | null> {
+  if (!(await pathExists(dir))) return null
+  let files: string[]
+  try {
+    files = await readdir(dir)
+  } catch {
+    return null
+  }
+  for (const file of files) {
+    if (!file.endsWith(ext)) continue
+    try {
+      const raw = await readFile(join(dir, file), 'utf-8')
+      let parsedId: string | undefined
+      if (ext === '.md' || ext === '.mdx') {
+        const { data } = matter(raw)
+        parsedId = (data as { id?: string }).id
+      } else {
+        const parsed = JSON.parse(raw)
+        parsedId = parsed.metadata?.id ?? parsed.id
+      }
+      if (parsedId === id) {
+        return join(dir, file)
+      }
+    } catch {
+      // skip unparseable files
+    }
+  }
+  return null
+}
+
 export async function saveItemToDir<T>(
   dir: string,
   item: T,
@@ -84,17 +119,36 @@ export async function saveItemToDir<T>(
   }
   const meta = (item as { metadata: { id: string } }).metadata
   const filePath = join(dir, `${meta.id}${ext}`)
+
+  // If a file with a different name but same internal ID exists, remove it first
+  // to prevent duplicates when filename ≠ ID (e.g. pr-review.workflow.json vs review.workflow.json)
+  const existing = await findFileByInternalId(dir, meta.id, ext)
+  if (existing && existing !== filePath) {
+    await unlink(existing).catch(() => {})
+  }
+
   await writeFile(filePath, serialize(item), 'utf-8')
 }
 
 export const jsonSerializer = <T>(item: T): string => JSON.stringify(item, null, 2) + '\n'
 
 export async function deleteItemFromDir(dir: string, id: string, ext: string): Promise<{ success: boolean }> {
-  const filePath = join(dir, `${id}${ext}`)
+  // First try the fast path: {id}{ext}
+  const fastPath = join(dir, `${id}${ext}`)
   try {
-    await unlink(filePath)
+    await unlink(fastPath)
     return { success: true }
   } catch {
+    // Fast path failed — try to find by internal ID
+    const found = await findFileByInternalId(dir, id, ext)
+    if (found) {
+      try {
+        await unlink(found)
+        return { success: true }
+      } catch {
+        return { success: false }
+      }
+    }
     return { success: false }
   }
 }

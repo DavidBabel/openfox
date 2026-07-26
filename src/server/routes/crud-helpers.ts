@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { join } from 'node:path'
-import { pathExists } from '../shared/item-loader.js'
+import { pathExists, findFileByInternalId } from '../shared/item-loader.js'
 
 export function computeOverrideIds<T extends { metadata: { id: string } }>(defaults: T[], userItems: T[]): string[] {
   return userItems.filter((u) => defaults.some((d) => d.metadata.id === u.metadata.id)).map((u) => u.metadata.id)
@@ -39,7 +39,12 @@ export async function isProjectItem(
   ext: string,
 ): Promise<boolean> {
   if (!projectDir) return false
-  return pathExists(getProjectItemPath(projectDir, dirName, id, ext))
+  // Fast path: check if {id}{ext} exists
+  if (await pathExists(getProjectItemPath(projectDir, dirName, id, ext))) return true
+  // Slow path: scan directory for a file whose internal ID matches
+  const dir = join(projectDir, '.openfox', dirName)
+  const found = await findFileByInternalId(dir, id, ext)
+  return found !== null
 }
 
 export interface CrudRouteConfig<T> {
