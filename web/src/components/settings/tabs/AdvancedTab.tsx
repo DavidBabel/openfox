@@ -277,9 +277,8 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
           <p className="text-xs text-text-muted mt-1">
             Proxy server all OpenFox network requests (AI, model fetching, web search, terminal). Leave empty for direct
             connection.
-          </p>est button)
+          </p>
         </div>
-        {proxyTestError && <p className="text-xs text-red-500 mt-1">{proxyTestError}</p>}
       </div>
       <hr className="border-border" />
       <div>
