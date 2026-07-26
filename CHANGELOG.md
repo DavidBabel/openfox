@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.96 - 2026-07-26
+
+### Features
+
+- **Remote SSH/SCP/SFTP/MOSH commands are visually distinguished** — tool calls running remote commands show a purple frame and a "REMOTE · SSH" badge, making it easy to spot remote execution at a glance.
+- **Open project folder in OS file explorer from header** — a new folder button opens the project directory in your system's file manager.
+- **Pick a vision fallback model from your configured providers** — choose which model handles vision tasks when the primary model doesn't support images.
+
+### Bug Fixes
+
+- **Project workflow saves no longer silently fall back to user config** — saving a workflow item now correctly updates the file on disk instead of appearing to succeed while leaving the old file intact.
+- **Shell injection prevented when deleting workspaces** — workspace names are no longer interpolated into shell commands, fixing a potential injection vector.
+
 ## 2.0.95 - 2026-07-26
 
 ### Features
