@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.94 - 2026-07-26
+
+### Features
+
+- **WorkflowBar shows persistent workflow status** — a new bar above the chat input displays the current workflow name, active step, and an Exit button. Survives page refresh and server restarts thanks to DB-backed workflow state.
+
+### Bug Fixes
+
+- **Workflow template parameters survive pause/resume** — params like `{{featureName}}` are now persisted across user-step pauses and correctly restored on continue.
+- **Continue button reappears after page refresh** — the workflow waiting state is loaded from the server on session reload, so the button is always visible when a workflow is paused.
+- **Launching a new workflow cancels the previous one** — if a workflow is already waiting, starting another automatically exits the old one first.
+- **MCP server changes no longer bump session timestamps** — modifying MCP overrides in settings no longer pushes the session to the top of the list.
+
 ## 2.0.93 - 2026-07-26
 
 ### Features
