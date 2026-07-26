@@ -2,10 +2,24 @@ import { useState, useEffect } from 'react'
 import { authFetch } from '../../../lib/api'
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard'
 import { CheckIcon, ClipboardIcon } from '../../shared/icons'
+import type { Provider } from '../../../stores/config'
+import {
+  useVisionModelOptions,
+  VisionModelConfigSection,
+  useBackendChangeHandler,
+  useProviderModelSelectHandler,
+} from '../../shared/VisionModelSelector'
 
 interface VisionStepProps {
   onNext: (data: {
-    visionFallback?: { enabled: boolean; url: string; model: string; timeout: number; backend: 'ollama' | 'openai' }
+    visionFallback?: {
+      enabled: boolean
+      url?: string
+      model?: string
+      timeout: number
+      backend?: 'ollama' | 'openai'
+      providerModelRef?: string
+    }
   }) => void
 }
 
@@ -14,6 +28,8 @@ export function VisionStep({ onNext }: VisionStepProps) {
   const [url, setUrl] = useState('http://localhost:11434')
   const [model, setModel] = useState('qwen3.5:0.8b')
   const [backend, setBackend] = useState<'ollama' | 'openai'>('ollama')
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [selectedRef, setSelectedRef] = useState<string>('')
   const { copied, copy } = useCopyToClipboard()
 
   useEffect(() => {
@@ -22,15 +38,28 @@ export function VisionStep({ onNext }: VisionStepProps) {
       .then((data) => {
         if (data.visionFallback) {
           setEnabled(data.visionFallback.enabled)
-          setUrl(data.visionFallback.url)
-          setModel(data.visionFallback.model)
-          if (data.visionFallback.backend) {
-            setBackend(data.visionFallback.backend)
+          if (data.visionFallback.providerModelRef) {
+            setSelectedRef(data.visionFallback.providerModelRef)
+          } else {
+            setUrl(data.visionFallback.url ?? 'http://localhost:11434')
+            setModel(data.visionFallback.model ?? 'qwen3.5:0.8b')
+            if (data.visionFallback.backend) {
+              setBackend(data.visionFallback.backend)
+            }
           }
+        }
+        if (data.providers) {
+          setProviders(data.providers)
         }
       })
       .catch(() => {})
   }, [])
+
+  const visionModelOptions = useVisionModelOptions(providers)
+
+  const handleProviderModelSelect = useProviderModelSelectHandler(setSelectedRef, setUrl, setModel)
+
+  const handleBackendChange = useBackendChangeHandler(setBackend, setSelectedRef, setUrl, setModel)
 
   function handleFinish(skip: boolean) {
     if (skip) {
@@ -38,16 +67,30 @@ export function VisionStep({ onNext }: VisionStepProps) {
       return
     }
 
-    onNext({
-      visionFallback: {
-        enabled,
-        url,
-        model,
-        timeout: 120,
-        backend,
-      },
-    })
+    if (enabled && selectedRef) {
+      onNext({
+        visionFallback: {
+          enabled,
+          providerModelRef: selectedRef,
+          timeout: 120,
+        },
+      })
+    } else {
+      onNext({
+        visionFallback: {
+          enabled,
+          url,
+          model,
+          timeout: 120,
+          backend,
+          providerModelRef: '',
+        },
+      })
+    }
   }
+
+  const hasOptions = visionModelOptions.length > 0
+  const noVisionMsg = 'No vision-capable models found in your providers. You can manually enter a model below.'
 
   return (
     <div className="max-w-xl mx-auto">
@@ -93,43 +136,15 @@ export function VisionStep({ onNext }: VisionStepProps) {
           <span className="text-text-primary">Enable vision fallback for non-vision models</span>
         </label>
 
-        {enabled && (
-          <div className="space-y-4 pl-8">
-            <div>
-              <label className="block text-sm text-text-secondary mb-1">Backend type</label>
-              <select
-                value={backend}
-                onChange={(e) => setBackend(e.target.value as 'ollama' | 'openai')}
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent-primary"
-              >
-                <option value="ollama">Ollama</option>
-                <option value="openai">OpenAI-compatible (vLLM, sglang, llama.cpp)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-text-secondary mb-1">Vision server URL</label>
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder={backend === 'ollama' ? 'http://localhost:11434' : 'http://localhost:8000/v1'}
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-text-secondary mb-1">Vision model name</label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder={backend === 'ollama' ? 'qwen3.5:0.8b' : 'qwen3.5-27b'}
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-primary"
-              />
-            </div>
-          </div>
-        )}
+        <VisionModelConfigSection
+          {...{ enabled, hasOptions, selectedRef, visionModelOptions }}
+          onProviderModelSelect={handleProviderModelSelect}
+          {...{ backend, url, model }}
+          onBackendChange={handleBackendChange}
+          onUrlChange={setUrl}
+          onModelChange={setModel}
+          noOptionsMessage={noVisionMsg}
+        />
 
         <div className="flex items-center justify-between pt-4">
           <button

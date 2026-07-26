@@ -105,6 +105,7 @@ const visionFallbackSchema = z.object({
   model: z.string().default('qwen3.5:0.8b'),
   timeout: z.number().default(120),
   backend: z.enum(['ollama', 'openai']).default('ollama'),
+  providerModelRef: z.string().optional(),
 })
 
 const cachedToolSchema = z.object({
@@ -132,12 +133,12 @@ const llmConfigSchema = z.object({
   idleTimeout: z.number().optional(),
 })
 
-const defaultVisionFallback = {
+const defaultVisionFallback: z.output<typeof visionFallbackSchema> = {
   enabled: false,
   url: 'http://localhost:11434',
   model: 'qwen3.5:0.8b',
   timeout: 120,
-  backend: 'ollama' as const,
+  backend: 'ollama',
 }
 
 // New config schema with providers array
@@ -200,7 +201,58 @@ export async function loadGlobalConfig(mode: Mode, configPathOverride?: string):
 }
 
 export function getDefaultVisionFallback() {
-  return { enabled: false, url: 'http://localhost:11434', model: 'qwen3.5:0.8b', timeout: 120 }
+  return {
+    enabled: false,
+    url: 'http://localhost:11434',
+    model: 'qwen3.5:0.8b',
+    timeout: 120,
+    backend: 'ollama' as const,
+  }
+}
+
+export function resolveVisionFallback(
+  config: GlobalConfig,
+): { baseUrl: string; model: string; timeout: number; backend: 'ollama' | 'openai'; apiKey?: string } | undefined {
+  const fallback = config.visionFallback
+  if (!fallback?.enabled) return undefined
+
+  if (fallback.providerModelRef) {
+    const slashIndex = fallback.providerModelRef.indexOf('/')
+    if (slashIndex !== -1) {
+      const providerId = fallback.providerModelRef.substring(0, slashIndex)
+      const modelId = fallback.providerModelRef.substring(slashIndex + 1)
+      const provider = config.providers?.find((p) => p.id === providerId)
+
+      if (provider) {
+        const exactModel = provider.models?.find((m) => m.id === modelId)
+        const model = exactModel?.supportsVision
+          ? exactModel
+          : provider.models?.find((m) => m.supportsVision)
+
+        if (model?.supportsVision) {
+          const backend: 'ollama' | 'openai' = provider.backend === 'ollama' ? 'ollama' : 'openai'
+          return {
+            baseUrl: provider.url || fallback.url || 'http://localhost:11434',
+            model: model.id,
+            timeout: (fallback.timeout ?? 120) * 1000,
+            backend,
+            ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
+          }
+        }
+      }
+    }
+  }
+
+  if (fallback.url && fallback.model) {
+    return {
+      baseUrl: fallback.url,
+      model: fallback.model,
+      timeout: (fallback.timeout ?? 120) * 1000,
+      backend: fallback.backend ?? 'ollama',
+    }
+  }
+
+  return undefined
 }
 
 export async function saveGlobalConfig(

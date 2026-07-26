@@ -1230,3 +1230,40 @@ describe('processContextImages', () => {
     expect(persistEvent).not.toHaveBeenCalled()
   })
 })
+
+describe('loadVisionModelFromGlobalConfig', () => {
+  it('returns resolved config from providerModelRef', async () => {
+    const configModule = await import('../../cli/config.js')
+    const visionProvider = {
+      id: 'vision-provider',
+      name: 'Vision Provider',
+      url: 'http://vision-server:8000/v1',
+      backend: 'openai' as const,
+      apiKey: 'sk-test-key-123',
+      models: [{ id: 'gpt-4o-vision', contextWindow: 128000, source: 'backend' as const, supportsVision: true }],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+
+    const config = {
+      providers: [visionProvider],
+      server: { port: 10369, host: '127.0.0.1', openBrowser: true },
+      logging: { level: 'error' as const },
+      database: { path: '' },
+      workspace: { workdir: process.cwd() },
+      visionFallback: {
+        enabled: true,
+        providerModelRef: 'vision-provider/gpt-4o-vision',
+        timeout: 120,
+      },
+    }
+
+    const fallbackRef = configModule.resolveVisionFallback(config as any)
+    expect(fallbackRef).toBeDefined()
+    expect(fallbackRef!.baseUrl).toBe('http://vision-server:8000/v1')
+    expect(fallbackRef!.model).toBe('gpt-4o-vision')
+    expect(fallbackRef!.timeout).toBe(120 * 1000)
+    expect(fallbackRef!.backend).toBe('openai')
+    expect(fallbackRef!.apiKey).toBe('sk-test-key-123')
+  })
+})

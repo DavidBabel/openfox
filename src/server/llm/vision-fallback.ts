@@ -7,6 +7,7 @@ export interface VisionModelConfig {
   model: string
   timeout: number
   backend: VisionBackend
+  apiKey?: string
 }
 
 interface OllamaChatMessage {
@@ -125,11 +126,16 @@ export async function describeImage(
       ? AbortSignal.any([timeoutController.signal, options.signal])
       : timeoutController.signal
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (isOpenAI && visionModel.apiKey) {
+      headers['Authorization'] = `Bearer ${visionModel.apiKey}`
+    }
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal,
     })

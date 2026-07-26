@@ -1538,7 +1538,14 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const activeProvider = providerManager.getActiveProvider()
 
     let visionFallback:
-      | { enabled: boolean; url: string; model: string; timeout: number; backend: VisionBackend }
+      | {
+          enabled: boolean
+          url: string
+          model: string
+          timeout: number
+          backend: VisionBackend
+          providerModelRef?: string
+        }
       | undefined
     let globalWorkdir: string | undefined
     try {
@@ -1552,6 +1559,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
           model: fallback.model ?? 'qwen3.5:0.8b',
           timeout: fallback.timeout ?? 120,
           backend: fallback.backend ?? 'ollama',
+          ...(fallback.providerModelRef ? { providerModelRef: fallback.providerModelRef } : {}),
         }
       }
       globalWorkdir = globalConfig.workspace?.workdir
@@ -2035,17 +2043,28 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   app.post('/api/init/config', async (req, res) => {
     const { workdir, visionFallback } = req.body as {
       workdir?: string
-      visionFallback?: { enabled: boolean; url: string; model: string; timeout: number; backend: VisionBackend }
+      visionFallback?: {
+        enabled: boolean
+        url?: string
+        model?: string
+        timeout?: number
+        backend?: VisionBackend
+        providerModelRef?: string
+      }
     }
 
     try {
       const { loadGlobalConfig, saveGlobalConfig } = await import('../cli/config.js')
       const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
 
+      const updatedVf = visionFallback
+        ? { ...globalConfig.visionFallback, ...visionFallback }
+        : globalConfig.visionFallback
+
       const updatedConfig = {
         ...globalConfig,
         workspace: workdir ? { workdir } : globalConfig.workspace,
-        visionFallback: visionFallback ?? globalConfig.visionFallback,
+        visionFallback: updatedVf,
       }
 
       await saveGlobalConfig(config.mode ?? 'production', updatedConfig, config.globalConfigPath)
@@ -2056,6 +2075,112 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         success: false,
         error: error instanceof Error ? error.message : 'Failed to save config',
       })
+    }
+  })
+
+  // Update vision fallback config only
+  app.put('/api/config/vision-fallback', async (req, res) => {
+    const { z } = await import('zod')
+
+    const visionFallbackUpdateSchema = z.object({
+      enabled: z.boolean().optional(),
+      url: z.string().optional(),
+      model: z.string().optional(),
+      timeout: z.number().positive().optional(),
+      backend: z.enum(['ollama', 'openai']).optional(),
+      providerModelRef: z.string().optional(),
+    })
+
+    const parsed = visionFallbackUpdateSchema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues.map((i) => i.message).join(', ') })
+      return
+    }
+
+    const updates = parsed.data
+
+    try {
+      const { loadGlobalConfig, saveGlobalConfig } = await import('../cli/config.js')
+      const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
+
+      const filteredUpdates = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined))
+
+      const updatedConfig = {
+        ...globalConfig,
+        visionFallback: {
+          ...(globalConfig.visionFallback ?? {
+            enabled: false,
+            url: 'http://localhost:11434',
+            model: 'qwen3.5:0.8b',
+            timeout: 120,
+            backend: 'ollama' as const,
+          }),
+          ...filteredUpdates,
+        },
+      }
+
+      await saveGlobalConfig(config.mode ?? 'production', updatedConfig, config.globalConfigPath)
+
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save vision fallback config',
+      })
+    }
+  })
+
+  // Test vision fallback configuration
+  app.post('/api/config/vision-fallback/test', async (req, res) => {
+    const { z } = await import('zod')
+
+    const testSchema = z.object({
+      url: z.string().optional(),
+      model: z.string().optional(),
+      backend: z.enum(['ollama', 'openai']).optional(),
+      providerModelRef: z.string().optional(),
+      timeout: z.number().positive().optional(),
+    })
+
+    const parsed = testSchema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues.map((i) => i.message).join(', ') })
+      return
+    }
+
+    const testConfig = parsed.data
+
+    try {
+      const { resolveVisionFallback } = await import('../cli/config.js')
+      const { loadGlobalConfig } = await import('../cli/config.js')
+      const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
+
+      // Merge test config over the existing one for testing
+      const filteredTestConfig = Object.fromEntries(Object.entries(testConfig).filter(([, v]) => v !== undefined))
+      const testVisionFallback = {
+        ...(globalConfig.visionFallback ?? {
+          enabled: true,
+          url: 'http://localhost:11434',
+          model: 'qwen3.5:0.8b',
+          timeout: 120,
+          backend: 'ollama' as const,
+        }),
+        ...filteredTestConfig,
+        enabled: true,
+      }
+      const testGlobalConfig = { ...globalConfig, visionFallback: testVisionFallback }
+      const resolved = resolveVisionFallback(testGlobalConfig)
+
+      if (resolved) {
+        res.json({
+          success: true,
+          description: `Config valid: ${resolved.model} @ ${resolved.baseUrl} (${resolved.backend})`,
+        })
+      } else {
+        res.json({ success: false, error: 'Could not resolve vision model config. Check your settings.' })
+      }
+    } catch (error) {
+      res.json({ success: false, error: error instanceof Error ? error.message : 'Test failed' })
     }
   })
 

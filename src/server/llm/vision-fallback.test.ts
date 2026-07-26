@@ -226,6 +226,70 @@ describe('vision-fallback', () => {
     })
   })
 
+  describe('HTTP auth headers', () => {
+    it('sends Authorization: Bearer header when apiKey is provided with openai backend', async () => {
+      const modelWithKey: VisionModelConfig = {
+        baseUrl: 'http://localhost:8000/v1',
+        model: 'gpt-4o-vision',
+        timeout: 120000,
+        backend: 'openai',
+        apiKey: 'sk-test-key-456',
+      }
+      const mockResponse = {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'desc' } }] }),
+      }
+      vi.mocked(fetch).mockResolvedValue(mockResponse as unknown as Response)
+
+      await describeImage('dGVzdA==', modelWithKey)
+
+      const headers = vi.mocked(fetch).mock.calls[0]?.[1]?.headers as Record<string, string>
+      expect(headers['Authorization']).toBe('Bearer sk-test-key-456')
+      expect(headers['Content-Type']).toBe('application/json')
+    })
+
+    it('does not send Authorization header when apiKey is not provided with openai backend', async () => {
+      const modelWithoutKey: VisionModelConfig = {
+        baseUrl: 'http://localhost:8000/v1',
+        model: 'gpt-4o-vision',
+        timeout: 120000,
+        backend: 'openai',
+      }
+      const mockResponse = {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'desc' } }] }),
+      }
+      vi.mocked(fetch).mockResolvedValue(mockResponse as unknown as Response)
+
+      await describeImage('dGVzdA==', modelWithoutKey)
+
+      const headers = vi.mocked(fetch).mock.calls[0]?.[1]?.headers as Record<string, string>
+      expect(headers['Authorization']).toBeUndefined()
+      expect(headers['Content-Type']).toBe('application/json')
+    })
+
+    it('does not send Authorization header for ollama backend even when apiKey is provided', async () => {
+      const ollamaModelWithKey: VisionModelConfig = {
+        baseUrl: 'http://localhost:11434',
+        model: 'llava',
+        timeout: 120000,
+        backend: 'ollama',
+        apiKey: 'should-not-be-used',
+      }
+      const mockResponse = {
+        ok: true,
+        json: async () => ({ message: { content: 'desc' } }),
+      }
+      vi.mocked(fetch).mockResolvedValue(mockResponse as unknown as Response)
+
+      await describeImage('dGVzdA==', ollamaModelWithKey)
+
+      const headers = vi.mocked(fetch).mock.calls[0]?.[1]?.headers as Record<string, string>
+      expect(headers['Authorization']).toBeUndefined()
+      expect(headers['Content-Type']).toBe('application/json')
+    })
+  })
+
   describe('describeImageFromDataUrl', () => {
     it('extracts base64 from data URL (ollama)', async () => {
       const mockResponse = {

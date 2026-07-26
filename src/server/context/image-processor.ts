@@ -9,22 +9,14 @@ import { contentHash, cacheSet } from '../utils/cache.js'
 import { decodeDataUrl } from '../utils/data-url.js'
 
 export async function loadVisionModelFromGlobalConfig(): Promise<
-  { baseUrl: string; model: string; timeout: number; backend: VisionBackend } | undefined
+  { baseUrl: string; model: string; timeout: number; backend: VisionBackend; apiKey?: string } | undefined
 > {
   try {
-    const { loadGlobalConfig, getVisionFallback } = await import('../../cli/config.js')
+    const { loadGlobalConfig, resolveVisionFallback } = await import('../../cli/config.js')
     const runtimeConfig = getRuntimeConfig()
     const mode = runtimeConfig.mode ?? 'production'
     const globalConfig = await loadGlobalConfig(mode)
-    const fallback = getVisionFallback(globalConfig)
-    if (fallback?.enabled && fallback.model) {
-      return {
-        baseUrl: fallback.url,
-        model: fallback.model,
-        timeout: fallback.timeout * 1000,
-        backend: fallback.backend ?? 'ollama',
-      }
-    }
+    return resolveVisionFallback(globalConfig)
   } catch {
     // Global config not available
   }
@@ -38,6 +30,7 @@ export interface ImageProcessorOptions {
     model: string
     timeout: number
     backend: VisionBackend
+    apiKey?: string
   }
   signal?: AbortSignal
   onEvent?: (event: TurnEvent) => void
