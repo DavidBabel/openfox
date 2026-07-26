@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.95 - 2026-07-26
+
+### Features
+
+- **All network requests route through configured HTTP proxy** — OpenFox now respects proxy settings for all outbound connections, with `HTTP_PROXY`/`HTTPS_PROXY` inherited by shell processes and a connectivity test button in Advanced settings.
+
+### Bug Fixes
+
+- **Aborting a workflow no longer cancels it** — hitting Escape during a workflow step stops the agent but preserves the execution; typing a message auto-resumes the workflow in the same step without re-injecting the prompt.
+- **Workflows can resume from any step type** — the previous restriction limiting resume to `user` steps has been removed, enabling recovery from aborted agent and shell steps.
+- **Proxy connections accept self-signed certificates** — the proxy agent now sets `rejectUnauthorized: false` for HTTPS targets behind TLS-intercepting proxies.
+
 ## 2.0.94 - 2026-07-26
 
 ### Features
