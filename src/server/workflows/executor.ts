@@ -318,6 +318,7 @@ export async function executeWorkflow(
   }
 
   // Emit workflow-started marker into the feed (skip on resume)
+  let executionId: string | undefined
   if (!isResume) {
     const startMsgId = crypto.randomUUID()
     const startWindowOpts = getCurrentWindowMessageOptions(sessionId)
@@ -336,6 +337,17 @@ export async function executeWorkflow(
     )
     eventStore.append(sessionId, { type: 'message.done', data: { messageId: startMsgId } })
 
+    // Create workflow execution record
+    executionId = crypto.randomUUID()
+    sessionManager.startWorkflow(
+      sessionId,
+      executionId,
+      workflow.metadata.id,
+      workflow.metadata.name,
+      workflow.metadata.color,
+      options.params ?? {},
+    )
+
     // Inject user-provided message after the workflow-started marker
     // Both go through EventStore so ordering is preserved
     if (options.userMessage) {
@@ -345,12 +357,28 @@ export async function executeWorkflow(
         ...(options.userMessage.attachments ? { attachments: options.userMessage.attachments } : {}),
       })
     }
+  } else {
+    // On resume, get the existing execution ID from the session
+    const activeExec = sessionManager.getActiveWorkflowExecution(sessionId)
+    if (activeExec) {
+      executionId = activeExec.id
+    }
   }
 
   while (iterations < workflow.settings.maxIterations) {
     // Check abort
     if (signal?.aborted) {
       logger.debug('Workflow executor aborted', { sessionId, iterations })
+      // Clean up workflow execution if it was started
+      if (executionId) {
+        sessionManager.cancelWorkflow(
+          sessionId,
+          executionId,
+          workflow.metadata.id,
+          workflow.metadata.name,
+          workflow.metadata.color,
+        )
+      }
       return {
         finalAction: { type: 'RUN_BUILDER', reason: 'Aborted' },
         iterations,
@@ -390,6 +418,19 @@ export async function executeWorkflow(
 
     // Set session phase
     sessionManager.setPhase(sessionId, step.phase as 'build' | 'verification' | 'waiting' | 'blocked' | 'done')
+
+    // Track current step in workflow execution
+    if (executionId) {
+      sessionManager.updateWorkflowStep(
+        sessionId,
+        executionId,
+        step.id,
+        step.name,
+        workflow.metadata.id,
+        workflow.metadata.name,
+        workflow.metadata.color,
+      )
+    }
 
     // Set session mode to match agent step's agentId
     if (step.type === 'agent') {
@@ -636,21 +677,19 @@ export async function executeWorkflow(
           break
         }
 
-        // Emit workflow.waiting event so the frontend knows we're paused
-        eventStore.append(sessionId, {
-          type: 'workflow.waiting',
-          data: {
-            workflowId: workflow.metadata.id,
-            workflowName: workflow.metadata.name,
-            stepId: step.id,
-            stepName: step.name,
-            stepOutput: lastStepOutput,
-            ...(Object.keys(templateCtx.params).length > 0 ? { params: templateCtx.params } : {}),
-          },
-        })
-
-        // Set phase to 'waiting' so the frontend shows the continue button
-        sessionManager.setPhase(sessionId, 'waiting')
+        // Pause workflow execution — frontend shows Continue + Exit buttons
+        if (executionId) {
+          sessionManager.waitAtStep(
+            sessionId,
+            executionId,
+            step.id,
+            step.name,
+            lastStepOutput,
+            workflow.metadata.id,
+            workflow.metadata.name,
+            workflow.metadata.color,
+          )
+        }
 
         logger.debug('Workflow paused at user step', { sessionId, stepId: step.id, stepName: step.name })
 
@@ -687,6 +726,17 @@ export async function executeWorkflow(
     // Handle terminal states
     if (nextStepId === TERMINAL_DONE) {
       sessionManager.setPhase(sessionId, 'done')
+
+      // Clean up workflow execution
+      if (executionId) {
+        sessionManager.completeWorkflow(
+          sessionId,
+          executionId,
+          workflow.metadata.id,
+          workflow.metadata.name,
+          workflow.metadata.color,
+        )
+      }
 
       const totalTimeSeconds = Math.round((performance.now() - startTime) / 100) / 10
       const completedSession = sessionManager.requireSession(sessionId)
@@ -732,6 +782,17 @@ export async function executeWorkflow(
 
     if (nextStepId === TERMINAL_BLOCKED) {
       sessionManager.setPhase(sessionId, 'blocked')
+
+      // Clean up workflow execution
+      if (executionId) {
+        sessionManager.blockWorkflow(
+          sessionId,
+          executionId,
+          workflow.metadata.id,
+          workflow.metadata.name,
+          workflow.metadata.color,
+        )
+      }
 
       const reason = 'No matching transition'
 

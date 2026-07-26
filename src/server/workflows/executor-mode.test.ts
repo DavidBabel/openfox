@@ -106,6 +106,16 @@ describe('executeWorkflow mode changes', () => {
       setPhase,
       getEffectiveWorkdir: vi.fn().mockReturnValue('/tmp/test'),
       addMessage: vi.fn(),
+      startWorkflow: vi.fn(),
+      updateWorkflowStep: vi.fn(),
+      completeWorkflow: vi.fn(),
+      blockWorkflow: vi.fn(),
+      waitAtStep: vi.fn((sessionId: string) => {
+        ;(setPhase as any)(sessionId, 'waiting')
+      }),
+      resumeWorkflow: vi.fn(),
+      getActiveWorkflowExecution: vi.fn(() => null),
+      cancelWorkflow: vi.fn(),
     }
 
     options = {

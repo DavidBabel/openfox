@@ -109,7 +109,7 @@ export type ServerMessageType =
   // Phase events
   | 'phase.changed' // Workflow phase changed (plan/build/verification/done)
   // Workflow events
-  | 'workflow.waiting' // Workflow paused at a user step, waiting for user to continue
+  | 'workflow.execution_changed' // Workflow execution state changed (status, step, etc.)
   // Task completion
   | 'task.completed' // Task finished with summary stats
   // Criteria events
@@ -180,7 +180,7 @@ export interface SessionStatePayload {
   pendingConfirmations: PendingPathConfirmationPayload[]
   pendingQuestions?: PendingQuestionPayload[]
   gitStatus?: GitStatusPayload // Current branch and diff, embedded on session load
-  waitingWorkflow?: WorkflowWaitingPayload
+  activeWorkflowExecution?: import('./types.js').WorkflowExecution | null
 }
 
 export interface WorkflowWaitingPayload {

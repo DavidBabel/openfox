@@ -24,7 +24,7 @@ import { provideAnswer } from '../tools/index.js'
 import { logger } from '../utils/logger.js'
 import { devServerManager } from '../dev-server/manager.js'
 import { onProcessEvent } from '../tools/background-process/manager.js'
-import { buildMessagesFromStoredEvents, foldPendingConfirmations, foldWaitingWorkflow } from '../events/folding.js'
+import { buildMessagesFromStoredEvents, foldPendingConfirmations } from '../events/folding.js'
 import { getPendingQuestionsForSession } from '../tools/index.js'
 import { generateSessionNameForSession, needsNameGeneration } from '../session/name-generator.js'
 import { getSessionMessageCount } from '../utils/session-utils.js'
@@ -636,7 +636,7 @@ export function createWebSocketServer(
       const { messages, hiddenCount } = buildMessagesFromStoredEvents(events, maxVisible || undefined)
       const pendingConfirmations = foldPendingConfirmations(events)
       const pendingQuestions = getPendingQuestionsForSession(updatedSession.id)
-      const waitingWorkflow = foldWaitingWorkflow(events)
+      const activeWorkflowExecution = sessionManager.getActiveWorkflowExecution(updatedSession.id)
 
       // Update activeWorkdir when workspace changed so git polling picks up the right dir
       const effectiveWorkdir = updatedSession.workspace ?? updatedSession.workdir
@@ -666,7 +666,7 @@ export function createWebSocketServer(
           undefined,
           undefined,
           hiddenCount,
-          waitingWorkflow,
+          activeWorkflowExecution ?? undefined,
         ),
       )
 
@@ -1360,6 +1360,29 @@ async function handleClientMessage(
         ...(isResume && launchPayload?.resumeFrom ? { resumeFromStep: launchPayload.resumeFrom } : {}),
         ...(isResume && launchPayload?.stepOutput ? { initialStepOutput: launchPayload.stepOutput } : {}),
         ...(launchPayload?.params ? { params: launchPayload.params } : {}),
+        // On resume, prefer params/stepOutput from the persisted workflow execution
+        ...(isResume
+          ? (() => {
+              const exec = sessionManager.getActiveWorkflowExecution(sessionId)
+              if (exec && exec.status === 'waiting') {
+                const resumed = sessionManager.resumeWorkflow(
+                  sessionId,
+                  exec.id,
+                  exec.workflowId,
+                  exec.workflowName,
+                  exec.workflowColor,
+                )
+                if (resumed) {
+                  return {
+                    params: resumed.params,
+                    initialStepOutput: resumed.stepOutput,
+                    ...(exec.currentStepId ? { resumeFromStep: exec.currentStepId } : {}),
+                  }
+                }
+              }
+              return {}
+            })()
+          : {}),
         ...(hasUserMessage
           ? {
               userMessage: {
@@ -1464,29 +1487,32 @@ async function handleClientMessage(
         return
       }
 
-      if (exitSession.phase !== 'waiting') {
-        send(createErrorMessage('INVALID_STATE', 'Workflow is not in a waiting state', message.id))
-        return
+      // Cancel the active workflow execution regardless of state
+      const activeExec = sessionManager.getActiveWorkflowExecution(exitSessionId)
+      if (activeExec) {
+        sessionManager.cancelWorkflow(
+          exitSessionId,
+          activeExec.id,
+          activeExec.workflowId,
+          activeExec.workflowName,
+          activeExec.workflowColor,
+        )
+      } else {
+        // Fallback: just change phase
+        sessionManager.setPhase(exitSessionId, 'build')
       }
 
-      // Emit task.completed to clear waitingWorkflow in event folding
-      getEventStore().append(exitSessionId, {
-        type: 'task.completed',
-        data: {
-          summary: null,
-          iterations: 0,
-          totalTimeSeconds: 0,
-          totalToolCalls: 0,
-          totalTokensGenerated: 0,
-          avgGenerationSpeed: 0,
-          responseCount: 0,
-          llmCallCount: 0,
-          criteria: [],
-        },
-      })
+      // Abort any running agent turn
+      const controller = activeAgents.get(exitSessionId)
+      if (controller) {
+        activeAgents.delete(exitSessionId)
+        controller.abort()
+      }
 
-      // Change phase to 'build' — frontend's phase.changed handler clears waitingWorkflow
-      sessionManager.setPhase(exitSessionId, 'build')
+      // Ensure running state is cleared
+      if (exitSession.isRunning) {
+        sessionManager.setRunning(exitSessionId, false)
+      }
 
       send({ type: 'ack', payload: {}, id: message.id })
       break

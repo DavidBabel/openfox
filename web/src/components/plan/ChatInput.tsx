@@ -11,6 +11,7 @@ import { PromptHistoryList } from '../shared/PromptHistory.js'
 import { RunningIndicator } from '../shared/RunningIndicator'
 import { AutoScrollToggle } from '../shared/AutoScrollToggle'
 import { SearchIcon, StopIcon } from '../shared/icons'
+import { WorkflowBar } from './WorkflowBar'
 import { processFile } from '../../lib/file-processing.js'
 import { mimeTypeToExtension, isSupportedMimeType } from '../../lib/attachment-utils.js'
 import { CHAT_TEXTAREA_ID } from '../../lib/focusChatTextarea'
@@ -496,7 +497,7 @@ export function ChatInput({
   }, [])
 
   return (
-    <form onSubmit={handleSubmit} className="relative p-2 md:p-4 bg-secondary">
+    <div className="relative">
       {isRunning && (
         <div className="absolute -top-8 left-2 md:left-4 z-10">
           <RunningIndicator />
@@ -520,154 +521,159 @@ export function ChatInput({
           Browse history
         </button>
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,text/*,.pdf,.json,.xml,.yaml,.yml,.js,.sh,.xhtml"
-        onChange={handleFileSelect}
-        className="hidden"
-        multiple
-      />
 
-      {errorMessage && (
-        <div className="mb-2 p-2 bg-red-500/10 border border-red-500/50 rounded text-red-300 text-sm">
-          {errorMessage}
-        </div>
-      )}
+      <WorkflowBar />
 
-      {attachments.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {attachments.map((attachment) => (
-            <AttachmentPreview key={attachment.id} attachment={attachment} onRemove={handleRemoveAttachment} />
-          ))}
-        </div>
-      )}
-
-      {showHistory && (
-        <PromptHistoryList
-          history={history}
-          selectedIndex={selectedIndex}
-          onSelect={(content) => {
-            setInput(content)
-            closeHistory()
-          }}
-          onEscape={closeHistory}
-          onNavigate={(direction) => {
-            if (direction === 'up') navigateUp()
-            else navigateDown()
-          }}
+      <form onSubmit={handleSubmit} className="p-2 md:p-4 bg-secondary rounded-lg">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,text/*,.pdf,.json,.xml,.yaml,.yml,.js,.sh,.xhtml"
+          onChange={handleFileSelect}
+          className="hidden"
+          multiple
         />
-      )}
 
-      <QueuedMessages messages={queuedMessages} onCancel={cancelQueued} />
+        {errorMessage && (
+          <div className="mb-2 p-2 bg-red-500/10 border border-red-500/50 rounded text-red-300 text-sm">
+            {errorMessage}
+          </div>
+        )}
 
-      <div
-        className={`flex items-end gap-3 p-3 rounded transition-colors ${
-          dragOver ? 'bg-accent-primary/10' : 'bg-primary'
-        }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div className="relative flex-1 min-w-0">
-          <textarea
-            id={CHAT_TEXTAREA_ID}
-            ref={textareaRef}
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            onSelect={handleSelect}
-            onKeyUp={handleKeyUp}
-            placeholder="What would you like to build?"
-            data-testid="chat-input-textarea"
-            className="w-full bg-transparent text-sm placeholder:text-text-muted resize-none overflow-y-auto focus:outline-none"
-            style={{ minHeight: '24px', maxHeight: '200px' }}
-            spellCheck={false}
+        {attachments.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {attachments.map((attachment) => (
+              <AttachmentPreview key={attachment.id} attachment={attachment} onRemove={handleRemoveAttachment} />
+            ))}
+          </div>
+        )}
+
+        {showHistory && (
+          <PromptHistoryList
+            history={history}
+            selectedIndex={selectedIndex}
+            onSelect={(content) => {
+              setInput(content)
+              closeHistory()
+            }}
+            onEscape={closeHistory}
+            onNavigate={(direction) => {
+              if (direction === 'up') navigateUp()
+              else navigateDown()
+            }}
           />
-          <AtMentionAutocomplete
-            ref={autocompleteRef}
-            text={input}
-            cursorPos={cursorPosRef.current}
-            workdir={workdir}
-            onSelect={handleSelectFile}
-          />
-          <SlashAutocomplete
-            ref={slashAutocompleteRef}
-            text={input}
-            cursorPos={cursorPosRef.current}
-            workflows={(() => {
-              const s = useWorkflowsStore.getState()
-              return [...s.defaults, ...s.userItems, ...s.projectItems]
-            })()}
-            commands={(() => {
-              const s = useCommandsStore.getState()
-              return [...s.defaults, ...s.userItems, ...s.projectItems]
-            })()}
-            onSelect={handleSelectSlash}
-          />
-          {activeSlashParams.length > 0 &&
-            (() => {
-              // Count space-separated args after the last /command
-              const match = input.match(/\/(\w+)\s+(.*)$/)
-              const args = match ? match[2]!.trim().split(/\s+/) : []
-              const filledCount = args.filter(Boolean).length
-              const nextParam = activeSlashParams[filledCount]
-              if (!nextParam) return null
-              return (
-                <span
-                  className="absolute left-3 top-[26px] text-sm text-text-muted/40 pointer-events-none select-none"
-                  aria-hidden
-                >
-                  {nextParam}=?
-                </span>
-              )
-            })()}
-        </div>
-        <div className="flex items-center self-center gap-1.5">
-          {isRunning && (
-            <button
-              type="button"
-              onClick={() => stopGeneration()}
-              data-testid="chat-stop-button"
-              className="flex items-center gap-1 px-4 py-1.5 rounded bg-accent-error/20 text-sm text-accent-error font-medium hover:bg-accent-error/30 transition-colors whitespace-nowrap"
-            >
-              <StopIcon />
-              Abort
-            </button>
-          )}
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!input.trim() && attachments.length === 0}
-              data-testid="chat-send-button"
-              className="px-4 py-1.5 rounded-l bg-accent-primary/20 text-sm text-accent-primary font-medium hover:bg-accent-primary/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              Send
-            </button>
-            <MoreMenu
-              onSendCommand={onSendCommand}
-              onSelectWorkflow={onSelectWorkflow}
-              onSelectWorkflowWithSubGroup={onSelectWorkflowWithSubGroup}
-              onOpenCommandsManager={onOpenCommandsModal}
-              onOpenWorkflowsManager={onOpenWorkflowsModal}
-              onAttach={handleAttachClick}
-              textareaContent={input}
-              attachments={attachments.length > 0 ? attachments : undefined}
+        )}
+
+        <QueuedMessages messages={queuedMessages} onCancel={cancelQueued} />
+
+        <div
+          className={`flex items-end gap-3 p-3 rounded transition-colors ${
+            dragOver ? 'bg-accent-primary/10' : 'bg-primary'
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div className="relative flex-1 min-w-0">
+            <textarea
+              id={CHAT_TEXTAREA_ID}
+              ref={textareaRef}
+              value={input}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              onSelect={handleSelect}
+              onKeyUp={handleKeyUp}
+              placeholder="What would you like to build?"
+              data-testid="chat-input-textarea"
+              className="w-full bg-transparent text-sm placeholder:text-text-muted resize-none overflow-y-auto focus:outline-none"
+              style={{ minHeight: '24px', maxHeight: '200px' }}
+              spellCheck={false}
             />
+            <AtMentionAutocomplete
+              ref={autocompleteRef}
+              text={input}
+              cursorPos={cursorPosRef.current}
+              workdir={workdir}
+              onSelect={handleSelectFile}
+            />
+            <SlashAutocomplete
+              ref={slashAutocompleteRef}
+              text={input}
+              cursorPos={cursorPosRef.current}
+              workflows={(() => {
+                const s = useWorkflowsStore.getState()
+                return [...s.defaults, ...s.userItems, ...s.projectItems]
+              })()}
+              commands={(() => {
+                const s = useCommandsStore.getState()
+                return [...s.defaults, ...s.userItems, ...s.projectItems]
+              })()}
+              onSelect={handleSelectSlash}
+            />
+            {activeSlashParams.length > 0 &&
+              (() => {
+                // Count space-separated args after the last /command
+                const match = input.match(/\/(\w+)\s+(.*)$/)
+                const args = match ? match[2]!.trim().split(/\s+/) : []
+                const filledCount = args.filter(Boolean).length
+                const nextParam = activeSlashParams[filledCount]
+                if (!nextParam) return null
+                return (
+                  <span
+                    className="absolute left-3 top-[26px] text-sm text-text-muted/40 pointer-events-none select-none"
+                    aria-hidden
+                  >
+                    {nextParam}=?
+                  </span>
+                )
+              })()}
+          </div>
+          <div className="flex items-center self-center gap-1.5">
+            {isRunning && (
+              <button
+                type="button"
+                onClick={() => stopGeneration()}
+                data-testid="chat-stop-button"
+                className="flex items-center gap-1 px-4 py-1.5 rounded bg-accent-error/20 text-sm text-accent-error font-medium hover:bg-accent-error/30 transition-colors whitespace-nowrap"
+              >
+                <StopIcon />
+                Abort
+              </button>
+            )}
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!input.trim() && attachments.length === 0}
+                data-testid="chat-send-button"
+                className="px-4 py-1.5 rounded-l bg-accent-primary/20 text-sm text-accent-primary font-medium hover:bg-accent-primary/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Send
+              </button>
+              <MoreMenu
+                onSendCommand={onSendCommand}
+                onSelectWorkflow={onSelectWorkflow}
+                onSelectWorkflowWithSubGroup={onSelectWorkflowWithSubGroup}
+                onOpenCommandsManager={onOpenCommandsModal}
+                onOpenWorkflowsManager={onOpenWorkflowsModal}
+                onAttach={handleAttachClick}
+                textareaContent={input}
+                attachments={attachments.length > 0 ? attachments : undefined}
+              />
+            </div>
           </div>
         </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <AgentSelector />
-          <DangerLevelSelector />
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AgentSelector />
+            <DangerLevelSelector />
+          </div>
+          <div className="flex items-center gap-2">
+            {useSettingsStore((s) => s.settings)[SETTINGS_KEYS.FEATURES_PER_SESSION_MCP] === 'true' && <McpSelector />}
+            <ProviderSelector />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {useSettingsStore((s) => s.settings)[SETTINGS_KEYS.FEATURES_PER_SESSION_MCP] === 'true' && <McpSelector />}
-          <ProviderSelector />
-        </div>
-      </div>
-    </form>
+      </form>
+    </div>
   )
 }

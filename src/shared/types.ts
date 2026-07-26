@@ -39,6 +39,23 @@ export interface WorkflowParameter {
   required?: boolean
 }
 
+export type WorkflowExecutionStatus = 'running' | 'waiting' | 'completed' | 'cancelled' | 'blocked'
+
+export interface WorkflowExecution {
+  id: string
+  sessionId: string
+  workflowId: string
+  workflowName: string
+  workflowColor?: string
+  status: WorkflowExecutionStatus
+  currentStepId?: string
+  currentStepName?: string
+  stepOutput: Record<string, string>
+  params: Record<string, string>
+  createdAt: number
+  updatedAt: number
+}
+
 export type DangerLevel = 'normal' | 'dangerous'
 
 export interface Session {
@@ -62,6 +79,7 @@ export interface Session {
   metadataEntries: Record<string, MetadataEntry[]> // Key-value store for structured session data (criteria, todos, review_findings, etc.)
   dangerLevel?: DangerLevel // Controls path confirmation bypass
   messageCount?: number // Cached message count for efficient sidebar display (optional, populated on load)
+  activeWorkflowExecution?: WorkflowExecution | null // Currently active workflow execution, if any
 }
 
 // ============================================================================

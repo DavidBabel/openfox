@@ -35,9 +35,8 @@ export const MessageList = memo(function MessageList({
   const error = useSessionStore((state) => state.error)
   const clearError = useSessionStore((state) => state.clearError)
   const isRunning = useIsRunning()
-  const waitingWorkflow = useSessionStore((state) => state.waitingWorkflow)
+  const activeWorkflowExecution = useSessionStore((state) => state.activeWorkflowExecution)
   const continueWorkflow = useSessionStore((state) => state.continueWorkflow)
-  const exitWorkflow = useSessionStore((state) => state.exitWorkflow)
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
@@ -50,7 +49,7 @@ export const MessageList = memo(function MessageList({
   const isDone = sessionPhase === 'done'
   const hasAssistantResponse = displayItems.some((item) => item.type === 'message' && item.message.role === 'assistant')
   const showStartBuilding = isPlanning && hasCriteria && !isRunning && hasAssistantResponse && !isDone
-  const showContinueWorkflow = sessionPhase === 'waiting' && waitingWorkflow != null && !isRunning
+  const showContinueWorkflow = activeWorkflowExecution?.status === 'waiting' && !isRunning
 
   const projectId = useSessionStore((state) => state.currentSession?.projectId)
   const [popupBlocked, setPopupBlocked] = useState(false)
@@ -82,7 +81,6 @@ export const MessageList = memo(function MessageList({
   }
 
   const [continuing, setContinuing] = useState(false)
-  const [exiting, setExiting] = useState(false)
 
   const handleContinue = useCallback(() => {
     if (continuing) return
@@ -91,12 +89,6 @@ export const MessageList = memo(function MessageList({
     // Re-enable after a timeout in case the workflow doesn't start
     setTimeout(() => setContinuing(false), 5000)
   }, [continuing, continueWorkflow])
-
-  const handleExitWorkflow = useCallback(() => {
-    if (exiting) return
-    setExiting(true)
-    exitWorkflow()
-  }, [exiting, exitWorkflow])
 
   const scrollToTop = useCallback(() => {
     onScrollToTop?.()
@@ -163,7 +155,7 @@ export const MessageList = memo(function MessageList({
             </div>
           )}
 
-          {showContinueWorkflow && waitingWorkflow && (
+          {showContinueWorkflow && activeWorkflowExecution && (
             <div className="flex justify-center gap-2 feed-item">
               <button
                 onClick={handleContinue}
@@ -172,14 +164,7 @@ export const MessageList = memo(function MessageList({
               >
                 {continuing
                   ? '⏳ Continuing...'
-                  : `▶ Continue ${waitingWorkflow.workflowName} (${waitingWorkflow.stepName})`}
-              </button>
-              <button
-                onClick={handleExitWorkflow}
-                disabled={exiting}
-                className="px-3 py-1.5 text-sm font-medium rounded bg-text-tool-error/10 text-text-tool-error border border-text-tool-error/25 hover:bg-text-tool-error/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {exiting ? 'Exiting...' : 'Exit workflow'}
+                  : `▶ Continue ${activeWorkflowExecution.workflowName} (${activeWorkflowExecution.currentStepName ?? '...'})`}
               </button>
             </div>
           )}

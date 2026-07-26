@@ -33,6 +33,10 @@ import {
   updateSessionBranch,
   updateSessionMessageCount,
   getSessionCachedPrompt,
+  createWorkflowExecution,
+  updateWorkflowExecutionStatus,
+  getActiveWorkflowExecution as dbGetActiveWorkflowExecution,
+  clearWorkflowExecution,
   type DangerLevel,
 } from '../db/sessions.js'
 import { getProject } from '../db/projects.js'
@@ -61,6 +65,7 @@ import {
   emitModeChanged,
   emitPhaseChanged,
   emitRunningChanged,
+  emitWorkflowExecutionChanged,
   emitUserMessage,
   emitAssistantMessageStart,
   emitCriteriaSet,
@@ -531,6 +536,178 @@ export class SessionManager {
     this.emit({ type: 'session_updated', session: updatedSession })
 
     return updatedSession
+  }
+
+  // ============================================================================
+  // Workflow Execution
+  // ============================================================================
+
+  /**
+   * Start a new workflow execution. Cancels any existing active execution first,
+   * then inserts a new row and emits events.
+   */
+  startWorkflow(
+    sessionId: string,
+    executionId: string,
+    workflowId: string,
+    workflowName: string,
+    workflowColor: string | undefined,
+    params: Record<string, string>,
+  ): void {
+    // Cancel any existing active workflow execution before starting a new one
+    const existing = this.getActiveWorkflowExecution(sessionId)
+    if (existing) {
+      this.cancelWorkflow(sessionId, existing.id, existing.workflowId, existing.workflowName, existing.workflowColor)
+    }
+
+    createWorkflowExecution(executionId, sessionId, workflowId, workflowName, workflowColor, params)
+    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'running')
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+  }
+
+  /**
+   * Update the current step of a running workflow execution.
+   */
+  updateWorkflowStep(
+    sessionId: string,
+    executionId: string,
+    stepId: string,
+    stepName: string,
+    workflowId: string,
+    workflowName: string,
+    workflowColor: string | undefined,
+  ): void {
+    updateWorkflowExecutionStatus(executionId, 'running', stepId, stepName)
+    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'running', stepName)
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+  }
+
+  /**
+   * Pause at a user step. Sets status to 'waiting' and records step output.
+   */
+  waitAtStep(
+    sessionId: string,
+    executionId: string,
+    stepId: string,
+    stepName: string,
+    stepOutput: Record<string, string>,
+    workflowId: string,
+    workflowName: string,
+    workflowColor: string | undefined,
+  ): void {
+    updateWorkflowExecutionStatus(executionId, 'waiting', stepId, stepName, stepOutput)
+    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'waiting', stepName)
+    this.setPhase(sessionId, 'waiting')
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+  }
+
+  /**
+   * Resume a paused workflow. Returns the saved params and step output.
+   */
+  resumeWorkflow(
+    sessionId: string,
+    executionId: string,
+    workflowId: string,
+    workflowName: string,
+    workflowColor: string | undefined,
+  ): { params: Record<string, string>; stepOutput: Record<string, string> } | null {
+    const row = dbGetActiveWorkflowExecution(sessionId)
+    if (!row || row.id !== executionId) return null
+    updateWorkflowExecutionStatus(executionId, 'running')
+    emitWorkflowExecutionChanged(
+      sessionId,
+      executionId,
+      workflowId,
+      workflowName,
+      workflowColor,
+      'running',
+      row.current_step_name ?? undefined,
+    )
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+    return {
+      params: JSON.parse(row.params ?? '{}') as Record<string, string>,
+      stepOutput: JSON.parse(row.step_output ?? '{}') as Record<string, string>,
+    }
+  }
+
+  /**
+   * Mark workflow as completed and clean up.
+   */
+  completeWorkflow(
+    sessionId: string,
+    executionId: string,
+    workflowId: string,
+    workflowName: string,
+    workflowColor: string | undefined,
+  ): void {
+    updateWorkflowExecutionStatus(executionId, 'completed')
+    clearWorkflowExecution(executionId)
+    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'completed')
+    this.setPhase(sessionId, 'done')
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+  }
+
+  /**
+   * Cancel/exit a workflow execution.
+   */
+  cancelWorkflow(
+    sessionId: string,
+    executionId: string,
+    workflowId: string,
+    workflowName: string,
+    workflowColor: string | undefined,
+  ): void {
+    updateWorkflowExecutionStatus(executionId, 'cancelled')
+    clearWorkflowExecution(executionId)
+    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'cancelled')
+    this.setPhase(sessionId, 'build')
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+  }
+
+  /**
+   * Mark workflow as blocked.
+   */
+  blockWorkflow(
+    sessionId: string,
+    executionId: string,
+    workflowId: string,
+    workflowName: string,
+    workflowColor: string | undefined,
+  ): void {
+    updateWorkflowExecutionStatus(executionId, 'blocked')
+    clearWorkflowExecution(executionId)
+    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'blocked')
+    this.setPhase(sessionId, 'blocked')
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+  }
+
+  /**
+   * Get the active workflow execution for a session, mapped to the shared type.
+   */
+  getActiveWorkflowExecution(sessionId: string): import('../../shared/types.js').WorkflowExecution | null {
+    const row = dbGetActiveWorkflowExecution(sessionId)
+    if (!row) return null
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      workflowId: row.workflow_id,
+      workflowName: row.workflow_name,
+      ...(row.workflow_color ? { workflowColor: row.workflow_color } : {}),
+      status: row.status as import('../../shared/types.js').WorkflowExecutionStatus,
+      ...(row.current_step_id ? { currentStepId: row.current_step_id } : {}),
+      ...(row.current_step_name ? { currentStepName: row.current_step_name } : {}),
+      stepOutput: JSON.parse(row.step_output ?? '{}') as Record<string, string>,
+      params: JSON.parse(row.params ?? '{}') as Record<string, string>,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
   }
 
   // ============================================================================

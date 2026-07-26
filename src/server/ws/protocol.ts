@@ -122,7 +122,7 @@ export function createSessionStateMessage(
   gitStatus?: GitStatusPayload,
   correlationId?: string,
   hiddenCount?: number,
-  waitingWorkflow?: SessionStatePayload['waitingWorkflow'],
+  activeWorkflowExecution?: import('../../shared/types.js').WorkflowExecution | null,
 ): ServerMessage<SessionStatePayload> {
   // Enrich messages so toolCalls have their results attached
   const enrichedMessages = enrichMessagesWithToolResults(messages)
@@ -135,7 +135,7 @@ export function createSessionStateMessage(
       ...(pendingQuestions ? { pendingQuestions } : {}),
       ...(gitStatus ? { gitStatus } : {}),
       ...(hiddenCount !== undefined ? { hiddenCount } : {}),
-      ...(waitingWorkflow !== undefined ? { waitingWorkflow } : {}),
+      ...(activeWorkflowExecution !== undefined && activeWorkflowExecution !== null ? { activeWorkflowExecution } : {}),
     },
     correlationId,
   )
@@ -499,8 +499,13 @@ export function storedEventToServerMessage(event: StoredEvent): ServerMessage | 
     }
 
     case 'workflow.waiting': {
-      const data = event.data as Extract<TurnEvent, { type: 'workflow.waiting' }>['data']
-      return createServerMessage('workflow.waiting', data)
+      // Legacy event — no longer emitted. Skip to avoid dead code path.
+      return null
+    }
+
+    case 'workflow.execution_changed': {
+      const data = event.data as Extract<TurnEvent, { type: 'workflow.execution_changed' }>['data']
+      return createServerMessage('workflow.execution_changed', data)
     }
 
     case 'session.initialized': {

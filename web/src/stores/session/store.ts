@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { authFetch } from '../../lib/api'
 import { appUrl } from '../../lib/basePath'
 import type { SessionSummary, Message } from '@shared/types.js'
-import type { QueuedMessage, PendingQuestionPayload, WorkflowWaitingPayload } from '@shared/protocol.js'
+import type { QueuedMessage, PendingQuestionPayload } from '@shared/protocol.js'
 import { wsClient } from '../../lib/ws'
 import { useConfigStore } from '../config'
 import { useProjectStore } from '../project'
@@ -138,7 +138,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     abortInProgress: false,
     restoredInput: null,
     error: null,
-    waitingWorkflow: null,
+    activeWorkflowExecution: null,
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
     pendingSessionCreate: false as boolean | string,
@@ -341,7 +341,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
           queuedMessages: (data.queueState as QueuedMessage[] | undefined) ?? [],
           pendingPathConfirmations: (data.pendingConfirmations ?? []) as PendingPathConfirmation[],
           pendingQuestions: (data.pendingQuestions ?? []) as PendingQuestionPayload[],
-          waitingWorkflow: (data.waitingWorkflow as WorkflowWaitingPayload | undefined) ?? null,
+          activeWorkflowExecution:
+            (data.activeWorkflowExecution as import('@shared/types.js').WorkflowExecution | undefined) ?? null,
           crossSessionConfirmations: crossCleanup,
           sessionsWithPendingConfirmations: Object.keys(crossCleanup),
         })
@@ -598,13 +599,13 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
     continueWorkflow: () => {
       const state = get()
-      const ww = state.waitingWorkflow
-      if (!ww) return
+      const exec = state.activeWorkflowExecution
+      if (!exec || exec.status !== 'waiting') return
       wsClient.send('runner.launch', {
-        workflowId: ww.workflowId,
-        resumeFrom: ww.stepId,
-        stepOutput: ww.stepOutput,
-        ...(ww.params && Object.keys(ww.params).length > 0 ? { params: ww.params } : {}),
+        workflowId: exec.workflowId,
+        resumeFrom: exec.currentStepId,
+        stepOutput: exec.stepOutput,
+        ...(exec.params && Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
       })
     },
 

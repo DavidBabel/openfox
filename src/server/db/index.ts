@@ -271,5 +271,29 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE sessions ADD COLUMN branch TEXT`)
   }
 
+  // Create workflow_executions table for first-class workflow state management
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_executions (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      workflow_name TEXT NOT NULL,
+      workflow_color TEXT,
+      status TEXT NOT NULL DEFAULT 'running',
+      current_step_id TEXT,
+      current_step_name TEXT,
+      step_output TEXT,
+      params TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_workflow_executions_session
+    ON workflow_executions(session_id)
+  `)
+
   logger.info('Database migrations completed')
 }

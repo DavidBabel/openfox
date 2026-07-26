@@ -87,6 +87,7 @@ export {
   emitModeChanged,
   emitPhaseChanged,
   emitRunningChanged,
+  emitWorkflowExecutionChanged,
   emitCriteriaSet,
   emitCriterionUpdated,
   emitTodosUpdated,

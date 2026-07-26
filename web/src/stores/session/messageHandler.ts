@@ -27,7 +27,6 @@ import type {
   ContextStatePayload,
   QueueStatePayload,
   SessionCreatedPayload,
-  WorkflowWaitingPayload,
 } from '@shared/protocol.js'
 import { useDevServerStore } from '../dev-server'
 import { useBackgroundProcessesStore } from '../background-processes'
@@ -209,7 +208,8 @@ export function handleServerMessage(
         crossSessionConfirmations: crossCleanup,
         sessionsWithPendingConfirmations: Object.keys(crossCleanup),
         pendingQuestions: payload.pendingQuestions ?? [],
-        waitingWorkflow: payload.waitingWorkflow ?? null,
+        activeWorkflowExecution:
+          (payload.activeWorkflowExecution as import('@shared/types.js').WorkflowExecution | undefined) ?? null,
         ...(wasPendingCreate ? { pendingSessionCreate: payload.session.id } : {}),
       })
 
@@ -682,16 +682,46 @@ export function handleServerMessage(
     case 'phase.changed': {
       const payload = message.payload as PhaseChangedPayload
       updateSessionField(message, set, get, (s) => ({ ...s, phase: payload.phase }))
-      // Clear waiting state when phase moves away from 'waiting'
-      if (payload.phase !== 'waiting') {
-        set({ waitingWorkflow: null })
-      }
       break
     }
 
-    case 'workflow.waiting': {
-      const payload = message.payload as WorkflowWaitingPayload
-      set({ waitingWorkflow: payload })
+    case 'workflow.execution_changed': {
+      const payload = message.payload as {
+        executionId: string
+        workflowId: string
+        workflowName: string
+        workflowColor?: string
+        status: import('@shared/types.js').WorkflowExecutionStatus
+        currentStepName?: string
+      }
+      set((state) => {
+        const current = state.activeWorkflowExecution
+        if (!current) {
+          // Event arrived before session state loaded — create minimal entry
+          return {
+            activeWorkflowExecution: {
+              id: payload.executionId,
+              sessionId: message.sessionId ?? '',
+              workflowId: payload.workflowId,
+              workflowName: payload.workflowName,
+              ...(payload.workflowColor ? { workflowColor: payload.workflowColor } : {}),
+              status: payload.status,
+              currentStepName: payload.currentStepName,
+              stepOutput: {},
+              params: {},
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          }
+        }
+        return {
+          activeWorkflowExecution: {
+            ...current,
+            status: payload.status,
+            currentStepName: payload.currentStepName ?? current.currentStepName,
+          },
+        }
+      })
       break
     }
 

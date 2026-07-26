@@ -460,6 +460,32 @@ export function emitRunningChanged(sessionId: string, isRunning: boolean): void 
 }
 
 /**
+ * Emit workflow execution changed (lightweight sync event)
+ */
+export function emitWorkflowExecutionChanged(
+  sessionId: string,
+  executionId: string,
+  workflowId: string,
+  workflowName: string,
+  workflowColor: string | undefined,
+  status: import('../../shared/types.js').WorkflowExecutionStatus,
+  currentStepName?: string,
+): void {
+  const eventStore = getEventStore()
+  eventStore.append(sessionId, {
+    type: 'workflow.execution_changed',
+    data: {
+      executionId,
+      workflowId,
+      workflowName,
+      ...(workflowColor ? { workflowColor } : {}),
+      status,
+      ...(currentStepName ? { currentStepName } : {}),
+    },
+  })
+}
+
+/**
  * Emit criteria set (replace all criteria)
  */
 export function emitCriteriaSet(sessionId: string, criteria: Criterion[]): void {

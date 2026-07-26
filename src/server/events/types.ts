@@ -24,6 +24,7 @@ import type {
   ContextState,
   Attachment,
   PreparingToolCall,
+  WorkflowExecutionStatus,
 } from '../../shared/types.js'
 import type { WorkflowWaitingPayload } from '../../shared/protocol.js'
 
@@ -210,6 +211,21 @@ export type TurnEvent =
         stepName: string
         stepOutput: Record<string, string>
         params?: Record<string, string>
+      }
+    }
+
+  // ----------------------------------------------------------------------------
+  // Workflow execution changed (lightweight sync event)
+  // ----------------------------------------------------------------------------
+  | {
+      type: 'workflow.execution_changed'
+      data: {
+        executionId: string
+        workflowId: string
+        workflowName: string
+        workflowColor?: string
+        status: WorkflowExecutionStatus
+        currentStepName?: string
       }
     }
 

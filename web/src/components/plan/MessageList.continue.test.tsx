@@ -32,6 +32,21 @@ function buildSessionState() {
           params: { feature: 'login' },
         }
       : null,
+    activeWorkflowExecution: mockState.hasWaitingWorkflow
+      ? {
+          id: 'exec-1',
+          sessionId: 's1',
+          workflowId: 'pr-review',
+          workflowName: 'PR Review',
+          status: 'waiting' as const,
+          currentStepId: 'user_test',
+          currentStepName: 'Manual Testing',
+          stepOutput: {} as Record<string, string>,
+          params: { feature: 'login' },
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+      : null,
     messages: [],
     hiddenCount: 0,
     error: null,
@@ -105,6 +120,7 @@ describe('MessageList continue workflow button', () => {
 
   it('does not render continue button when phase is not waiting', () => {
     mockState.phase = 'build'
+    mockState.hasWaitingWorkflow = false
     renderMessageList()
     expect(screen.queryByRole('button', { name: /continue/i })).toBeNull()
   })

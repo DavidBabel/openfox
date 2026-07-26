@@ -471,3 +471,69 @@ interface SessionSummaryRow {
   provider_model: string | null
   message_count: number
 }
+
+// ============================================================================
+// Workflow Execution Operations
+// ============================================================================
+
+export interface WorkflowExecutionRow {
+  id: string
+  session_id: string
+  workflow_id: string
+  workflow_name: string
+  workflow_color: string | null
+  status: string
+  current_step_id: string | null
+  current_step_name: string | null
+  step_output: string | null
+  params: string | null
+  created_at: number
+  updated_at: number
+}
+
+export function createWorkflowExecution(
+  id: string,
+  sessionId: string,
+  workflowId: string,
+  workflowName: string,
+  workflowColor: string | undefined,
+  params: Record<string, string>,
+): void {
+  const db = getDatabase()
+  const now = Date.now()
+  db.prepare(
+    `INSERT INTO workflow_executions (id, session_id, workflow_id, workflow_name, workflow_color, status, step_output, params, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'running', '{}', ?, ?, ?)`,
+  ).run(id, sessionId, workflowId, workflowName, workflowColor ?? null, JSON.stringify(params), now, now)
+}
+
+export function updateWorkflowExecutionStatus(
+  executionId: string,
+  status: string,
+  stepId?: string,
+  stepName?: string,
+  stepOutput?: Record<string, string>,
+): void {
+  const db = getDatabase()
+  const now = Date.now()
+  const stepOutputJson = stepOutput ? JSON.stringify(stepOutput) : undefined
+  db.prepare(
+    `UPDATE workflow_executions SET status = ?, current_step_id = COALESCE(?, current_step_id), current_step_name = COALESCE(?, current_step_name), step_output = COALESCE(?, step_output), updated_at = ? WHERE id = ?`,
+  ).run(status, stepId ?? null, stepName ?? null, stepOutputJson ?? null, now, executionId)
+}
+
+export function getActiveWorkflowExecution(sessionId: string): WorkflowExecutionRow | undefined {
+  const db = getDatabase()
+  const row = db
+    .prepare(
+      `SELECT * FROM workflow_executions WHERE session_id = ? AND status IN ('running', 'waiting') ORDER BY updated_at DESC LIMIT 1`,
+    )
+    .get(sessionId) as WorkflowExecutionRow | undefined
+  return row
+}
+
+export function clearWorkflowExecution(executionId: string): void {
+  const db = getDatabase()
+  const now = Date.now()
+  db.prepare(`UPDATE workflow_executions SET updated_at = ? WHERE id = ?`).run(now, executionId)
+}
