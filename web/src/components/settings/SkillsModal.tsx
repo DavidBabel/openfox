@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '../shared/Button'
 import { useSkillsStore, type SkillFull, type SkillInfo } from '../../stores/skills'
-import { useConfirmDialog, FormField, ErrorBanner } from './CRUDModal'
+import { useConfirmDialog, FormField, ErrorBanner, DestinationSelector } from './CRUDModal'
 import { ItemsHeader } from '../shared/ItemsHeader'
 import { CRUDListHeader } from './CRUDListHeader'
 import { CRUDListView } from './CRUDListView'
@@ -242,17 +242,10 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
         </div>
 
         {!editingId && (
-          <div className="flex items-center gap-2 pt-2">
-            <label className="text-xs text-text-secondary">Save to:</label>
-            <select
-              value={formData.destination as string}
-              onChange={(e) => setFormData((prev) => ({ ...prev, destination: e.target.value as 'project' | 'user' }))}
-              className="px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
-            >
-              <option value="user">Global config</option>
-              <option value="project">Project (.openfox/)</option>
-            </select>
-          </div>
+          <DestinationSelector
+            value={formData.destination as 'project' | 'user'}
+            onChange={(v) => setFormData((prev) => ({ ...prev, destination: v }))}
+          />
         )}
 
         <div className="flex justify-end gap-2 pt-3 border-t border-border flex-shrink-0">

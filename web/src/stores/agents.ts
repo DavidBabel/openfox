@@ -101,6 +101,7 @@ export const useAgentsStore = create<AgentsState>((set) => {
         if (res.ok) {
           set((state) => ({
             userItems: state.userItems.filter((a) => a.id !== agentId),
+            projectItems: state.projectItems.filter((a) => a.id !== agentId),
           }))
           return { success: true }
         }

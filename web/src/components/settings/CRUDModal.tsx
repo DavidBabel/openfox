@@ -157,6 +157,27 @@ export function ErrorBanner({ message }: ErrorBannerProps) {
   return <div className="text-accent-error text-sm px-3 py-2 bg-accent-error/10 rounded">{message}</div>
 }
 
+interface DestinationSelectorProps {
+  value: 'project' | 'user'
+  onChange: (value: 'project' | 'user') => void
+}
+
+export function DestinationSelector({ value, onChange }: DestinationSelectorProps) {
+  return (
+    <div className="flex items-center gap-2">
+      <label className="text-xs text-text-secondary">Save to:</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as 'project' | 'user')}
+        className="px-2 py-1 bg-bg-tertiary border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent-primary"
+      >
+        <option value="user">Global config</option>
+        <option value="project">Project (.openfox/)</option>
+      </select>
+    </div>
+  )
+}
+
 interface CRUDListHeaderProps {
   description: string
   onNew: () => void

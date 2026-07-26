@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { useAgentsStore, type AgentFull } from '../../stores/agents'
 import { authFetch } from '../../lib/api'
-import { CRUDListHeader, useConfirmDialog } from './CRUDModal'
+import { CRUDListHeader, useConfirmDialog, DestinationSelector } from './CRUDModal'
 import { AgentGroup } from './agents/AgentListItem'
 import { AgentForm } from './agents/AgentForm'
 
@@ -23,6 +23,7 @@ function toSlug(name: string): string {
 export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps) {
   const defaults = useAgentsStore((state) => state.defaults)
   const userItems = useAgentsStore((state) => state.userItems)
+  const projectItems = useAgentsStore((state) => state.projectItems)
   const loading = useAgentsStore((state) => state.loading)
   const fetchAgents = useAgentsStore((state) => state.fetchAgents)
   const fetchAgent = useAgentsStore((state) => state.fetchAgent)
@@ -42,6 +43,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
   const [formTools, setFormTools] = useState<string[]>([])
   const [formColor, setFormColor] = useState('#6b7280')
   const [formPrompt, setFormPrompt] = useState('')
+  const [formDestination, setFormDestination] = useState<'project' | 'user'>('user')
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -139,7 +141,10 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
   }
 
   const handleDuplicate = async (agentId: string) => {
-    const content = await fetchDefaultContent(agentId)
+    let content = await fetchDefaultContent(agentId)
+    if (!content) {
+      content = await fetchAgent(agentId)
+    }
     if (!content) return
     applyDuplicateFromContent(content, agentId, true)
   }
@@ -153,6 +158,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
     setFormTools(['read_file'])
     setFormColor('#6b7280')
     setFormPrompt('')
+    setFormDestination('user')
     setFormError('')
     setIsReadOnly(false)
     setView('edit')
@@ -193,7 +199,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
       prompt: formPrompt,
     }
 
-    const result = editingId ? await updateAgent(editingId, agent) : await createAgent(agent)
+    const result = editingId ? await updateAgent(editingId, agent) : await createAgent(agent, formDestination)
 
     setSaving(false)
 
@@ -226,6 +232,8 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
   const defaultTopLevelAgents = defaults.filter((a) => !a.subagent)
   const userSubAgents = userItems.filter((a) => a.subagent)
   const userTopLevelAgents = userItems.filter((a) => !a.subagent)
+  const projectSubAgents = projectItems.filter((a) => a.subagent)
+  const projectTopLevelAgents = projectItems.filter((a) => !a.subagent)
 
   if (view === 'edit') {
     return (
@@ -235,6 +243,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
         title={isReadOnly ? `${formName}` : editingId ? 'Edit Agent' : 'New Agent'}
         size="xl"
       >
+        {!editingId && !isReadOnly && <DestinationSelector value={formDestination} onChange={setFormDestination} />}
         <AgentForm
           formName={formName}
           formId={formId}
@@ -278,7 +287,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
         description="Agents define behavior, tools, and prompts for top-level modes and sub-agents."
         onNew={handleNew}
         loading={loading}
-        hasItems={defaults.length > 0 || userItems.length > 0}
+        hasItems={defaults.length > 0 || userItems.length > 0 || projectItems.length > 0}
       >
         <div className="space-y-4">
           {defaults.length > 0 && (
@@ -293,27 +302,34 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
             />
           )}
 
-          {userItems.length > 0 && (
-            <AgentGroup
-              title="Custom"
-              agents={userTopLevelAgents}
-              subagents={userSubAgents}
-              isBuiltIn={false}
-              alwaysAllowedNames={alwaysAllowedNames}
-              isConfirmingDelete={(id) => isConfirming(id, 'delete')}
-              onView={handleView}
-              onDuplicate={handleDuplicate}
-              onEdit={handleEdit}
-              onDelete={(id) => {
-                if (isConfirming(id, 'delete')) {
-                  handleDelete(id)
-                  clearConfirm()
-                } else {
-                  requestDelete(id)
-                }
-              }}
-              onCancelDelete={clearConfirm}
-            />
+          {[
+            { title: 'Custom', agents: userTopLevelAgents, subagents: userSubAgents },
+            { title: 'Project', agents: projectTopLevelAgents, subagents: projectSubAgents },
+          ].map(
+            (section) =>
+              section.agents.length > 0 && (
+                <AgentGroup
+                  key={section.title}
+                  title={section.title}
+                  agents={section.agents}
+                  subagents={section.subagents}
+                  isBuiltIn={false}
+                  alwaysAllowedNames={alwaysAllowedNames}
+                  isConfirmingDelete={(id) => isConfirming(id, 'delete')}
+                  onView={handleView}
+                  onDuplicate={handleDuplicate}
+                  onEdit={handleEdit}
+                  onDelete={(id) => {
+                    if (isConfirming(id, 'delete')) {
+                      handleDelete(id)
+                      clearConfirm()
+                    } else {
+                      requestDelete(id)
+                    }
+                  }}
+                  onCancelDelete={clearConfirm}
+                />
+              ),
           )}
         </div>
       </CRUDListHeader>

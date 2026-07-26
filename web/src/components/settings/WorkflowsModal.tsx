@@ -11,7 +11,14 @@ import {
 } from '../../stores/workflows'
 import { useAgentsStore } from '../../stores/agents'
 import { ArrowRightIcon, EyeIcon } from '../shared/icons'
-import { ConfirmButton, DeleteIcon, DuplicateIcon, useConfirmDialog, CRUDListHeader } from './CRUDModal'
+import {
+  ConfirmButton,
+  DeleteIcon,
+  DuplicateIcon,
+  useConfirmDialog,
+  CRUDListHeader,
+  DestinationSelector,
+} from './CRUDModal'
 import { FlowDiagram } from './workflows/FlowDiagram'
 import { WorkflowFormFields } from './workflows/WorkflowFormFields'
 import { WorkflowListSection } from './workflows/WorkflowListItem'
@@ -49,6 +56,7 @@ const DEFAULT_STEPS: WorkflowStep[] = []
 export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModalProps) {
   const defaults = useWorkflowsStore((state) => state.defaults)
   const userItems = useWorkflowsStore((state) => state.userItems)
+  const projectItems = useWorkflowsStore((state) => state.projectItems)
   const loading = useWorkflowsStore((state) => state.loading)
   const templateVariables = useWorkflowsStore((state) => state.templateVariables)
   const fetchWorkflows = useWorkflowsStore((state) => state.fetchWorkflows)
@@ -78,6 +86,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
   const [formSteps, setFormSteps] = useState<WorkflowStep[]>(DEFAULT_STEPS)
   const [formStartCondition, setFormStartCondition] = useState<WorkflowCondition>({ type: 'always' })
   const [formParameters, setFormParameters] = useState<WorkflowParameter[]>([])
+  const [formDestination, setFormDestination] = useState<'project' | 'user'>('user')
   const [formError, setFormError] = useState('')
   const [_saving, setSaving] = useState(false)
   const agentDefaults = useAgentsStore((s) => s.defaults)
@@ -210,7 +219,9 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
       steps: formSteps,
       startCondition: formStartCondition,
     }
-    const result = editingId ? await updateWorkflow(editingId, workflow) : await createWorkflow(workflow)
+    const result = editingId
+      ? await updateWorkflow(editingId, workflow)
+      : await createWorkflow(workflow, formDestination)
     setSaving(false)
     if (!result.success) {
       setFormError(result.error ?? 'Failed to save.')
@@ -276,6 +287,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
     setFormSteps(structuredClone(DEFAULT_STEPS))
     setFormStartCondition({ type: 'always' })
     setFormParameters([])
+    setFormDestination('user')
     setFormError('')
     setSelectedNodeKey(null)
     setSelectedEdgeKey(null)
@@ -619,6 +631,8 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
           </div>
         )}
 
+        {!editingId && !isReadOnly && <DestinationSelector value={formDestination} onChange={setFormDestination} />}
+
         <div className="flex gap-3" style={{ height: 'calc(90vh - 220px)', minHeight: 300 }}>
           <div className="flex-1 min-w-0 bg-bg-primary/50 border border-border rounded-lg flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50 shrink-0">
@@ -944,7 +958,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
         description="Workflows define multi-step agentic processes with branching transitions."
         onNew={handleNew}
         loading={loading}
-        hasItems={defaults.length > 0 || userItems.length > 0}
+        hasItems={defaults.length > 0 || userItems.length > 0 || projectItems.length > 0}
       >
         <div className="space-y-4">
           <WorkflowListSection
@@ -975,6 +989,25 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
               </>
             )}
           />
+          {projectItems.length > 0 && (
+            <WorkflowListSection
+              title="Project"
+              items={projectItems}
+              renderActions={(wf) => (
+                <>
+                  <EditButton onClick={() => handleEdit(wf.id)}>
+                    <span className="text-[10px]">Edit</span>
+                  </EditButton>
+                  <DuplicateIcon onClick={() => handleDuplicate(wf.id)} />
+                  {isConfirming(wf.id, 'delete') ? (
+                    <ConfirmButton onConfirm={() => handleDelete(wf.id)} onCancel={clearConfirm} />
+                  ) : (
+                    <DeleteIcon onClick={() => requestDelete(wf.id)} />
+                  )}
+                </>
+              )}
+            />
+          )}
         </div>
       </CRUDListHeader>
     </Modal>

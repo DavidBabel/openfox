@@ -163,6 +163,7 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
       if (res.ok) {
         set((state) => ({
           userItems: state.userItems.filter((p) => p.id !== id),
+          projectItems: state.projectItems.filter((p) => p.id !== id),
         }))
         return { success: true }
       }
