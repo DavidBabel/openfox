@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.93 - 2026-07-26
+
+### Features
+
+- **Multi-step workflows with user pause points** — new `user` step type lets workflow authors insert natural hand-off points where execution pauses and waits for manual action before continuing; state survives page refreshes.
+- **Workflow parameterization with named params** — define parameters with labels, descriptions, and positions on any workflow; values are collected via a modal or slash command and resolved in step prompts via `{{param_name}}`.
+- **Slash autocomplete with inline parameter hints** — type `/` to fuzzy-match workflows and commands; select with Tab/Enter and fill in `param=?` hints that advance as you type values.
+- **Command template parameters** — commands support `{{param_name}}` placeholders in their prompt; launching from the UI shows a parameter collection modal.
+- **Clear logs button and visual markers in LogViewer** — clear dev server output with one click and insert divider markers to annotate log sections.
+
+### Enhancements
+
+- **Automatic session naming on first workflow launch** — session titles are now generated from the workflow name and parameter values, producing contextual names like "PR #157: Fix bug".
+- **Runner errors surfaced as visible chat messages** — workflow launch failures now show as error messages in the feed instead of silent logs.
+- **OpenFox repo URL included in system prompt** — the agent can self-reference the repository when working on OpenFox itself.
+
+### Bug Fixes
+
+- **Changelog no longer shown on first install** — the "What's New" modal now only appears on version upgrades, not when running the app for the first time.
+- **Saving workflows and agents to project `.openfox/` directory now works** — the "Project" destination option in creation modals correctly saves to the repository-scoped location.
+- **Double-submit guard prevents duplicate sends** — rapid clicks on Send no longer trigger multiple message deliveries.
+
 ## 2.0.92 - 2026-07-25
 
 ### Bug Fixes
