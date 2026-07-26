@@ -31,7 +31,11 @@ const config: CrudRouteConfig<CommandDefinition> = {
   isDefault: isDefaultCommand,
   getDefaultIds: getDefaultCommandIds,
   validateCreate: validateNameIdPrompt,
-  mapToResponse: (c) => c.metadata as unknown as { [key: string]: unknown },
+  mapToResponse: (c) =>
+    ({
+      ...c.metadata,
+      paramNames: [...new Set(Array.from(c.prompt.matchAll(/\{\{(\w+)\}\}/g), (m) => m[1]!))],
+    }) as unknown as { [key: string]: unknown },
 }
 
 export function createCommandRoutes(configDir: string, projectDir?: string) {

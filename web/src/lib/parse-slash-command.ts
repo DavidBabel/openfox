@@ -9,6 +9,7 @@ export interface WorkflowInfo {
 export interface CommandInfo {
   id: string
   name: string
+  paramNames?: string[]
 }
 
 export interface SlashCommandResult {

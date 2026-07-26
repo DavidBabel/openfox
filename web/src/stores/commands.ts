@@ -7,6 +7,7 @@ export interface CommandInfo {
   id: string
   name: string
   agentMode?: string
+  paramNames?: string[]
 }
 
 export interface CommandFull {

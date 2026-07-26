@@ -1,9 +1,9 @@
-import { useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useState, useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { useSessionStore, useIsRunning } from '../../stores/session'
 import { useWorkflowsStore } from '../../stores/workflows'
 import { useCommandsStore } from '../../stores/commands'
 import { authFetch } from '../../lib/api'
-import { parseSlashCommand } from '../../lib/parse-slash-command'
+import { parseSlashCommand, extractTemplateParams } from '../../lib/parse-slash-command'
 import type { Attachment } from '@shared/types.js'
 import type { PromptHistoryItem } from '../../hooks/usePromptHistory'
 import { AttachmentPreview } from '../shared/AttachmentPreview.js'
@@ -28,6 +28,7 @@ import {
   type AtMentionAutocompleteHandle,
   type FileSuggestion,
 } from '../shared/AtMentionAutocomplete'
+import { SlashAutocomplete, type SlashAutocompleteHandle, type SlashSuggestion } from '../shared/SlashAutocomplete'
 
 interface ChatInputProps {
   input: string
@@ -93,6 +94,7 @@ export function ChatInput({
   const prevLenRef = useRef(0)
   const cursorPosRef = useRef(0)
   const autocompleteRef = useRef<AtMentionAutocompleteHandle>(null)
+  const slashAutocompleteRef = useRef<SlashAutocompleteHandle>(null)
 
   const isRunning = useIsRunning()
   const stopGeneration = useSessionStore((state) => state.stopGeneration)
@@ -104,10 +106,12 @@ export function ChatInput({
   const currentSession = useSessionStore((state) => state.currentSession)
   const warmupSentRef = useRef(false)
   const workflowsFetchedRef = useRef(false)
+  const sendingRef = useRef(false)
+  const [activeSlashParams, setActiveSlashParams] = useState<string[]>([])
 
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
 
-  // Eagerly load workflows so slash commands always have data — no lazy-fetch on send
+  // Eagerly load workflows and commands so slash autocomplete always has data
   useEffect(() => {
     if (workflowsFetchedRef.current) return
     workflowsFetchedRef.current = true
@@ -119,7 +123,22 @@ export function ChatInput({
     ) {
       allWorkflows.fetchWorkflows()
     }
+    const allCommands = useCommandsStore.getState()
+    if (
+      allCommands.defaults.length === 0 &&
+      allCommands.userItems.length === 0 &&
+      allCommands.projectItems.length === 0
+    ) {
+      allCommands.fetchCommands()
+    }
   }, [])
+
+  // Clear inline param hints when input is emptied (after send, escape, etc.)
+  useEffect(() => {
+    if (!input) {
+      setActiveSlashParams([])
+    }
+  }, [input])
 
   useEffect(() => {
     if (restoredInput !== null) {
@@ -211,6 +230,9 @@ export function ChatInput({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (slashAutocompleteRef.current?.handleKeyDown(e)) {
+      return
+    }
     if (autocompleteRef.current?.handleKeyDown(e)) {
       return
     }
@@ -324,7 +346,9 @@ export function ChatInput({
   }, [])
 
   const handleSend = () => {
+    if (sendingRef.current) return
     if (!input.trim() && attachments.length === 0) return
+    sendingRef.current = true
     scrollContainerRef.current?.scrollTo({
       top: scrollContainerRef.current.scrollHeight,
       behavior: 'smooth',
@@ -345,33 +369,47 @@ export function ChatInput({
         if (missingRequired.length > 0) {
           const names = missingRequired.map((p) => p.label || p.id).join(', ')
           setErrorMessage(`Missing required parameter${missingRequired.length > 1 ? 's' : ''}: ${names}`)
+          sendingRef.current = false
           return
         }
         launchWorkflow(undefined, undefined, slashResult.workflowId, undefined, slashResult.params)
         clearInput()
+        sendingRef.current = false
         return
       }
       if (slashResult?.commandId) {
-        // Fetch command, resolve positional params, send as message
+        // Fetch command, resolve params, send as message
         allCommands.fetchCommand(slashResult.commandId).then((full) => {
           if (full) {
+            // Map positional args to named params by order of appearance in the prompt
+            const paramNames = extractTemplateParams(full.prompt)
+            const namedParams: Record<string, string> = {}
+            for (const [posKey, value] of Object.entries(slashResult.params)) {
+              const idx = parseInt(posKey, 10)
+              const name = paramNames[idx]
+              if (name) namedParams[name] = value
+            }
             let prompt = full.prompt
-            for (const [key, value] of Object.entries(slashResult.params)) {
+            for (const [key, value] of Object.entries(namedParams)) {
               prompt = prompt.replaceAll(`{{${key}}}`, value)
             }
             sendMessage(prompt, undefined)
+            clearInput()
           }
+          sendingRef.current = false
+          // If fetch fails (null), leave input intact so user can retry
         })
-        clearInput()
         return
       }
       // Unrecognized slash command — don't send as normal message
       clearInput()
+      sendingRef.current = false
       return
     }
 
     sendMessage(input, attachments)
     clearInput()
+    sendingRef.current = false
   }
 
   const handleSelectFile = useCallback(
@@ -395,6 +433,39 @@ export function ChatInput({
     [input, setInput],
   )
 
+  const handleSelectSlash = useCallback(
+    (suggestion: SlashSuggestion, startIndex: number) => {
+      const beforeCursor = input.slice(0, startIndex)
+      const afterCursor = input.slice(cursorPosRef.current)
+      const newText = `${beforeCursor}/${suggestion.id} ${afterCursor}`
+      setInput(newText)
+      const newCursorPos = startIndex + suggestion.id.length + 2
+      cursorPosRef.current = newCursorPos
+      if (textareaRef.current) {
+        textareaRef.current.selectionStart = newCursorPos
+        textareaRef.current.selectionEnd = newCursorPos
+        textareaRef.current.focus()
+      }
+      // Set inline param hints
+      if (suggestion.type === 'workflow') {
+        const wf = [
+          ...useWorkflowsStore.getState().defaults,
+          ...useWorkflowsStore.getState().userItems,
+          ...useWorkflowsStore.getState().projectItems,
+        ].find((w) => w.id === suggestion.id)
+        setActiveSlashParams((wf?.parameters ?? []).map((p) => p.id))
+      } else {
+        // Use paramNames from the command list (server-computed from prompt)
+        const allCmds = useCommandsStore.getState()
+        const cmd = [...allCmds.defaults, ...allCmds.userItems, ...allCmds.projectItems].find(
+          (c) => c.id === suggestion.id,
+        )
+        setActiveSlashParams(cmd?.paramNames ?? [])
+      }
+    },
+    [input, setInput],
+  )
+
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const value = e.target.value
@@ -402,13 +473,18 @@ export function ChatInput({
       if (showHistory) closeHistory()
       cursorPosRef.current = e.target.selectionStart
 
+      // Clear inline param hints when slash pattern is broken or input is empty
+      if (activeSlashParams.length > 0 && (!value.startsWith('/') || !value.includes(' '))) {
+        setActiveSlashParams([])
+      }
+
       // Warmup: on first keystroke in an empty session, prefill the LLM cache
       if (!warmupSentRef.current && sessionId && value && currentSession && currentSession.messages.length === 0) {
         warmupSentRef.current = true
         authFetch(`/api/sessions/${sessionId}/warmup`, { method: 'POST' }).catch(() => {})
       }
     },
-    [setInput, showHistory, closeHistory, sessionId, currentSession],
+    [setInput, showHistory, closeHistory, sessionId, currentSession, activeSlashParams],
   )
 
   const handleSelect = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
@@ -515,6 +591,37 @@ export function ChatInput({
             workdir={workdir}
             onSelect={handleSelectFile}
           />
+          <SlashAutocomplete
+            ref={slashAutocompleteRef}
+            text={input}
+            cursorPos={cursorPosRef.current}
+            workflows={(() => {
+              const s = useWorkflowsStore.getState()
+              return [...s.defaults, ...s.userItems, ...s.projectItems]
+            })()}
+            commands={(() => {
+              const s = useCommandsStore.getState()
+              return [...s.defaults, ...s.userItems, ...s.projectItems]
+            })()}
+            onSelect={handleSelectSlash}
+          />
+          {activeSlashParams.length > 0 &&
+            (() => {
+              // Count space-separated args after the last /command
+              const match = input.match(/\/(\w+)\s+(.*)$/)
+              const args = match ? match[2]!.trim().split(/\s+/) : []
+              const filledCount = args.filter(Boolean).length
+              const nextParam = activeSlashParams[filledCount]
+              if (!nextParam) return null
+              return (
+                <span
+                  className="absolute left-3 top-[26px] text-sm text-text-muted/40 pointer-events-none select-none"
+                  aria-hidden
+                >
+                  {nextParam}=?
+                </span>
+              )
+            })()}
         </div>
         <div className="flex items-center self-center gap-1.5">
           {isRunning && (

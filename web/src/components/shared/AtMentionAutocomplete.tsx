@@ -153,7 +153,7 @@ const AtMentionAutocomplete = forwardRef<AtMentionAutocompleteHandle, AtMentionA
     return (
       <div ref={containerRef} className="absolute bottom-full left-0 right-0 mb-2 z-50">
         <div className="bg-bg-secondary border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
-          <ul className="py-1">
+          <ul>
             {suggestions.map((item, index) => (
               <li
                 ref={(el) => {
