@@ -751,14 +751,12 @@ export function handleServerMessage(
       const activeSessionId = get().currentSession?.id
 
       set((state) => {
-        const updatedSessions = state.sessions.map((s) =>
-          s.id === eventSessionId ? { ...s, title: payload.name, updatedAt: new Date().toISOString() } : s,
-        )
+        const updatedSessions = state.sessions.map((s) => (s.id === eventSessionId ? { ...s, title: payload.name } : s))
 
         const updatedCurrentSession =
           activeSessionId === eventSessionId
             ? state.currentSession
-              ? { ...state.currentSession, title: payload.name, updatedAt: new Date().toISOString() }
+              ? { ...state.currentSession, metadata: { ...state.currentSession.metadata, title: payload.name } }
               : null
             : state.currentSession
 

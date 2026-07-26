@@ -215,9 +215,8 @@ export function updateSessionMetadata(id: string, metadata: Partial<Session['met
 
 export function updateSessionMcpDisabledServers(id: string, disabledServers: string[]): void {
   const db = getDatabase()
-  const now = new Date().toISOString()
   const value = disabledServers.length > 0 ? JSON.stringify(disabledServers) : null
-  db.prepare(`UPDATE sessions SET mcp_disabled_servers = ?, updated_at = ? WHERE id = ?`).run(value, now, id)
+  db.prepare(`UPDATE sessions SET mcp_disabled_servers = ? WHERE id = ?`).run(value, id)
 }
 
 export function updateSessionCachedPrompt(

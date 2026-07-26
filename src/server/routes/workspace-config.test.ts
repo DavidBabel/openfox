@@ -4,6 +4,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createWorkspaceConfigRoutes } from './workspace-config.js'
+import Database from 'better-sqlite3'
 
 /**
  * Simulates project DB records for route tests.
@@ -13,6 +14,19 @@ import { createWorkspaceConfigRoutes } from './workspace-config.js'
 const mockProjectById = new Map<string, string>() // projectId → workdir
 const mockProjectRecords = new Map<string, { workspaceRootDir?: string }>() // workdir → data
 
+/**
+ * In-memory SQLite database for MCP overrides integration test.
+ * Allows verifying that updateSessionMcpDisabledServers does not touch updated_at.
+ */
+let mockDb: Database.Database | undefined
+
+vi.mock('../db/index.js', () => ({
+  getDatabase: () => {
+    if (!mockDb) throw new Error('mockDb not initialized for test')
+    return mockDb
+  },
+}))
+
 vi.mock('../db/projects.js', () => ({
   getProjectByWorkdir: vi.fn((workdir: string) => {
     let record = mockProjectRecords.get(workdir)
@@ -20,8 +34,8 @@ vi.mock('../db/projects.js', () => ({
       record = {}
       mockProjectRecords.set(workdir, record)
     }
-    mockProjectById.set('test-id', workdir)
-    return { id: 'test-id', workspaceRootDir: record.workspaceRootDir }
+    mockProjectById.set('test-project', workdir)
+    return { id: 'test-project', workspaceRootDir: record.workspaceRootDir }
   }),
   updateProject: vi.fn((id: string, updates: { workspaceRootDir?: string | null }) => {
     const workdir = mockProjectById.get(id)
@@ -458,5 +472,156 @@ describe('POST /api/workspace/config (existing endpoint)', () => {
     const body = (await res.json()) as ConfigResponse
     expect(body.config.rootDir).toBeUndefined()
     expect(body.config.setup).toEqual(['npm install'])
+  })
+})
+
+describe('POST /api/workspace/config with MCP overrides', () => {
+  let app: express.Express
+  let server: ReturnType<typeof app.listen>
+  let baseUrl: string
+  let testDir: string
+
+  const SESSION_1_ID = 'mcp-session-1'
+  const SESSION_2_ID = 'mcp-session-2'
+  const FROZEN_TIME = '2024-01-01T00:00:00.000Z'
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `openfox-ws-config-mcp-test-${Date.now()}`)
+    await mkdir(testDir, { recursive: true })
+
+    mockDb = new Database(':memory:')
+    mockDb.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        workdir TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'planner',
+        phase TEXT NOT NULL DEFAULT 'idle',
+        workflow_phase TEXT NOT NULL DEFAULT 'plan',
+        is_running INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        title TEXT,
+        total_tokens_used INTEGER DEFAULT 0,
+        total_tool_calls INTEGER DEFAULT 0,
+        iteration_count INTEGER DEFAULT 0,
+        provider_id TEXT,
+        provider_model TEXT,
+        message_count INTEGER NOT NULL DEFAULT 0,
+        mcp_disabled_servers TEXT,
+        danger_level TEXT NOT NULL DEFAULT 'normal',
+        workspace TEXT,
+        branch TEXT
+      )
+    `)
+    mockDb
+      .prepare(
+        `
+      INSERT INTO sessions (id, project_id, workdir, mode, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+      )
+      .run(SESSION_1_ID, 'test-project', testDir, 'builder', FROZEN_TIME, FROZEN_TIME)
+    mockDb
+      .prepare(
+        `
+      INSERT INTO sessions (id, project_id, workdir, mode, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+      )
+      .run(SESSION_2_ID, 'test-project', testDir, 'planner', FROZEN_TIME, FROZEN_TIME)
+
+    app = express()
+    app.use(express.json())
+    app.use(
+      '/api/workspace',
+      createWorkspaceConfigRoutes({
+        listSessions: () => [
+          {
+            id: SESSION_1_ID,
+            projectId: 'test-project',
+            workdir: testDir,
+            mode: 'builder',
+            phase: 'build',
+            isRunning: false,
+            createdAt: FROZEN_TIME,
+            updatedAt: FROZEN_TIME,
+            criteriaCount: 0,
+            criteriaCompleted: 0,
+            messageCount: 0,
+          },
+          {
+            id: SESSION_2_ID,
+            projectId: 'test-project',
+            workdir: testDir,
+            mode: 'planner',
+            phase: 'plan',
+            isRunning: false,
+            createdAt: FROZEN_TIME,
+            updatedAt: FROZEN_TIME,
+            criteriaCount: 0,
+            criteriaCompleted: 0,
+            messageCount: 0,
+          },
+        ],
+        setDynamicContextChanged: () => {},
+      } as any),
+    )
+
+    return new Promise<void>((resolve) => {
+      server = app.listen(0, () => {
+        baseUrl = `http://localhost:${(server.address() as any).port}`
+        resolve()
+      })
+    })
+  })
+
+  afterEach(async () => {
+    server?.close()
+    mockDb?.close()
+    mockDb = undefined
+    await rm(testDir, { recursive: true, force: true })
+  })
+
+  it('does not change session updated_at when saving MCP overrides', async () => {
+    const res = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mcpOverrides: { 'server-1': { disabled: true }, 'server-2': { disabled: true } },
+      }),
+    })
+
+    expect(res.status).toBe(200)
+
+    const session1 = mockDb!
+      .prepare('SELECT updated_at, mcp_disabled_servers FROM sessions WHERE id = ?')
+      .get(SESSION_1_ID) as { updated_at: string; mcp_disabled_servers: string | null }
+    const session2 = mockDb!
+      .prepare('SELECT updated_at, mcp_disabled_servers FROM sessions WHERE id = ?')
+      .get(SESSION_2_ID) as { updated_at: string; mcp_disabled_servers: string | null }
+
+    expect(session1.updated_at).toBe(FROZEN_TIME)
+    expect(session2.updated_at).toBe(FROZEN_TIME)
+    expect(session1.mcp_disabled_servers).toBe(JSON.stringify(['server-1', 'server-2']))
+    expect(session2.mcp_disabled_servers).toBe(JSON.stringify(['server-1', 'server-2']))
+  })
+
+  it('does not change session updated_at when clearing MCP overrides', async () => {
+    const res = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mcpOverrides: {},
+      }),
+    })
+
+    expect(res.status).toBe(200)
+
+    const session1 = mockDb!.prepare('SELECT updated_at FROM sessions WHERE id = ?').get(SESSION_1_ID) as {
+      updated_at: string
+    }
+
+    expect(session1.updated_at).toBe(FROZEN_TIME)
   })
 })

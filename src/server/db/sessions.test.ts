@@ -18,12 +18,14 @@ import {
   getSession,
   listSessions,
   listSessionsByProject,
+  updateSessionMcpDisabledServers,
   updateSessionMetadata,
   updateSessionMode,
   updateSessionPhase,
   updateSessionRunning,
   updateSessionMessageCount,
 } from './sessions.js'
+import { getDatabase } from './index.js'
 
 describe('db sessions', () => {
   let rootA: string
@@ -257,5 +259,48 @@ describe('db sessions', () => {
 
     expect(sessionSummary).toBeDefined()
     expect(sessionSummary?.messageCount).toBe(2) // Only user and assistant messages
+  })
+
+  it('updateSessionMcpDisabledServers does not modify updated_at', async () => {
+    const session = createSession(projectAId, rootA, 'MCP Test')
+
+    // Delay to ensure the timestamp would differ if updated_at were touched
+    await new Promise((r) => setTimeout(r, 5))
+
+    const beforeUpdate = getSession(session.id)!
+    const originalUpdatedAt = beforeUpdate.updatedAt
+
+    updateSessionMcpDisabledServers(session.id, ['server-1', 'server-2'])
+
+    const afterUpdate = getSession(session.id)!
+    expect(afterUpdate.updatedAt).toBe(originalUpdatedAt)
+  })
+
+  it('updateSessionMcpDisabledServers sets mcp_disabled_servers to JSON array when servers are provided', () => {
+    const session = createSession(projectAId, rootA, 'MCP JSON Test')
+
+    updateSessionMcpDisabledServers(session.id, ['mcp-a', 'mcp-b'])
+
+    const db = getDatabase()
+    const row = db.prepare('SELECT mcp_disabled_servers FROM sessions WHERE id = ?').get(session.id) as {
+      mcp_disabled_servers: string | null
+    }
+    expect(row).not.toBeNull()
+    expect(row.mcp_disabled_servers).toBe(JSON.stringify(['mcp-a', 'mcp-b']))
+  })
+
+  it('updateSessionMcpDisabledServers sets mcp_disabled_servers to null when list is empty', () => {
+    const session = createSession(projectAId, rootA, 'MCP Empty Test')
+
+    // First set some servers
+    updateSessionMcpDisabledServers(session.id, ['server-1'])
+    // Then clear with empty array
+    updateSessionMcpDisabledServers(session.id, [])
+
+    const db = getDatabase()
+    const row = db.prepare('SELECT mcp_disabled_servers FROM sessions WHERE id = ?').get(session.id) as {
+      mcp_disabled_servers: string | null
+    }
+    expect(row.mcp_disabled_servers).toBeNull()
   })
 })
