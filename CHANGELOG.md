@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.97 - 2026-07-27
+
+### Enhancements
+
+- **"esc to interrupt" hint hidden on mobile** — the keyboard shortcut hint no longer clutters the UI on small screens where keyboard shortcuts don't apply.
+
+### Bug Fixes
+
+- **Mistral structured content blocks now render correctly** — models with `reasoning_effort` (like `mistral-small-2603`) previously showed `[object Object]` for every streaming chunk. Text and thinking content are now properly extracted and displayed.
+
 ## 2.0.96 - 2026-07-26
 
 ### Features
