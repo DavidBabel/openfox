@@ -52,8 +52,8 @@ const LANG_TESTS: LangTest[] = [
     errorsFile: 'errors.py',
     cleanFile: 'clean.py',
     expectedErrors: [
-      { line: 3, snippet: "is not assignable to declared type" },
-      { line: 7, snippet: "cannot be assigned to parameter" },
+      { line: 3, snippet: 'is not assignable to declared type' },
+      { line: 7, snippet: 'cannot be assigned to parameter' },
     ],
   },
   {
@@ -87,9 +87,7 @@ const LANG_TESTS: LangTest[] = [
     fixtureDir: 'php',
     errorsFile: 'errors.php',
     cleanFile: 'clean.php',
-    expectedErrors: [
-      { line: 9, snippet: 'not found' },
-    ],
+    expectedErrors: [{ line: 9, snippet: 'not found' }],
   },
   {
     id: 'go',
@@ -137,9 +135,7 @@ const LANG_TESTS: LangTest[] = [
     fixtureDir: 'yaml',
     errorsFile: 'errors.yaml',
     cleanFile: 'clean.yaml',
-    expectedErrors: [
-      { line: 3, snippet: 'Flow sequence' },
-    ],
+    expectedErrors: [{ line: 3, snippet: 'Flow sequence' }],
   },
   {
     id: 'json',
@@ -154,9 +150,7 @@ const LANG_TESTS: LangTest[] = [
     fixtureDir: 'json',
     errorsFile: 'errors.json',
     cleanFile: 'clean.json',
-    expectedErrors: [
-      { line: 4, snippet: 'Value expected' },
-    ],
+    expectedErrors: [{ line: 4, snippet: 'Value expected' }],
   },
   {
     id: 'html',
@@ -186,9 +180,7 @@ const LANG_TESTS: LangTest[] = [
     fixtureDir: 'css',
     errorsFile: 'errors.css',
     cleanFile: 'clean.css',
-    expectedErrors: [
-      { line: 6, snippet: '}' },
-    ],
+    expectedErrors: [{ line: 6, snippet: '}' }],
   },
   {
     id: 'cpp',
@@ -203,9 +195,7 @@ const LANG_TESTS: LangTest[] = [
     fixtureDir: 'cpp',
     errorsFile: 'errors.cpp',
     cleanFile: 'clean.cpp',
-    expectedErrors: [
-      { line: 3, snippet: 'Cannot initialize' },
-    ],
+    expectedErrors: [{ line: 3, snippet: 'Cannot initialize' }],
   },
 ]
 
@@ -252,8 +242,16 @@ for (const { test, fixturePath } of startedServers) {
         const fs = await import('node:fs')
         const targetDir = join(fixturePath, 'target')
         const lockFile = join(fixturePath, 'Cargo.lock')
-        try { fs.rmSync(targetDir, { recursive: true, force: true }) } catch { /* ignore */ }
-        try { fs.rmSync(lockFile, { force: true }) } catch { /* ignore */ }
+        try {
+          fs.rmSync(targetDir, { recursive: true, force: true })
+        } catch {
+          /* ignore */
+        }
+        try {
+          fs.rmSync(lockFile, { force: true })
+        } catch {
+          /* ignore */
+        }
       }
       const cmdPath = await which(test.config.serverCommand, fixturePath)
       server = new LspServer(test.config, fixturePath, cmdPath!)
@@ -276,7 +274,9 @@ for (const { test, fixturePath } of startedServers) {
       const diagnostics = await server.getDiagnosticsWithWait(errorsPath, 8000)
 
       if (test.id === 'rust') {
-        console.log(`[RUST DETECT] ${diagnostics.length} diagnostics: ${diagnostics.map((d) => `L${d.range.start.line + 1}:${d.message.slice(0, 60)}`).join(', ')}`)
+        console.log(
+          `[RUST DETECT] ${diagnostics.length} diagnostics: ${diagnostics.map((d) => `L${d.range.start.line + 1}:${d.message.slice(0, 60)}`).join(', ')}`,
+        )
       }
       for (const expected of test.expectedErrors) {
         const match = diagnostics.find(
@@ -309,8 +309,13 @@ for (const { test, fixturePath } of startedServers) {
       try {
         // Start fresh server with clean content on disk so workspace scan
         // finds no errors. Then verify clean open, error open, and clean reopen.
+        // For Go, use unique content to avoid redeclaration conflicts with
+        // the other file in the same package that's still on disk.
         const cleanPath = join(fixturePath, test.cleanFile)
-        const cleanContent = await readFile(cleanPath)
+        const cleanContent =
+          test.id === 'go'
+            ? 'package main\n\nfunc hello() string {\n\treturn "ok"\n}\n\nfunc main() {\n\tprintln(hello())\n}\n'
+            : await readFile(cleanPath)
         fs.writeFileSync(errorsPath, cleanContent, 'utf-8')
 
         const cmdPath = await which(test.config.serverCommand, fixturePath)
@@ -322,14 +327,16 @@ for (const { test, fixturePath } of startedServers) {
         const cleanDiags = await freshServer.getDiagnosticsWithWait(errorsPath, 8000)
         const cleanErrors = cleanDiags.filter((d) => d.severity === 'error')
         if (cleanErrors.length > 0) {
-          console.log(`[GO CLEAN ERRORS] ${cleanErrors.map((d) => `L${d.range.start.line + 1}:${d.message.slice(0, 60)}`).join(', ')}`)
+          console.log(
+            `[GO CLEAN ERRORS] ${cleanErrors.map((d) => `L${d.range.start.line + 1}:${d.message.slice(0, 60)}`).join(', ')}`,
+          )
         }
         expect(cleanErrors).toHaveLength(0)
 
         // Write error content to disk, close, reopen
         fs.writeFileSync(errorsPath, originalContent, 'utf-8')
         await freshServer.didClose(errorsPath)
-        await new Promise(r => setTimeout(r, 500))
+        await new Promise((r) => setTimeout(r, 500))
         await freshServer.didOpen(errorsPath, originalContent)
         const errorDiags = await freshServer.getDiagnosticsWithWait(errorsPath, 8000)
         const errorErrors = errorDiags.filter((d) => d.severity === 'error')
@@ -346,7 +353,7 @@ for (const { test, fixturePath } of startedServers) {
         // Write clean content back to disk, close, reopen
         fs.writeFileSync(errorsPath, cleanContent, 'utf-8')
         await freshServer.didClose(errorsPath)
-        await new Promise(r => setTimeout(r, 500))
+        await new Promise((r) => setTimeout(r, 500))
         await freshServer.didOpen(errorsPath, cleanContent)
         const updatedDiags = await freshServer.getDiagnosticsWithWait(errorsPath, 8000)
 
