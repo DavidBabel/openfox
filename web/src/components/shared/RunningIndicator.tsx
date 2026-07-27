@@ -18,7 +18,7 @@ export function RunningIndicator() {
         </span>
         <span className="text-text-secondary">{aborting ? 'Running... (abort in progress)' : 'Running'}</span>
       </div>
-      {!aborting && <span className="text-text-muted">esc to interrupt</span>}
+      {!aborting && <span className="text-text-muted hidden sm:inline">esc to interrupt</span>}
     </div>
   )
 }
