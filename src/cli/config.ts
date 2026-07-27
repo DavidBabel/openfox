@@ -58,6 +58,7 @@ const providerSchema = z
     createdAt: z.string().optional(),
     isLocal: z.boolean().optional(),
     thinkingField: z.string().optional(),
+    sendReasoningInMessages: z.boolean().optional(),
     authAdapter: z.string().optional(),
     transportAdapter: z.string().optional(),
     credentialRef: z.string().optional(),
@@ -75,6 +76,9 @@ const providerSchema = z
       createdAt: provider.createdAt ?? new Date().toISOString(),
       ...(provider.isLocal !== undefined ? { isLocal: provider.isLocal } : {}),
       ...(provider.thinkingField ? { thinkingField: provider.thinkingField } : {}),
+      ...(provider.sendReasoningInMessages !== undefined
+        ? { sendReasoningInMessages: provider.sendReasoningInMessages }
+        : {}),
       ...(provider.authAdapter ? { authAdapter: provider.authAdapter } : {}),
       ...(provider.transportAdapter ? { transportAdapter: provider.transportAdapter } : {}),
       ...(provider.credentialRef ? { credentialRef: provider.credentialRef } : {}),
@@ -225,9 +229,7 @@ export function resolveVisionFallback(
 
       if (provider) {
         const exactModel = provider.models?.find((m) => m.id === modelId)
-        const model = exactModel?.supportsVision
-          ? exactModel
-          : provider.models?.find((m) => m.supportsVision)
+        const model = exactModel?.supportsVision ? exactModel : provider.models?.find((m) => m.supportsVision)
 
         if (model?.supportsVision) {
           const backend: 'ollama' | 'openai' = provider.backend === 'ollama' ? 'ollama' : 'openai'

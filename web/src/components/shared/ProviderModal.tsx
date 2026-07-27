@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { authFetch } from '../../lib/api'
 import type { Backend } from '../../stores/config'
 import type { ModelConfig as SharedModelConfig } from '@shared/types.js'
-import { ChevronDownIcon } from './icons'
+import { ChevronDownIcon, SettingsIcon } from './icons'
 import { QueryParamsInput } from './QueryParamsInput'
 import { formatTokens } from '../../lib/format-stats'
 
@@ -58,6 +58,7 @@ export interface ProviderFormData {
   apiKey?: string
   isLocal?: boolean
   thinkingField?: string
+  sendReasoningInMessages?: boolean
   authAdapter?: string
   transportAdapter?: string
   models: Array<Omit<SharedModelConfig, 'source'>>
@@ -71,6 +72,7 @@ export function providerFormPayload(formData: ProviderFormData) {
     apiKey: formData.apiKey,
     isLocal: formData.isLocal,
     thinkingField: formData.thinkingField,
+    sendReasoningInMessages: formData.sendReasoningInMessages,
     authAdapter: formData.authAdapter,
     transportAdapter: formData.transportAdapter,
     models: formData.models,
@@ -90,6 +92,7 @@ interface ProviderModalProps {
     apiKey?: string
     isLocal?: boolean
     thinkingField?: string
+    sendReasoningInMessages?: boolean
     authAdapter?: string
     transportAdapter?: string
     models?: Array<Omit<SharedModelConfig, 'source'>>
@@ -453,6 +456,7 @@ export function ProviderModal({
   const [expandedModelId, setExpandedModelId] = useState<string | null>(null)
   const [showDefaults, setShowDefaults] = useState(false)
   const [thinkingField, setThinkingField] = useState('')
+  const [sendReasoningInMessages, setSendReasoningInMessages] = useState(true)
   const [modelConfigs, setModelConfigs] = useState<Record<string, ModelConfig>>({})
   const [autoConfigState, setAutoConfigState] = useState<{
     loading: boolean
@@ -542,6 +546,7 @@ export function ProviderModal({
       setFormTransportAdapter(editProvider?.transportAdapter)
       setFetchError(null)
       setThinkingField(editProvider?.thinkingField ?? '')
+      setSendReasoningInMessages(editProvider?.sendReasoningInMessages ?? true)
       setTestResults({})
       setRawModalData(null)
       setDraftProviderId(null)
@@ -898,6 +903,7 @@ export function ProviderModal({
       apiKey: formApiKey || undefined,
       isLocal: formIsLocal,
       thinkingField: thinkingField || undefined,
+      sendReasoningInMessages,
       authAdapter: formAuthAdapter,
       transportAdapter: formTransportAdapter,
       models: models.map((m) => ({
@@ -1108,6 +1114,17 @@ export function ProviderModal({
         {/* Step 2: Test & Configure Models */}
         {formStep === 2 && (
           <div className="px-6 py-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-text-primary">Test &amp; Configure Models</h4>
+              <button
+                type="button"
+                onClick={() => setShowDefaults(true)}
+                className="p-1.5 text-text-muted hover:text-text-primary rounded transition-colors"
+                title="Provider-level defaults"
+              >
+                <SettingsIcon className="w-4 h-4" />
+              </button>
+            </div>
             {Boolean(formAuthAdapter) && (
               <div className="rounded-lg border border-border bg-bg-primary p-4">
                 <div className="flex items-center justify-between gap-4">
@@ -1533,6 +1550,18 @@ export function ProviderModal({
                   thinking).
                 </p>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sendReasoningInMessages}
+                  onChange={(e) => setSendReasoningInMessages(e.target.checked)}
+                  className="rounded border-border bg-bg-primary text-accent-primary focus:ring-accent-primary"
+                />
+                <span className="text-sm text-text-secondary">Send reasoning in messages</span>
+                <span className="text-xs text-text-muted ml-auto">
+                  When disabled, strips reasoning/thinking content from assistant messages sent to this provider
+                </span>
+              </label>
             </div>
             <div className="flex justify-end px-6 py-4 border-t border-border">
               <button

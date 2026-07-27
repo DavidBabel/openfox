@@ -1979,6 +1979,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       model,
       isLocal,
       thinkingField,
+      sendReasoningInMessages,
       models: modelConfigs,
       authAdapter,
       transportAdapter,
@@ -1990,6 +1991,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       model?: string
       isLocal?: boolean
       thinkingField?: string
+      sendReasoningInMessages?: boolean
       models?: Record<string, unknown>[]
       authAdapter?: string
       transportAdapter?: string
@@ -2019,6 +2021,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         apiKey,
         ...(isLocal !== undefined ? { isLocal } : {}),
         ...(thinkingField ? { thinkingField } : {}),
+        ...(sendReasoningInMessages !== undefined ? { sendReasoningInMessages } : {}),
         ...(authAdapter ? { authAdapter } : {}),
         ...(transportAdapter ? { transportAdapter } : {}),
         models: providerModels,
@@ -2267,6 +2270,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       apiKey,
       isLocal,
       thinkingField,
+      sendReasoningInMessages,
       models: modelConfigs,
       authAdapter,
       transportAdapter,
@@ -2277,6 +2281,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       apiKey?: string | null
       isLocal?: boolean
       thinkingField?: string | null
+      sendReasoningInMessages?: boolean | null
       models?: Record<string, unknown>[]
       authAdapter?: string | null
       transportAdapter?: string | null
@@ -2295,6 +2300,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       if (apiKey !== undefined) updates['apiKey'] = apiKey || undefined
       if (isLocal !== undefined) updates['isLocal'] = isLocal
       if (thinkingField !== undefined) updates['thinkingField'] = thinkingField || undefined
+      if (sendReasoningInMessages !== undefined) updates['sendReasoningInMessages'] = sendReasoningInMessages
       if (authAdapter !== undefined) updates['authAdapter'] = authAdapter || undefined
       if (transportAdapter !== undefined) updates['transportAdapter'] = transportAdapter || undefined
       if (modelConfigs !== undefined) {

@@ -34,7 +34,7 @@ describe('llm client pure helpers', () => {
     ])
   })
 
-  it('passes reasoning through on assistant messages with thinkingContent', async () => {
+  it('passes reasoning through on assistant messages with thinkingContent when sendReasoningInMessages is true', async () => {
     const result = await convertMessages(
       [
         {
@@ -47,6 +47,8 @@ describe('llm client pure helpers', () => {
         { role: 'assistant', content: 'Here is the file.', thinkingContent: 'Summarizing the result' },
       ],
       false,
+      undefined,
+      true,
     )
 
     // First assistant message with tool calls includes reasoning
@@ -61,6 +63,37 @@ describe('llm client pure helpers', () => {
     expect(secondAssistant['role']).toBe('assistant')
     expect(secondAssistant['content']).toBe('Here is the file.')
     expect(secondAssistant['reasoning']).toBe('Summarizing the result')
+  })
+
+  it('strips reasoning from assistant messages when sendReasoningInMessages is false', async () => {
+    const result = await convertMessages(
+      [
+        {
+          role: 'assistant',
+          content: '',
+          thinkingContent: 'I need to read the file first',
+          toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'foo.ts' } }],
+        },
+        { role: 'tool', content: 'file contents', toolCallId: 'call-1' },
+        { role: 'assistant', content: 'Here is the file.', thinkingContent: 'Summarizing the result' },
+      ],
+      false,
+      undefined,
+      false,
+    )
+
+    // First assistant message — reasoning should be absent
+    const firstAssistant = result[0] as unknown as Record<string, unknown>
+    expect(firstAssistant['role']).toBe('assistant')
+    expect(firstAssistant['content']).toBe('')
+    expect(firstAssistant['reasoning']).toBeUndefined()
+    expect(firstAssistant['tool_calls']).toBeDefined()
+
+    // Second assistant message — reasoning should be absent
+    const secondAssistant = result[2] as unknown as Record<string, unknown>
+    expect(secondAssistant['role']).toBe('assistant')
+    expect(secondAssistant['content']).toBe('Here is the file.')
+    expect(secondAssistant['reasoning']).toBeUndefined()
   })
 
   it('converts tool definitions to openai function schema', () => {

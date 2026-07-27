@@ -579,6 +579,8 @@ export interface Provider {
   isLocal?: boolean | undefined // User-specified: true = local, false/undefined = API/cloud
   /** Response field name that contains thinking/reasoning content (e.g., "reasoning_content") */
   thinkingField?: string
+  /** When false, strips reasoning/thinking content from outgoing assistant messages */
+  sendReasoningInMessages?: boolean
 }
 
 export interface Config {
@@ -595,6 +597,8 @@ export interface Config {
     reasoningEffort?: string
     /** Response field name that contains thinking/reasoning content (e.g., "reasoning_content") */
     thinkingField?: string
+    /** When false, strips reasoning/thinking content from outgoing assistant messages */
+    sendReasoningInMessages?: boolean
     /** Vision model for image description fallback when primary model lacks vision support */
     visionModel?: string
   }

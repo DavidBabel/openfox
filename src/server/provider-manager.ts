@@ -389,6 +389,9 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
         backend: provider.backend as LlmBackend,
         ...(provider.apiKey && { apiKey: provider.apiKey }),
         ...(provider.thinkingField && { thinkingField: provider.thinkingField }),
+        ...(provider.sendReasoningInMessages !== undefined
+          ? { sendReasoningInMessages: provider.sendReasoningInMessages }
+          : {}),
         ...(modelThinking.reasoningEffort && { reasoningEffort: modelThinking.reasoningEffort }),
       },
     }

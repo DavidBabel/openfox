@@ -107,7 +107,11 @@ export function getThinking(
   return msg['reasoning'] ?? msg['reasoning_content'] ?? msg['thinking']
 }
 
-function buildAssistantMessage(msg: LLMMessage, thinkingField?: string): Record<string, unknown> {
+function buildAssistantMessage(
+  msg: LLMMessage,
+  thinkingField?: string,
+  sendReasoningInMessages?: boolean,
+): Record<string, unknown> {
   const result: Record<string, unknown> = {
     role: 'assistant',
     content: msg.toolCalls?.length ? msg.content || '' : msg.content || null,
@@ -115,7 +119,7 @@ function buildAssistantMessage(msg: LLMMessage, thinkingField?: string): Record<
   if (msg.toolCalls?.length) {
     result['tool_calls'] = convertToolCalls(msg.toolCalls)
   }
-  if (msg.thinkingContent) {
+  if (msg.thinkingContent && sendReasoningInMessages !== false) {
     result[thinkingField ?? 'reasoning'] = msg.thinkingContent
   }
   return result
@@ -156,6 +160,7 @@ export async function convertMessages(
   messages: LLMMessage[],
   modelSupportsVision: boolean,
   thinkingField?: string,
+  sendReasoningInMessages?: boolean,
 ): Promise<ChatCompletionMessageParam[]> {
   const filtered = messages.filter((msg) => {
     return !(msg.role === 'assistant' && !msg.content?.trim() && (!msg.toolCalls || msg.toolCalls.length === 0))
@@ -179,7 +184,9 @@ export async function convertMessages(
         })
       }
     } else if (msg.role === 'assistant') {
-      result.push(buildAssistantMessage(msg, thinkingField) as unknown as ChatCompletionMessageParam)
+      result.push(
+        buildAssistantMessage(msg, thinkingField, sendReasoningInMessages) as unknown as ChatCompletionMessageParam,
+      )
     } else if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
       const content = await buildAttachmentContent(msg.content, msg.attachments, modelSupportsVision)
       result.push({
@@ -215,13 +222,19 @@ async function buildChatCompletionCreateParams(
   reasoningEffort: ReasoningEffort | undefined,
   isStreaming: boolean,
   thinkingField?: string,
+  sendReasoningInMessages?: boolean,
 ): Promise<{
   params: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming
   modelParams: ModelParams
 }> {
   const userVisionOverride = request.modelSettings?.supportsVision
   const modelSupportsVision = userVisionOverride ?? profile.supportsVision ?? false
-  const convertedMessages = await convertMessages(request.messages, modelSupportsVision, thinkingField)
+  const convertedMessages = await convertMessages(
+    request.messages,
+    modelSupportsVision,
+    thinkingField,
+    sendReasoningInMessages,
+  )
 
   const temperature = request.modelSettings?.temperature ?? request.temperature ?? profile.temperature
   const maxTokens = request.modelSettings?.maxTokens ?? request.maxTokens ?? profile.defaultMaxTokens
@@ -291,10 +304,11 @@ async function buildCreateParamsFromInput<
     capabilities: MinimalCapabilities
     reasoningEffort?: ReasoningEffort
     thinkingField?: string
+    sendReasoningInMessages?: boolean
   },
   isStreaming: boolean,
 ): Promise<{ params: T; modelParams: ModelParams }> {
-  const { model, request, profile, capabilities, reasoningEffort, thinkingField } = input
+  const { model, request, profile, capabilities, reasoningEffort, thinkingField, sendReasoningInMessages } = input
   return buildChatCompletionCreateParams(
     model,
     request,
@@ -303,6 +317,7 @@ async function buildCreateParamsFromInput<
     reasoningEffort,
     isStreaming,
     thinkingField,
+    sendReasoningInMessages,
   ) as Promise<{ params: T; modelParams: ModelParams }>
 }
 

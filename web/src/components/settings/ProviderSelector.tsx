@@ -863,6 +863,7 @@ export function ProviderSelector() {
             apiKey: editingProvider?.apiKey,
             isLocal: editingProvider?.isLocal,
             thinkingField: editingProvider?.thinkingField,
+            sendReasoningInMessages: editingProvider?.sendReasoningInMessages,
             authAdapter: editingProvider?.authAdapter,
             transportAdapter: editingProvider?.transportAdapter,
             models: editingProvider?.models,

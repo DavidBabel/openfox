@@ -28,6 +28,7 @@ interface Provider {
   status?: ProviderStatus
   isLocal?: boolean
   thinkingField?: string
+  sendReasoningInMessages?: boolean
   authAdapter?: string
   transportAdapter?: string
   credentialRef?: string

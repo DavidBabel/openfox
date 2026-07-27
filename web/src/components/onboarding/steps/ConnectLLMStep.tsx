@@ -33,6 +33,7 @@ export function ConnectLLMStep({ onNext }: ConnectLLMStepProps) {
             apiKey?: string
             isLocal?: boolean
             thinkingField?: string
+            sendReasoningInMessages?: boolean
             models?: Array<{
               id: string
               contextWindow: number
@@ -52,6 +53,7 @@ export function ConnectLLMStep({ onNext }: ConnectLLMStepProps) {
           apiKey: p.apiKey,
           isLocal: p.isLocal,
           thinkingField: p.thinkingField,
+          sendReasoningInMessages: p.sendReasoningInMessages,
           models: p.models,
         }))
         setExistingProviders(mapped)

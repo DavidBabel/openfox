@@ -65,7 +65,16 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
   let capabilities = getBackendCapabilities(backend)
   const reasoningEffort = config.llm.reasoningEffort
   const thinkingField = config.llm.thinkingField
+  const sendReasoningInMessages = config.llm.sendReasoningInMessages
   const idleTimeout = config.llm.idleTimeout ?? 120_000
+
+  function buildExtraParams(resolvedEffort: ReasoningEffort | undefined) {
+    return {
+      ...(resolvedEffort ? { reasoningEffort: resolvedEffort } : {}),
+      ...(thinkingField ? { thinkingField } : {}),
+      ...(sendReasoningInMessages !== undefined ? { sendReasoningInMessages } : {}),
+    }
+  }
 
   return {
     getModel() {
@@ -116,8 +125,7 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
           request,
           profile,
           capabilities,
-          ...(resolvedEffort ? { reasoningEffort: resolvedEffort } : {}),
-          ...(thinkingField ? { thinkingField } : {}),
+          ...buildExtraParams(resolvedEffort),
         })
         const httpResponse = await httpClient.createChatCompletion(
           createParams,
@@ -199,8 +207,7 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
           request,
           profile,
           capabilities,
-          ...(resolvedEffort ? { reasoningEffort: resolvedEffort } : {}),
-          ...(thinkingField ? { thinkingField } : {}),
+          ...buildExtraParams(resolvedEffort),
         })
 
         const { params: streamingParams } = createParams

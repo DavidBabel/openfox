@@ -10,6 +10,7 @@ export interface ProviderInfo {
   apiKey?: string
   isLocal?: boolean
   thinkingField?: string
+  sendReasoningInMessages?: boolean
   models?: Array<{
     id: string
     contextWindow: number
