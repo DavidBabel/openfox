@@ -668,4 +668,115 @@ describe('llm client', () => {
     expect(events.find((e) => e['type'] === 'done')).toBeDefined()
     expect(events.find((e) => e['type'] === 'error')).toBeUndefined()
   })
+
+  it('handles structured content blocks (Mistral-style) in streaming — extracts thinking and text', async () => {
+    httpClientCreateStreamMock.mockReturnValueOnce(
+      (async function* () {
+        // Thinking block
+        yield createChunk({
+          choices: [
+            {
+              delta: { content: [{ type: 'thinking', thinking: [{ type: 'text', text: 'Let me ' }] }] },
+              finish_reason: null,
+            },
+          ],
+        })
+        yield createChunk({
+          choices: [
+            {
+              delta: { content: [{ type: 'thinking', thinking: [{ type: 'text', text: 'think...' }], closed: true }] },
+              finish_reason: null,
+            },
+          ],
+        })
+        // Text block
+        yield createChunk({
+          choices: [{ delta: { content: [{ type: 'text', text: 'Hello there!' }] }, finish_reason: null }],
+        })
+        yield createChunk({
+          choices: [{ delta: { content: [{ type: 'text', text: ' How are you?' }] }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 8, total_tokens: 18 },
+        })
+      })(),
+    )
+
+    const client = createLLMClient(createConfig(), 'vllm')
+    const events = [] as Array<Record<string, unknown>>
+
+    for await (const event of client.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
+      events.push(event as Record<string, unknown>)
+    }
+
+    expect(events).toEqual([
+      { type: 'thinking_delta', content: 'Let me ' },
+      { type: 'thinking_delta', content: 'think...' },
+      { type: 'text_delta', content: 'Hello there!' },
+      { type: 'text_delta', content: ' How are you?' },
+      {
+        type: 'done',
+        response: {
+          id: 'resp-1',
+          content: 'Hello there! How are you?',
+          thinkingContent: 'Let me think...',
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 8, totalTokens: 18 },
+        },
+      },
+    ])
+  })
+
+  it('handles structured content blocks (Mistral-style) in non-streaming', async () => {
+    httpClientCreateMock.mockResolvedValueOnce({
+      id: 'resp-1',
+      choices: [
+        {
+          finish_reason: 'stop',
+          message: {
+            content: [
+              { type: 'thinking', thinking: [{ type: 'text', text: 'Let me think step by step.' }] },
+              { type: 'text', text: 'The answer is 42.' },
+            ],
+          },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 8, total_tokens: 18 },
+    })
+
+    const client = createLLMClient(createConfig(), 'vllm')
+    const response = await client.complete({ messages: [{ role: 'user', content: 'hello' }] })
+
+    expect(response.content).toBe('The answer is 42.')
+    expect(response.thinkingContent).toBe('Let me think step by step.')
+  })
+
+  it('handles structured content blocks with only text (no thinking)', async () => {
+    httpClientCreateStreamMock.mockReturnValueOnce(
+      (async function* () {
+        yield createChunk({
+          choices: [{ delta: { content: [{ type: 'text', text: 'Just text' }] }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+        })
+      })(),
+    )
+
+    const client = createLLMClient(createConfig(), 'vllm')
+    const events = [] as Array<Record<string, unknown>>
+
+    for await (const event of client.stream({ messages: [{ role: 'user', content: 'hi' }] })) {
+      events.push(event as Record<string, unknown>)
+    }
+
+    expect(events).toEqual([
+      { type: 'text_delta', content: 'Just text' },
+      {
+        type: 'done',
+        response: {
+          id: 'resp-1',
+          content: 'Just text',
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 2, totalTokens: 7 },
+        },
+      },
+    ])
+  })
 })

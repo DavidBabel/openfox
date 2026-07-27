@@ -7,6 +7,7 @@ import type {
   ReasoningEffort,
 } from './types.js'
 import type { ToolCall } from '../../shared/types.js'
+import type { ContentBlock, ChatCompletionChunk } from './openai-types.js'
 import { logger } from '../utils/logger.js'
 import { LLMError } from '../utils/errors.js'
 import { getModelProfile, type ModelProfile } from './profiles.js'
@@ -20,6 +21,27 @@ import {
   parseToolArguments,
 } from './client-pure.js'
 import { OpenAIHttpClient } from './http-client.js'
+
+/**
+ * Extract text and thinking content from structured content blocks
+ * (used by Mistral and other APIs that return content as an array of blocks).
+ */
+function extractContentFromBlocks(blocks: ContentBlock[]): { text: string; thinking: string } {
+  let text = ''
+  let thinking = ''
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      text += block.text
+    } else if (block.type === 'thinking') {
+      for (const part of block.thinking) {
+        if (part.type === 'text') {
+          thinking += part.text
+        }
+      }
+    }
+  }
+  return { text, thinking }
+}
 
 export interface LLMClientWithModel extends LLMClient {
   getModel(): string
@@ -111,14 +133,23 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
         }
 
         const message = choice.message as {
-          content?: string | null
+          content?: string | ContentBlock[] | null
           reasoning_content?: string | null
           reasoning?: string | null
           tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>
         }
 
-        const content = message.content ?? ''
-        const thinkingContent = getThinking(message as Record<string, string | null>, thinkingField) ?? ''
+        let content: string
+        let thinkingContent: string
+
+        if (Array.isArray(message.content)) {
+          const extracted = extractContentFromBlocks(message.content)
+          content = extracted.text
+          thinkingContent = extracted.thinking
+        } else {
+          content = message.content ?? ''
+          thinkingContent = getThinking(message as Record<string, string | null>, thinkingField) ?? ''
+        }
 
         const toolCalls = message.tool_calls?.map((tc) => {
           const { arguments: args, parseError } = parseToolArguments(tc.function.arguments, {
@@ -242,28 +273,31 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
               finishReason = mapFinishReason(choice.finish_reason)
             }
 
-            const delta = choice.delta as Record<string, unknown> & {
-              content?: string | null
-              reasoning_content?: string | null
-              reasoning?: string | null
-              tool_calls?: Array<{
-                index: number
-                id?: string
-                function?: { name?: string; arguments?: string }
-              }>
-            }
+            const delta = choice.delta as ChatCompletionChunk['choices'][0]['delta']
 
-            // Handle reasoning/thinking delta
+            // Handle reasoning/thinking delta (plain string fields)
             const reasoning = getThinking(delta as Record<string, string | null | undefined>, thinkingField)
             if (reasoning) {
               fullThinking += reasoning
               yield { type: 'thinking_delta', content: reasoning }
             }
 
-            // Handle content delta
+            // Handle content delta — can be string or structured content blocks (Mistral-style)
             if (delta.content) {
-              fullContent += delta.content
-              yield { type: 'text_delta', content: delta.content }
+              if (Array.isArray(delta.content)) {
+                const extracted = extractContentFromBlocks(delta.content)
+                if (extracted.text) {
+                  fullContent += extracted.text
+                  yield { type: 'text_delta', content: extracted.text }
+                }
+                if (extracted.thinking) {
+                  fullThinking += extracted.thinking
+                  yield { type: 'thinking_delta', content: extracted.thinking }
+                }
+              } else {
+                fullContent += delta.content
+                yield { type: 'text_delta', content: delta.content }
+              }
             }
 
             // Handle tool call deltas

@@ -67,12 +67,20 @@ export interface ChatCompletionCreateParamsStreaming extends ChatCompletionCreat
   stream_options?: { include_usage?: boolean }
 }
 
+/**
+ * Structured content block used by some APIs (e.g. Mistral with reasoning_effort).
+ * Instead of returning content as a plain string, the API returns an array of content blocks.
+ */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: Array<{ type: 'text'; text: string }>; closed?: boolean }
+
 export interface ChatCompletionResponse {
   id: string
   choices: Array<{
     finish_reason: string | null
     message: {
-      content: string | null
+      content: string | ContentBlock[] | null
       reasoning_content?: string | null
       reasoning?: string | null
       tool_calls?: ChatCompletionMessageToolCall[]
@@ -89,7 +97,7 @@ export interface ChatCompletionChunk {
   id: string
   choices: Array<{
     delta: {
-      content?: string | null
+      content?: string | ContentBlock[] | null
       reasoning_content?: string | null
       reasoning?: string | null
       tool_calls?: Array<{
