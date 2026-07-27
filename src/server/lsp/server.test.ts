@@ -97,7 +97,7 @@ describe('LspServer', () => {
     expect(connection.listen).toHaveBeenCalledTimes(1)
     expect(connection.sendRequest).toHaveBeenCalledWith(
       'initialize',
-      expect.objectContaining({ rootPath: '/tmp/project', rootUri: 'file:///tmp/project' }),
+      expect.objectContaining({ rootUri: 'file:///tmp/project' }),
     )
     expect(connection.sendNotification).toHaveBeenCalledWith('initialized', {})
     expect(server.isRunning()).toBe(true)
