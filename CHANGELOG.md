@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.99 - 2026-07-27
+
+### Bug Fixes
+
+- **Workflow progress no longer shows another session's state** — execution events from background sessions no longer corrupt the active workflow display.
+
 ## 2.0.98 - 2026-07-27
 
 ### Enhancements
