@@ -20,6 +20,7 @@ const LSP = {
   didOpen: 'textDocument/didOpen',
   didChange: 'textDocument/didChange',
   didClose: 'textDocument/didClose',
+  didSave: 'textDocument/didSave',
   publishDiagnostics: 'textDocument/publishDiagnostics',
   definition: 'textDocument/definition',
   references: 'textDocument/references',
@@ -192,6 +193,13 @@ export class LspServer {
     }
   >()
 
+  // Debounce timers for diagnostic resolution.
+  // Servers may send multiple publishDiagnostics in quick succession
+  // (e.g., rust-analyzer sends an empty clear, then its own analysis,
+  // then rustc flycheck results). We wait for a quiet period before
+  // resolving the waiter so all waves are captured.
+  private pendingDiagnosticDebounce = new Map<string, NodeJS.Timeout>()
+
   private commandPath: string
 
   constructor(config: LanguageConfig, workdir: string, commandPath?: string) {
@@ -288,10 +296,9 @@ export class LspServer {
       this.connection.listen()
 
       // Send initialize request
-      const initParams = {
+      const initParams: Record<string, unknown> = {
         processId: process.pid,
         rootUri: `file://${this.workdir}`,
-        rootPath: this.workdir,
         capabilities: {
           textDocument: {
             publishDiagnostics: {
@@ -307,7 +314,6 @@ export class LspServer {
             workspaceFolders: true,
           },
         },
-        workspaceFolders: [{ uri: `file://${this.workdir}`, name: 'workspace' }],
         initializationOptions: this.config.initOptions,
       }
 
@@ -365,6 +371,12 @@ export class LspServer {
       this.process = null
     }
 
+    // Clear diagnostic debounce timers
+    for (const [, timer] of this.pendingDiagnosticDebounce) {
+      clearTimeout(timer)
+    }
+    this.pendingDiagnosticDebounce.clear()
+
     this.connection?.dispose()
     this.connection = null
     this.state = 'stopped'
@@ -386,6 +398,12 @@ export class LspServer {
       waiter.resolve([])
     }
     this.pendingDiagnostics.clear()
+
+    // Clear diagnostic debounce timers
+    for (const [, timer] of this.pendingDiagnosticDebounce) {
+      clearTimeout(timer)
+    }
+    this.pendingDiagnosticDebounce.clear()
   }
 
   // ============================================================================
@@ -408,6 +426,8 @@ export class LspServer {
     const languageId = this.getLanguageIdForFile(path)
 
     this.openDocuments.set(path, { version: 1, content })
+    // Clear cached diagnostics — the server will send fresh ones after didOpen
+    this.diagnostics.delete(path)
 
     await this.connection.sendNotification(LSP.didOpen, {
       textDocument: {
@@ -479,6 +499,22 @@ export class LspServer {
     })
   }
 
+  async didSave(path: string, content?: string): Promise<void> {
+    if (this.state !== 'running' || !this.connection) {
+      return
+    }
+
+    const uri = `file://${path}`
+    const params: Record<string, unknown> = {
+      textDocument: { uri },
+    }
+    if (content !== undefined) {
+      params['text'] = content
+    }
+
+    await this.connection.sendNotification(LSP.didSave, params)
+  }
+
   // ============================================================================
   // Diagnostics
   // ============================================================================
@@ -508,13 +544,26 @@ export class LspServer {
       callback(path, diagnostics)
     }
 
-    // Resolve any pending waiters for this path
+    // Cancel any pending debounce for this path
+    const existingDebounce = this.pendingDiagnosticDebounce.get(path)
+    if (existingDebounce) {
+      clearTimeout(existingDebounce)
+      this.pendingDiagnosticDebounce.delete(path)
+    }
+
     const waiter = this.pendingDiagnostics.get(path)
-    if (waiter) {
+    if (!waiter) return
+
+    // Debounce resolution: servers may send multiple publishDiagnostics
+    // in quick succession (empty clear → own analysis → rustc flycheck).
+    // Each batch resets the timer; we resolve once things settle.
+    const debounce = setTimeout(() => {
+      this.pendingDiagnosticDebounce.delete(path)
       clearTimeout(waiter.timeout)
       this.pendingDiagnostics.delete(path)
-      waiter.resolve(diagnostics)
-    }
+      waiter.resolve(this.diagnostics.get(path) ?? [])
+    }, 400)
+    this.pendingDiagnosticDebounce.set(path, debounce)
   }
 
   /**

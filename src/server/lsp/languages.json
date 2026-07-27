@@ -29,7 +29,8 @@
     "extensions": [".rs"],
     "serverCommand": "rust-analyzer",
     "serverArgs": [],
-    "rootPatterns": ["Cargo.toml"]
+    "rootPatterns": ["Cargo.toml"],
+    "installHint": "rustup component add rust-analyzer"
   },
   {
     "id": "go",
