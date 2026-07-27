@@ -1,8 +1,0 @@
-    Blocking waiting for file lock on build directory
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
-_fixtures__/rust) target="lsp-fixture-rust"}: cargo::core::compiler::fingerprint: fingerprint dirty for lsp-fixture-rust v0.1.0 (/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust)/Check { test: false }/TargetInner { name: "lsp-fixture-rust", doc: true, ..: with_path("/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust/src/main.rs", Edition2021) }
-   0.007024569s  INFO prepare_target{force=false package_id=lsp-fixture-rust v0.1.0 (/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust) target="lsp-fixture-rust"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(Stale)
-   0.007173786s  INFO prepare_target{force=false package_id=lsp-fixture-rust v0.1.0 (/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust) target="lsp-fixture-rust"}: cargo::core::compiler::fingerprint: fingerprint dirty for lsp-fixture-rust v0.1.0 (/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust)/Check { test: true }/TargetInner { name: "lsp-fixture-rust", doc: true, ..: with_path("/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust/src/main.rs", Edition2021) }
-   0.007180869s  INFO prepare_target{force=false package_id=lsp-fixture-rust v0.1.0 (/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust) target="lsp-fixture-rust"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(Stale)
-    Checking lsp-fixture-rust v0.1.0 (/home/conrad/dev/openfox/src/server/lsp/__fixtures__/rust)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
