@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.98 - 2026-07-27
+
+### Enhancements
+
+- **Per-provider toggle to strip reasoning from messages** — a new "Send reasoning in messages" checkbox in the provider defaults panel (gear icon on step 2) lets you disable sending reasoning/thinking content to providers like Mistral that reject the field.
+
 ## 2.0.97 - 2026-07-27
 
 ### Enhancements
