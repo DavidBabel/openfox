@@ -686,6 +686,10 @@ export function handleServerMessage(
     }
 
     case 'workflow.execution_changed': {
+      if (!isMessageForCurrentSession(message, get().currentSession?.id ?? null)) {
+        markBackgroundSessionUnread()
+        break
+      }
       const payload = message.payload as {
         executionId: string
         workflowId: string

@@ -166,3 +166,133 @@ describe('session.name_generated handler', () => {
     expect(state.sessions[0]?.updatedAt).toBe(originalUpdatedAt)
   })
 })
+
+describe('workflow.execution_changed handler', () => {
+  beforeEach(() => {
+    wsSendMock.mockClear()
+    wsSubscribeMock.mockClear()
+    wsConnectMock.mockClear()
+    wsDisconnectMock.mockClear()
+    wsStatusMock.mockClear()
+    fetchMock.mockClear()
+  })
+
+  const workflowEvent = (sessionId: string) => ({
+    type: 'workflow.execution_changed' as const,
+    sessionId,
+    payload: {
+      executionId: 'exec-1',
+      workflowId: 'default',
+      workflowName: 'Build & Verify',
+      workflowColor: '#3b82f6',
+      status: 'running' as const,
+      currentStepId: 'step-1',
+      currentStepName: 'Build',
+    },
+  })
+
+  it('should NOT touch activeWorkflowExecution when the event is for a different session', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-b', messages: [] } as any,
+      activeWorkflowExecution: null,
+      unreadSessionIds: [],
+    }))
+
+    useSessionStore.getState().handleServerMessage(workflowEvent('session-a'))
+
+    expect(useSessionStore.getState().activeWorkflowExecution).toBeNull()
+    expect(useSessionStore.getState().unreadSessionIds).toContain('session-a')
+  })
+
+  it('should update activeWorkflowExecution when the event is for the current session', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-a', messages: [] } as any,
+      activeWorkflowExecution: null,
+      unreadSessionIds: ['session-a'],
+    }))
+
+    useSessionStore.getState().handleServerMessage(workflowEvent('session-a'))
+
+    const exec = useSessionStore.getState().activeWorkflowExecution
+    expect(exec?.id).toBe('exec-1')
+    expect(exec?.workflowName).toBe('Build & Verify')
+    expect(exec?.status).toBe('running')
+    expect(exec?.currentStepName).toBe('Build')
+    expect(useSessionStore.getState().unreadSessionIds).toContain('session-a')
+  })
+
+  it('should update an existing execution for the current session', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    const existing = {
+      id: 'exec-1',
+      sessionId: 'session-a',
+      workflowId: 'default',
+      workflowName: 'Build & Verify',
+      workflowColor: '#3b82f6',
+      status: 'running' as const,
+      stepOutput: {},
+      params: {},
+      createdAt: 1000,
+      updatedAt: 1000,
+    }
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-a', messages: [] } as any,
+      activeWorkflowExecution: existing,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'workflow.execution_changed',
+      sessionId: 'session-a',
+      payload: {
+        executionId: 'exec-1',
+        workflowId: 'default',
+        workflowName: 'Build & Verify',
+        status: 'waiting' as const,
+        currentStepId: 'step-2',
+        currentStepName: 'Review',
+      },
+    })
+
+    const exec = useSessionStore.getState().activeWorkflowExecution
+    expect(exec?.status).toBe('waiting')
+    expect(exec?.currentStepId).toBe('step-2')
+    expect(exec?.currentStepName).toBe('Review')
+    expect(exec?.createdAt).toBe(1000)
+  })
+
+  it('should leave the current session execution untouched when a background event arrives', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    const existing = {
+      id: 'exec-1',
+      sessionId: 'session-a',
+      workflowId: 'default',
+      workflowName: 'Build & Verify',
+      workflowColor: '#3b82f6',
+      status: 'running' as const,
+      stepOutput: {},
+      params: {},
+      createdAt: 1000,
+      updatedAt: 1000,
+    }
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-a', messages: [] } as any,
+      activeWorkflowExecution: existing,
+    }))
+
+    useSessionStore.getState().handleServerMessage(workflowEvent('session-b'))
+
+    expect(useSessionStore.getState().activeWorkflowExecution).toBe(existing)
+  })
+})
