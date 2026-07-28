@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.100 - 2026-07-28
+
+### Features
+
+- **LSP servers notified on file save** — OpenFox now sends `textDocument/didSave` to language servers after write operations, enabling save-triggered linting and compilation.
+
+### Enhancements
+
+- **Rust users see setup hint for rust-analyzer** — if `rust-analyzer` is not installed, OpenFox now suggests `rustup component add rust-analyzer`.
+
+### Bug Fixes
+
+- **LSP diagnostics no longer miss late-arriving waves** — rust-analyzer sends clear → own analysis → rustc flycheck in rapid succession. A 400ms debounce now captures all waves instead of only the first.
+- **Pyright LSP diagnostics work correctly** — removed `rootPath` and `workspaceFolders` from initialization parameters, which caused pyright to refuse diagnostics or switch to pull mode.
+- **Stale LSP diagnostics cleared on file reopen** — reopening a file now fetches fresh diagnostics instead of returning cached stale ones.
+
 ## 2.0.99 - 2026-07-27
 
 ### Bug Fixes
