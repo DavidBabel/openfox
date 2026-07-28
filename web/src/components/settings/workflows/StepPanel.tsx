@@ -83,6 +83,16 @@ export function StepPanel({
       </div>
 
       <div>
+        <label className={labelClass}>Name</label>
+        <input
+          value={step.name}
+          onChange={(e) => onUpdate({ ...step, name: e.target.value })}
+          placeholder="Step name"
+          className={inputClass}
+        />
+      </div>
+
+      <div>
         <label className={labelClass}>Type</label>
         <select
           value={step.type}

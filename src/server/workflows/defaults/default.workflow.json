@@ -13,7 +13,7 @@
   "steps": [
     {
       "id": "build",
-      "name": "Builder",
+      "name": "Implement",
       "type": "agent",
       "phase": "build",
       "agentId": "builder",

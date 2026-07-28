@@ -30,7 +30,6 @@ export const MessageList = memo(function MessageList({
 }: MessageListProps) {
   const criteria = useSessionStore((state) => state.currentSession?.metadataEntries?.['criteria'] ?? EMPTY_CRITERIA)
   const sessionId = useSessionStore((state) => state.currentSession?.id)
-  const sessionMode = useSessionStore((state) => state.currentSession?.mode)
   const sessionPhase = useSessionStore((state) => state.currentSession?.phase)
   const error = useSessionStore((state) => state.error)
   const clearError = useSessionStore((state) => state.clearError)
@@ -44,11 +43,10 @@ export const MessageList = memo(function MessageList({
   const workflowUserItems = useWorkflowsStore((state) => state.userItems)
   const workflows = [...workflowDefaults, ...workflowUserItems]
 
-  const isPlanning = sessionMode === 'planner'
-  const hasCriteria = criteria.length > 0
+  const hasNewCriteria = criteria.some((c) => c.status === 'pending')
   const isDone = sessionPhase === 'done'
   const hasAssistantResponse = displayItems.some((item) => item.type === 'message' && item.message.role === 'assistant')
-  const showStartBuilding = isPlanning && hasCriteria && !isRunning && hasAssistantResponse && !isDone
+  const showStartBuilding = hasNewCriteria && !isRunning && hasAssistantResponse && !isDone
   const showContinueWorkflow = activeWorkflowExecution?.status === 'waiting' && !isRunning
 
   const projectId = useSessionStore((state) => state.currentSession?.projectId)
