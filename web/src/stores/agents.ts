@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { authFetch } from '../lib/api'
 import { saveEntity, duplicateEntity } from './utils'
-import { fetchItems } from './fetch-items'
 
 export interface AgentInfo {
   id: string
@@ -36,6 +35,7 @@ interface AgentsState {
   defaults: AgentInfo[]
   userItems: AgentInfo[]
   projectItems: AgentInfo[]
+  modelOverrides: Record<string, string>
   loading: boolean
   fetchAgents: () => Promise<void>
   fetchAgent: (agentId: string) => Promise<AgentFull | null>
@@ -48,13 +48,27 @@ interface AgentsState {
 
 export const useAgentsStore = create<AgentsState>((set) => {
   const fetchAgents = async () => {
-    await fetchItems('/api/agents', set as Parameters<typeof fetchItems>[1], true)
+    set({ loading: true } as Record<string, unknown>)
+    try {
+      const res = await authFetch('/api/agents')
+      const data = await res.json()
+      set({
+        defaults: data.defaults ?? [],
+        userItems: data.userItems ?? [],
+        projectItems: data.projectItems ?? [],
+        modelOverrides: data.modelOverrides ?? {},
+        loading: false,
+      } as Record<string, unknown>)
+    } catch {
+      set({ loading: false } as Record<string, unknown>)
+    }
   }
 
   return {
     defaults: [],
     userItems: [],
     projectItems: [],
+    modelOverrides: {},
     loading: false,
 
     fetchAgents,

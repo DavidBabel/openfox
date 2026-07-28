@@ -255,6 +255,20 @@ function createSessionManager(state: Record<string, any>) {
       state['current'].executionState = { ...(state['current'].executionState ?? {}), ...updates }
     }),
     getModelCompactionThreshold: vi.fn(() => undefined),
+    getProviderManager: vi.fn(() => ({
+      getLLMClient: () => ({ getModel: () => 'test-model' }),
+      createClient: vi.fn(),
+      getProviders: vi.fn(() => []),
+    })),
+    createClientForAgent: vi.fn((_agentId: string) => ({
+      getModel: () => 'test-model',
+      setModel: vi.fn(),
+      getProfile: vi.fn(),
+      getBackend: () => 'unknown',
+      setBackend: vi.fn(),
+      complete: vi.fn(),
+      stream: vi.fn(),
+    })),
   }
 }
 

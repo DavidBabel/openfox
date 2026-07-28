@@ -1,51 +1,40 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'wouter'
 import { useConfigStore, getBackendDisplayName, type Provider } from '../../stores/config'
 import { useSessionStore } from '../../stores/session'
+import { useAgentsStore, getAgentColor } from '../../stores/agents'
 import { ProviderModal, providerFormPayload, type ProviderFormData } from '../shared/ProviderModal'
 import { authFetch } from '../../lib/api'
-import {
-  ChevronDownIcon,
-  ReloadIcon,
-  CheckIcon,
-  EditSmallIcon,
-  StarIcon,
-  StarFilledIcon,
-  SearchIcon,
-} from '../shared/icons'
+import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon } from '../shared/icons'
 import { useKeybindings, useBinding } from '../../hooks/useKeybindings'
 import { focusChatTextarea } from '../../lib/focusChatTextarea'
-
-function formatContextWindow(context: number): string {
-  if (context >= 1000000) return `${(context / 1000000).toFixed(1)}M`
-  if (context >= 1000) return `${(context / 1000).toFixed(0)}K`
-  return `${context}`
-}
-
-interface ModelWithConfig {
-  id: string
-  name?: string
-  contextWindow: number
-  source: 'backend' | 'user' | 'default'
-}
-
-function modelMatchesQuery(model: { name?: string; id: string }, query: string): boolean {
-  const q = query.toLowerCase()
-  const name = (model.name ?? '').toLowerCase()
-  const id = model.id.toLowerCase()
-  const idDisplay = id.replace(/-/g, ' ')
-  return name.includes(q) || id.includes(q) || idDisplay.includes(q)
-}
+import { useModelSearch, ModelEntryRow, type ModelWithConfig } from './model-list'
 
 type ProviderLabelProps = {
   activeProvider: { name: string; isLocal?: boolean } | undefined
   shortModelName: string
+  agentOverrideActive?: boolean
+  agentColor?: string
+  agentName?: string
 }
 
-function ProviderLabel({ activeProvider, shortModelName }: ProviderLabelProps) {
+function ProviderLabel({
+  activeProvider,
+  shortModelName,
+  agentOverrideActive,
+  agentColor,
+  agentName,
+}: ProviderLabelProps) {
   return (
     <>
-      <span className="text-sm text-accent-primary">
+      <span className="text-sm text-accent-primary flex items-center gap-1">
+        {agentOverrideActive && (
+          <span
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-border"
+            style={{ backgroundColor: agentColor ?? '#6b7280' }}
+            title={`Model set by agent "${agentName ?? 'unknown'}". Change it in Settings > Agents.`}
+          />
+        )}
         {activeProvider ? (
           <>
             <span className="hidden sm:inline">{activeProvider.name} • </span>
@@ -65,85 +54,6 @@ function ProviderLabel({ activeProvider, shortModelName }: ProviderLabelProps) {
         {activeProvider?.isLocal ? 'local' : 'api'}
       </span>
     </>
-  )
-}
-
-type ModelEntryProps = {
-  providerId: string
-  modelConfig: ModelWithConfig
-  isActive: boolean
-  isDefault: boolean
-  disabled: boolean
-  hasSession: boolean
-  settingDefault: boolean
-  highlighted: boolean
-  onModelClick: (providerId: string, modelId: string) => void
-  onSetDefault: (e: React.MouseEvent, providerId: string, modelId: string) => void
-  onEditModel: (providerId: string, model: ModelWithConfig) => void
-}
-
-function ModelEntry({
-  providerId,
-  modelConfig,
-  isActive,
-  isDefault: isDef,
-  disabled,
-  hasSession,
-  settingDefault,
-  highlighted,
-  onModelClick,
-  onSetDefault,
-  onEditModel,
-}: ModelEntryProps) {
-  return (
-    <div
-      className={`flex items-center px-4 py-1.5 text-sm transition-colors group ${
-        highlighted ? 'bg-bg-tertiary' : 'hover:bg-bg-tertiary'
-      } ${disabled ? 'opacity-50 cursor-wait' : ''} ${isActive ? 'text-accent-primary' : 'text-text-secondary'}`}
-    >
-      <button
-        type="button"
-        onClick={() => onModelClick(providerId, modelConfig.id)}
-        disabled={disabled}
-        className="flex-1 truncate text-left"
-      >
-        {modelConfig.name ?? modelConfig.id.split('/').pop()?.replace(/-/g, ' ') ?? modelConfig.id}
-      </button>
-      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-        <span className="text-xs text-text-muted">{formatContextWindow(modelConfig.contextWindow)}</span>
-        {hasSession && (
-          <button
-            type="button"
-            onClick={(e) => onSetDefault(e, providerId, modelConfig.id)}
-            disabled={settingDefault}
-            className="p-0.5 hover:bg-bg-tertiary rounded transition-colors disabled:opacity-40"
-            title={isDef ? 'Default model' : 'Set as default model'}
-          >
-            {isDef ? (
-              <StarFilledIcon className="w-3.5 h-3.5 text-accent-warning" />
-            ) : (
-              <StarIcon className="w-3.5 h-3.5 text-text-muted hover:text-accent-warning" />
-            )}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onEditModel(providerId, modelConfig)
-          }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-bg-tertiary rounded transition-opacity"
-          title="Edit model context"
-        >
-          <EditSmallIcon className="w-3 h-3 text-text-muted" />
-        </button>
-        {isActive && (
-          <span className="text-accent-success flex-shrink-0" title="Session model">
-            <CheckIcon className="w-3.5 h-3.5" />
-          </span>
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -173,9 +83,6 @@ export function ProviderSelector() {
   const codeCopiedTimerRef = useRef<number | null>(null)
   const [devicePageOpened, setDevicePageOpened] = useState(false)
   const loadedProvidersRef = useRef<Set<string>>(new Set())
-  const [highlightedIndex, setHighlightedIndex] = useState(-1)
-  const highlightedRef = useRef<HTMLDivElement | null>(null)
-
   const providers = useConfigStore((state) => state.providers)
   const activeProviderId = useConfigStore((state) => state.activeProviderId)
   const defaultModelSelection = useConfigStore((state) => state.defaultModelSelection)
@@ -201,9 +108,41 @@ export function ProviderSelector() {
     ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
     : 'No model'
 
+  // Agent model override indicator
+  const agentDefaults = useAgentsStore((state) => state.defaults)
+  const agentUserItems = useAgentsStore((state) => state.userItems)
+  const currentAgentId = currentSession?.mode
+  const currentAgent = currentAgentId
+    ? (agentDefaults.find((a) => a.id === currentAgentId) ?? agentUserItems.find((a) => a.id === currentAgentId))
+    : undefined
+  const [agentOverride, setAgentOverride] = useState<string | undefined>(undefined)
+  const agentColor = currentAgentId ? getAgentColor([...agentDefaults, ...agentUserItems], currentAgentId) : undefined
+
+  // Fetch the agent's model override when the session mode changes
+  useEffect(() => {
+    if (!currentAgentId) {
+      setAgentOverride(undefined)
+      return
+    }
+    authFetch(`/api/agents/${currentAgentId}/model`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.providerId && data.model) {
+          setAgentOverride(`${data.providerId}/${data.model}`)
+        } else {
+          setAgentOverride(undefined)
+        }
+      })
+      .catch(() => setAgentOverride(undefined))
+  }, [currentAgentId])
+
+  const isAgentOverrideActive = !!(
+    agentOverride &&
+    sessionModel &&
+    agentOverride === `${sessionProviderId}/${sessionModel}`
+  )
+
   const [settingDefault, setSettingDefault] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -239,13 +178,6 @@ export function ProviderSelector() {
       inputRef.current?.focus()
     }
   }, [isOpen])
-
-  // Scroll highlighted item into view
-  useEffect(() => {
-    if (highlightedIndex >= 0 && highlightedRef.current) {
-      highlightedRef.current.scrollIntoView({ block: 'nearest' })
-    }
-  }, [highlightedIndex])
 
   // Auto-expand all providers when menu opens and load their models (once per session)
   useEffect(() => {
@@ -481,85 +413,33 @@ export function ProviderSelector() {
     }
   }
 
-  function getVisibleModels(provider: Provider) {
-    const hasSelected = provider.models.some((m) => m.selected)
-    return hasSelected ? provider.models.filter((m) => m.selected) : provider.models
-  }
+  const {
+    searchQuery,
+    setSearchQuery,
+    highlightedIndex,
+    setHighlightedIndex,
+    visibleGroups,
+    flatItems,
+    handleSearchKeyDown,
+    highlightedRef,
+    inputRef,
+  } = useModelSearch({
+    providers,
+    onSelect: handleModelClick,
+    onEscape: () => setIsOpen(false),
+    extraItemCount: 1,
+  })
 
-  // Compute visible providers and their models, filtered by search query
-  const visibleGroups = useMemo(() => {
-    if (searchQuery.trim()) {
-      return providers
-        .map((p) => ({
-          provider: p,
-          models: getVisibleModels(p).filter((m) => modelMatchesQuery(m, searchQuery)),
-        }))
-        .filter((g) => g.models.length > 0)
-    }
-    return providers.map((p) => ({
-      provider: p,
-      models: getVisibleModels(p),
-    }))
-  }, [providers, searchQuery])
-
-  // Flat list of all visible model items for keyboard navigation
-  const flatItems = useMemo(
-    () => visibleGroups.flatMap((g) => g.models.map((m) => ({ providerId: g.provider.id, modelConfig: m }))),
-    [visibleGroups],
-  )
-
-  const totalNavItems = flatItems.length + 1 // +1 for "Manage providers"
   const isManageHighlighted = highlightedIndex === flatItems.length
 
-  // Auto-highlight first item when filtered results change, clamp otherwise
-  useEffect(() => {
-    if (totalNavItems === 1) {
-      setHighlightedIndex(-1)
-    } else if (highlightedIndex >= totalNavItems) {
-      setHighlightedIndex(totalNavItems - 1)
-    } else if (highlightedIndex < 0 && searchQuery.trim()) {
-      setHighlightedIndex(0)
+  const handleProviderSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && highlightedIndex === flatItems.length) {
+      e.preventDefault()
+      navigate('/onboarding')
+      setIsOpen(false)
+      return
     }
-  }, [totalNavItems, highlightedIndex, searchQuery])
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    switch (e.key) {
-      case 'Escape':
-        setIsOpen(false)
-        break
-      case 'ArrowDown':
-        e.preventDefault()
-        if (totalNavItems > 0) {
-          setHighlightedIndex((prev) => (prev < totalNavItems - 1 ? prev + 1 : 0))
-        }
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        if (totalNavItems > 0) {
-          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : totalNavItems - 1))
-        }
-        break
-      case 'Home':
-        e.preventDefault()
-        setHighlightedIndex(0)
-        break
-      case 'End':
-        e.preventDefault()
-        setHighlightedIndex(totalNavItems - 1)
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (highlightedIndex === flatItems.length) {
-          navigate('/onboarding')
-          setIsOpen(false)
-        } else if (highlightedIndex >= 0 && highlightedIndex < flatItems.length) {
-          const item = flatItems[highlightedIndex]
-          if (item) {
-            handleModelClick(item.providerId, item.modelConfig.id)
-          }
-        }
-        break
-    }
+    handleSearchKeyDown(e)
   }
 
   if (providers.length === 0) {
@@ -573,7 +453,13 @@ export function ProviderSelector() {
         {isLlmOffline ? (
           <span className="text-sm text-accent-error animate-pulse">LLM offline</span>
         ) : (
-          <ProviderLabel activeProvider={activeProvider} shortModelName={shortModelName} />
+          <ProviderLabel
+            activeProvider={activeProvider}
+            shortModelName={shortModelName}
+            agentOverrideActive={isAgentOverrideActive}
+            agentColor={agentColor}
+            agentName={currentAgent?.name}
+          />
         )}
         <span className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">↻</span>
       </button>
@@ -591,7 +477,13 @@ export function ProviderSelector() {
         {isLlmOffline ? (
           <span className="text-sm text-accent-error animate-pulse">offline</span>
         ) : (
-          <ProviderLabel activeProvider={activeProvider} shortModelName={shortModelName} />
+          <ProviderLabel
+            activeProvider={activeProvider}
+            shortModelName={shortModelName}
+            agentOverrideActive={isAgentOverrideActive}
+            agentColor={agentColor}
+            agentName={currentAgent?.name}
+          />
         )}
         <ChevronDownIcon className={`w-3 h-3 text-text-muted transition-transform`} rotate={isOpen ? 180 : 0} />
       </button>
@@ -608,7 +500,7 @@ export function ProviderSelector() {
                 setSearchQuery(e.currentTarget.value)
                 setHighlightedIndex(-1)
               }}
-              onKeyDown={handleSearchKeyDown}
+              onKeyDown={handleProviderSearchKeyDown}
               placeholder="Search models..."
               className="bg-transparent border-none outline-none text-sm text-text-primary w-full placeholder:text-text-muted"
             />
@@ -722,7 +614,7 @@ export function ProviderSelector() {
                                 key={`${group.provider.id}/${modelConfig.id}`}
                                 ref={isHighlighted ? highlightedRef : undefined}
                               >
-                                <ModelEntry
+                                <ModelEntryRow
                                   providerId={group.provider.id}
                                   modelConfig={modelConfig}
                                   isActive={isSessionActive(group.provider.id, modelConfig.id)}

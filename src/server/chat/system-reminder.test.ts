@@ -58,6 +58,13 @@ function createSessionManager(state: any) {
     updateMessage: vi.fn(),
     updateMessageStats: vi.fn(),
     drainAsapMessages: vi.fn(() => []),
+    createClientForAgent: vi.fn((_agentId: string) => state['llmClient']),
+    getProviderManager: vi.fn(() => ({
+      getLLMClient: () => state['llmClient'],
+      getCurrentModel: () => 'test-model',
+      getActiveProviderId: () => 'test-provider',
+      getModelSettings: () => undefined,
+    })),
   }
 }
 
@@ -91,7 +98,9 @@ describe('System Reminder Injection', () => {
     vi.mocked(getEventStore).mockReturnValue(eventStore as any)
     vi.mocked(loadAllAgentsDefault).mockResolvedValue([])
 
+    const llmClient = { getModel: () => 'qwen3-32b' } as any
     const state: any = {
+      llmClient,
       current: {
         id: 'session-1',
         projectId: 'project-1',
@@ -109,7 +118,7 @@ describe('System Reminder Injection', () => {
     await runChatTurn({
       sessionManager: sessionManager as any,
       sessionId: 'session-1',
-      llmClient: { getModel: () => 'qwen3-32b' } as any,
+      llmClient,
     })
 
     const fullDefs = findFullDefinitionCalls(eventStore, 'Plan Mode')
@@ -141,7 +150,9 @@ describe('System Reminder Injection', () => {
     vi.mocked(getEventStore).mockReturnValue(eventStore as any)
     vi.mocked(loadAllAgentsDefault).mockResolvedValue([])
 
+    const llmClient = { getModel: () => 'qwen3-32b' } as any
     const state: any = {
+      llmClient,
       current: {
         id: 'session-1',
         projectId: 'project-1',
@@ -159,7 +170,7 @@ describe('System Reminder Injection', () => {
     await runChatTurn({
       sessionManager: sessionManager as any,
       sessionId: 'session-1',
-      llmClient: { getModel: () => 'qwen3-32b' } as any,
+      llmClient,
     })
 
     const smallReminders = findSmallReminderCalls(eventStore)
@@ -190,7 +201,9 @@ describe('System Reminder Injection', () => {
     vi.mocked(getEventStore).mockReturnValue(eventStore as any)
     vi.mocked(loadAllAgentsDefault).mockResolvedValue([])
 
+    const llmClient = { getModel: () => 'qwen3-32b' } as any
     const state: any = {
+      llmClient,
       current: {
         id: 'session-1',
         projectId: 'project-1',
@@ -208,7 +221,7 @@ describe('System Reminder Injection', () => {
     await runChatTurn({
       sessionManager: sessionManager as any,
       sessionId: 'session-1',
-      llmClient: { getModel: () => 'qwen3-32b' } as any,
+      llmClient,
     })
 
     const fullDefs = findFullDefinitionCalls(eventStore, 'Build Mode')
@@ -261,7 +274,9 @@ describe('System Reminder Injection', () => {
     vi.mocked(getEventStore).mockReturnValue(eventStore as any)
     vi.mocked(loadAllAgentsDefault).mockResolvedValue([])
 
+    const llmClient = { getModel: () => 'qwen3-32b' } as any
     const state: any = {
+      llmClient,
       current: {
         id: 'session-1',
         projectId: 'project-1',
@@ -279,7 +294,7 @@ describe('System Reminder Injection', () => {
     await runChatTurn({
       sessionManager: sessionManager as any,
       sessionId: 'session-1',
-      llmClient: { getModel: () => 'qwen3-32b' } as any,
+      llmClient,
     })
 
     const fullDefs = findFullDefinitionCalls(eventStore, 'Plan Mode')
@@ -295,7 +310,9 @@ describe('System Reminder Injection', () => {
     vi.mocked(getEventStore).mockReturnValue(eventStore as any)
     vi.mocked(loadAllAgentsDefault).mockResolvedValue([])
 
+    const llmClient = { getModel: () => 'qwen3-32b' } as any
     const state: any = {
+      llmClient,
       current: {
         id: 'session-1',
         projectId: 'project-1',
@@ -314,7 +331,7 @@ describe('System Reminder Injection', () => {
       await runChatTurn({
         sessionManager: sessionManager as any,
         sessionId: 'session-1',
-        llmClient: { getModel: () => 'qwen3-32b' } as any,
+        llmClient,
       })
     }
 

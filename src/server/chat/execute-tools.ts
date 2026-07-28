@@ -6,6 +6,7 @@ import type { TurnEvent } from '../events/types.js'
 import type { RequestContextMessage } from './request-context.js'
 import type { LLMClientWithModel } from '../llm/client.js'
 import type { StatsIdentity } from '../../shared/types.js'
+import type { ProviderManager } from '../provider-manager.js'
 import type { ServerMessage } from '../../shared/protocol.js'
 import type { DangerLevel } from '../../shared/types.js'
 import { createToolProgressHandler } from './tool-streaming.js'
@@ -26,6 +27,7 @@ export interface ToolBatchContext {
   onMessage?: ((msg: ServerMessage) => void) | undefined
   llmClient?: LLMClientWithModel | undefined
   statsIdentity?: StatsIdentity | undefined
+  providerManager?: ProviderManager | undefined
   onToolExecuted?: ((toolCall: ToolCall, result: ToolResult) => void) | undefined
   agentTimeout?: number
 }
@@ -204,6 +206,9 @@ export async function executeTools(
     }
     if (ctx.isSubAgent) {
       toolContext.isSubAgent = true
+    }
+    if (ctx.providerManager) {
+      toolContext.providerManager = ctx.providerManager
     }
 
     const startTime = Date.now()

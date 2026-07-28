@@ -58,6 +58,7 @@ import { logger } from '../utils/logger.js'
 import { EventEmitter, type Unsubscribe } from '../utils/async.js'
 import { getLspManager as getOrCreateLspManager, shutdownLspManager, type LspManager } from '../lsp/index.js'
 import { devServerManager } from '../dev-server/manager.js'
+import { resolveLLMClientForAgent } from '../agents/model-overrides.js'
 import { getEventStore } from '../events/store.js'
 import {
   getSessionState,
@@ -123,6 +124,36 @@ export class SessionManager {
 
   constructor(providerManager: import('../provider-manager.js').ProviderManager) {
     this.providerManager = providerManager
+  }
+
+  getProviderManager(): import('../provider-manager.js').ProviderManager {
+    return this.providerManager
+  }
+
+  /**
+   * Create an LLM client for a specific agent, respecting its model override.
+   *
+   * If the agent has a model override stored in settings, creates a dedicated
+   * client for that provider+model. Falls back to the global client if no
+   * override is set or the provider no longer exists.
+   *
+   * @param preferredFallback - When provided, used as fallback instead of
+   *   providerManager.getLLMClient(). This is important in mock/test mode
+   *   where the caller already has a mock client that should be preserved.
+   */
+  createClientForAgent(
+    agentId: string,
+    preferredFallback?: import('../llm/client.js').LLMClientWithModel,
+  ): import('../llm/client.js').LLMClientWithModel {
+    const fallback = preferredFallback ?? this.providerManager.getLLMClient()
+    const resolved = resolveLLMClientForAgent(agentId, fallback, this.providerManager)
+    if (resolved.warning) {
+      logger.warn('Agent model override unavailable, falling back', {
+        agentId,
+        warning: resolved.warning,
+      })
+    }
+    return resolved.client
   }
 
   getCurrentModelSettings(

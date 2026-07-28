@@ -1,6 +1,8 @@
 import { FormField, ModalActions, ErrorBanner } from '../CRUDModal'
 import { DropdownMenu } from '../../shared/DropdownMenu'
+import { ModelPicker } from '../../shared/ModelPicker'
 import { parseAllowedTools, serializeTools } from './tools'
+import type { Provider } from '../../../stores/config'
 
 interface AgentFormProps {
   formName: string
@@ -9,17 +11,21 @@ interface AgentFormProps {
   formSubagent: boolean
   formTools: string[]
   formColor: string
+  formModel: string | undefined
   formPrompt: string
   formError: string
   saving: boolean
+  loadingModel?: boolean
   isReadOnly: boolean
   availableTools: { name: string; actions: string[]; topLevelOnly?: boolean }[]
+  providers: Provider[]
   onNameChange: (name: string) => void
   onIdChange: (id: string) => void
   onDescriptionChange: (desc: string) => void
   onSubagentChange: (subagent: boolean) => void
   onToolsChange: (tools: string[]) => void
   onColorChange: (color: string) => void
+  onModelChange: (model: string | undefined) => void
   onPromptChange: (prompt: string) => void
   onSave: () => void
   onCancel: () => void
@@ -33,17 +39,21 @@ export function AgentForm({
   formSubagent,
   formTools,
   formColor,
+  formModel,
   formPrompt,
   formError,
   saving,
+  loadingModel,
   isReadOnly,
   availableTools,
+  providers,
   onNameChange,
   onIdChange,
   onDescriptionChange,
   onSubagentChange,
   onToolsChange,
   onColorChange,
+  onModelChange,
   onPromptChange,
   onSave,
   onCancel,
@@ -147,6 +157,21 @@ export function AgentForm({
             </div>
           </div>
         </div>
+
+        {!isReadOnly && (
+          <div>
+            <label className="block text-xs text-text-secondary mb-1">Model override</label>
+            <ModelPicker
+              providers={providers}
+              value={formModel}
+              onChange={onModelChange}
+              defaultLabel="Default (global model)"
+            />
+            <p className="text-[10px] text-text-muted mt-0.5">
+              When set, this model will be used when this agent is active (overrides the session model).
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs text-text-secondary mb-1">Tools</label>
@@ -257,7 +282,7 @@ export function AgentForm({
         onCancel={onCancel}
         onSave={onSave}
         saving={saving}
-        saveDisabled={!formName || !formPrompt || isReadOnly}
+        saveDisabled={!formName || !formPrompt || isReadOnly || loadingModel}
       />
       {isReadOnly && (
         <div className="flex justify-end mt-2">

@@ -72,7 +72,12 @@ vi.mock('../../stores/config', () => ({
 }))
 
 vi.mock('../../lib/api', () => ({
-  authFetch: vi.fn(),
+  authFetch: vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ providerId: null, model: null }),
+    }),
+  ),
 }))
 
 vi.mock('../shared/icons', () => ({
@@ -88,6 +93,20 @@ vi.mock('../shared/icons', () => ({
 vi.mock('../shared/ProviderModal', () => ({
   ProviderModal: () => '<div>ProviderModal</div>',
   providerFormPayload: (data: any) => data,
+}))
+
+vi.mock('../../stores/agents', () => ({
+  useAgentsStore: (selector: any) => {
+    const state = {
+      defaults: [
+        { id: 'planner', name: 'Planner', color: '#a855f7', subagent: false, allowedTools: [], description: '' },
+        { id: 'builder', name: 'Builder', color: '#3b82f6', subagent: false, allowedTools: [], description: '' },
+      ],
+      userItems: [],
+    }
+    return selector ? selector(state) : state
+  },
+  getAgentColor: () => '#a855f7',
 }))
 
 vi.mock('../../hooks/useKeybindings', () => ({

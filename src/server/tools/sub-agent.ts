@@ -73,7 +73,7 @@ export const callSubAgentTool: Tool = {
       }
     }
 
-    const { sessionId, sessionManager, llmClient, statsIdentity } = context
+    const { sessionId, sessionManager, llmClient, statsIdentity, providerManager } = context
 
     if (!sessionId || !sessionManager || !llmClient) {
       return {
@@ -99,6 +99,7 @@ export const callSubAgentTool: Tool = {
         llmClient,
         toolRegistry,
         turnMetrics,
+        providerManager,
         statsIdentity: statsIdentity ?? {
           providerId: 'unknown',
           providerName: 'Unknown',

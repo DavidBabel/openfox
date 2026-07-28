@@ -31,7 +31,8 @@ export function CRUDListItem({
       <div className="min-w-0 flex-1 mr-3">{children}</div>
 
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        {isBuiltIn && onView && (
+        {isBuiltIn && onEdit && <EditButton onClick={onEdit} />}
+        {isBuiltIn && !onEdit && onView && (
           <button
             onClick={onView}
             className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-primary transition-colors"

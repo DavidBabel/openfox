@@ -28,11 +28,36 @@ import { closeDatabase, getDatabase, initDatabase } from '../db/index.js'
 import { createProject } from '../db/projects.js'
 import { getSession } from '../db/sessions.js'
 import { initEventStore, getCurrentContextWindowId, emitContextCompacted, getEventStore } from '../events/index.js'
+import { setAgentModelOverride } from '../agents/model-overrides.js'
 import { SessionManager } from './manager.js'
 
 // Mock provider manager
+const mockGlobalClient = {
+  getModel: vi.fn(() => 'global-model'),
+  setModel: vi.fn(),
+  getProfile: vi.fn(),
+  getBackend: vi.fn(() => 'unknown'),
+  setBackend: vi.fn(),
+  complete: vi.fn(),
+  stream: vi.fn(),
+}
+
+const mockDedicatedClient = {
+  getModel: vi.fn(() => 'dedicated-model'),
+  setModel: vi.fn(),
+  getProfile: vi.fn(),
+  getBackend: vi.fn(() => 'unknown'),
+  setBackend: vi.fn(),
+  complete: vi.fn(),
+  stream: vi.fn(),
+}
+
 const mockProviderManager = {
   getCurrentModelContext: vi.fn(() => 200000),
+  getLLMClient: vi.fn(() => mockGlobalClient),
+  createClient: vi.fn((): typeof mockDedicatedClient | undefined => mockDedicatedClient),
+  getActiveProviderId: vi.fn(() => 'test-provider'),
+  getCurrentModel: vi.fn(() => 'global-model'),
 }
 
 describe('SessionManager', () => {
@@ -676,12 +701,55 @@ describe('SessionManager', () => {
       const eventStore = getEventStore()
       const forkedEvents = eventStore.getEvents(forked.id)
       const snapshotEvent = forkedEvents.find((e) => e.type === 'turn.snapshot')
-      const snapshot = snapshotEvent!.data as { currentContextWindowId: string; messages: Array<{ contextWindowId?: string }> }
+      const snapshot = snapshotEvent!.data as {
+        currentContextWindowId: string
+        messages: Array<{ contextWindowId?: string }>
+      }
 
       // All messages in the snapshot must have the new contextWindowId
       for (const m of snapshot.messages) {
         expect(m.contextWindowId).toBe(snapshot.currentContextWindowId)
       }
+    })
+  })
+
+  describe('createClientForAgent', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('returns global client when no override set', () => {
+      const client = manager.createClientForAgent('planner')
+      expect(client).toBe(mockGlobalClient)
+      expect(mockProviderManager.createClient).not.toHaveBeenCalled()
+    })
+
+    it('creates dedicated client when override exists', () => {
+      setAgentModelOverride('planner', { providerId: 'test-provider', model: 'dedicated-model' })
+      const client = manager.createClientForAgent('planner')
+      expect(client).toBe(mockDedicatedClient)
+      expect(mockProviderManager.createClient).toHaveBeenCalledWith('test-provider', 'dedicated-model')
+    })
+
+    it('falls back to global client when provider not found', () => {
+      mockProviderManager.createClient.mockReturnValueOnce(undefined)
+      setAgentModelOverride('planner', { providerId: 'nonexistent', model: 'dedicated-model' })
+      const client = manager.createClientForAgent('planner')
+      expect(client).toBe(mockGlobalClient)
+    })
+
+    it('falls back to global client when override cleared', () => {
+      setAgentModelOverride('planner', { providerId: 'test-provider', model: 'dedicated-model' })
+      setAgentModelOverride('planner', null)
+      const client = manager.createClientForAgent('planner')
+      expect(client).toBe(mockGlobalClient)
+      expect(mockProviderManager.createClient).not.toHaveBeenCalled()
+    })
+
+    it('creates client with correct provider and model', () => {
+      setAgentModelOverride('verifier', { providerId: 'my-provider', model: 'my-model' })
+      manager.createClientForAgent('verifier')
+      expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model')
     })
   })
 })

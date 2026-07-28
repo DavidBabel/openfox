@@ -12,13 +12,17 @@ import { loadDefaultAgents, findAgentById } from '../agents/registry.js'
 import { executeSubAgent, loadGitIgnoreRules } from './manager.js'
 import type { SessionManager } from '../session/index.js'
 import type { LLMClientWithModel } from '../llm/client.js'
+import type { ProviderManager } from '../provider-manager.js'
 import type { ToolRegistry } from '../tools/types.js'
 import type { TurnMetrics } from '../chat/stream-pure.js'
 
-const { getEventStoreMock, getAllInstructionsMock } = vi.hoisted(() => ({
-  getEventStoreMock: vi.fn(),
-  getAllInstructionsMock: vi.fn(),
-}))
+const { getEventStoreMock, getAllInstructionsMock, getAgentModelOverrideMock, resolveLLMClientForAgentMock } =
+  vi.hoisted(() => ({
+    getEventStoreMock: vi.fn(),
+    getAllInstructionsMock: vi.fn(),
+    getAgentModelOverrideMock: vi.fn(),
+    resolveLLMClientForAgentMock: vi.fn(),
+  }))
 
 vi.mock('../events/index.js', () => ({
   getEventStore: getEventStoreMock,
@@ -43,6 +47,125 @@ vi.mock('../runtime-config.js', () => ({
   })),
 }))
 
+vi.mock('../agents/model-overrides.js', () => ({
+  getAgentModelOverride: getAgentModelOverrideMock,
+  resolveLLMClientForAgent: resolveLLMClientForAgentMock,
+  getAgentModelOverrides: vi.fn(() => ({})),
+  setAgentModelOverride: vi.fn(),
+  parseAgentModelOverrides: vi.fn(() => ({})),
+  AGENT_MODEL_OVERRIDES_KEY: 'agent.modelOverrides',
+}))
+
+function createMockSessionManager(): SessionManager {
+  return {
+    requireSession: vi.fn().mockReturnValue({
+      criteria: [],
+      workdir: '/test',
+      projectId: 'test-project',
+    }),
+    setCurrentContextSize: vi.fn(),
+    getContextState: vi.fn().mockReturnValue({
+      currentTokens: 1000,
+      maxTokens: 128000,
+      compactionCount: 0,
+      dangerZone: false,
+      canCompact: false,
+      dynamicContextChanged: false,
+    }),
+    getCurrentModelSettings: vi.fn().mockReturnValue({}),
+    getCurrentModelContext: vi.fn().mockReturnValue(128000),
+    getDynamicContextChanged: vi.fn().mockReturnValue(false),
+    setDynamicContextChanged: vi.fn(),
+    getCachedPrompt: vi.fn().mockReturnValue(undefined),
+    setCachedPrompt: vi.fn(),
+    getModelCompactionThreshold: vi.fn().mockReturnValue(undefined),
+    getLspManager: vi.fn().mockReturnValue(undefined),
+    getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+    drainAsapMessages: vi.fn().mockReturnValue([]),
+    getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+    updateMessage: vi.fn(),
+    getQueueState: vi.fn().mockReturnValue({ queued: 0, processing: false }),
+  } as unknown as SessionManager
+}
+
+function createMockLLMClient(onStream?: () => void): LLMClientWithModel {
+  return {
+    getModel: () => 'test-model',
+    setModel: () => {},
+    getProfile: () => ({ contextWindow: 128000, supportsVision: false, supportsThinking: false }),
+    getBackend: () => 'ollama' as const,
+    setBackend: () => {},
+    stream: async function* () {
+      onStream?.()
+      yield {
+        type: 'tool_call_delta',
+        index: 0,
+        id: 'call-1',
+        name: 'return_value',
+        arguments: '{"content":"Test result content","result":"success"}',
+      }
+      yield {
+        type: 'text_delta',
+        content: 'Completed.',
+      }
+      yield {
+        type: 'done',
+        response: {
+          id: 'mock-1',
+          content: 'Completed.',
+          thinkingContent: '',
+          toolCalls: [
+            {
+              id: 'call-1',
+              name: 'return_value',
+              arguments: { content: 'Test result content', result: 'success' },
+            },
+          ],
+          finishReason: 'tool_calls',
+          usage: { promptTokens: 50, completionTokens: 30, totalTokens: 80 },
+        },
+      }
+    },
+  } as unknown as LLMClientWithModel
+}
+
+function createMockToolRegistry(): ToolRegistry {
+  return {
+    tools: [],
+    definitions: [
+      {
+        type: 'function',
+        function: {
+          name: 'return_value',
+          description: 'Return value',
+          parameters: { type: 'object', properties: { content: { type: 'string' }, result: { type: 'string' } } },
+        },
+      },
+    ],
+    execute: vi.fn().mockImplementation(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'return_value') {
+        return {
+          success: true,
+          output: `Returned: ${args['content']} (${args['result']})`,
+          durationMs: 1,
+          truncated: false,
+        }
+      }
+      return { success: true, output: 'ok', durationMs: 1, truncated: false }
+    }),
+  } as unknown as ToolRegistry
+}
+
+function createMockTurnMetrics(): TurnMetrics {
+  return {
+    addLLMCall: vi.fn(),
+    addToolTime: vi.fn(),
+    buildStats: vi.fn().mockReturnValue({ totalDurationMs: 100, llmCalls: 1 }),
+  } as unknown as TurnMetrics
+}
+
+const TEST_STATS_IDENTITY = { providerId: 'mock', providerName: 'mock', backend: 'ollama' as const, model: 'test' }
+
 describe('SubAgentManager', () => {
   let db: Database.Database
   let eventStore: EventStore
@@ -63,108 +186,18 @@ describe('SubAgentManager', () => {
   })
 
   it('should exit immediately after return_value is called without extra LLM calls', async () => {
-    const mockSessionManager = {
-      requireSession: vi.fn().mockReturnValue({
-        criteria: [],
-        workdir: '/test',
-        projectId: 'test-project',
-      }),
-      setCurrentContextSize: vi.fn(),
-      getContextState: vi.fn().mockReturnValue({
-        currentTokens: 1000,
-        maxTokens: 128000,
-        compactionCount: 0,
-        dangerZone: false,
-        canCompact: false,
-        dynamicContextChanged: false,
-      }),
-      getCurrentModelSettings: vi.fn().mockReturnValue({}),
-      getCurrentModelContext: vi.fn().mockReturnValue(128000),
-      getDynamicContextChanged: vi.fn().mockReturnValue(false),
-      setDynamicContextChanged: vi.fn(),
-      getCachedPrompt: vi.fn().mockReturnValue(undefined),
-      setCachedPrompt: vi.fn(),
-      getModelCompactionThreshold: vi.fn().mockReturnValue(undefined),
-      getLspManager: vi.fn().mockReturnValue(undefined),
-      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
-      drainAsapMessages: vi.fn().mockReturnValue([]),
-      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
-      updateMessage: vi.fn(),
-      getQueueState: vi.fn().mockReturnValue({ queued: 0, processing: false }),
-    } as unknown as SessionManager
+    const mockSessionManager = createMockSessionManager()
 
     let llmCallCount = 0
-    const mockLLMClient = {
-      getModel: () => 'test-model',
-      setModel: () => {},
-      getProfile: () => ({ contextWindow: 128000, supportsVision: false, supportsThinking: false }),
-      getBackend: () => 'ollama' as const,
-      setBackend: () => {},
-      stream: async function* () {
-        llmCallCount++
-        yield {
-          type: 'tool_call_delta',
-          index: 0,
-          id: 'call-1',
-          name: 'return_value',
-          arguments: '{"content":"Test result content","result":"success"}',
-        }
-        yield {
-          type: 'text_delta',
-          content: 'Completed.',
-        }
-        yield {
-          type: 'done',
-          response: {
-            id: 'mock-1',
-            content: 'Completed.',
-            thinkingContent: '',
-            toolCalls: [
-              {
-                id: 'call-1',
-                name: 'return_value',
-                arguments: { content: 'Test result content', result: 'success' },
-              },
-            ],
-            finishReason: 'tool_calls',
-            usage: { promptTokens: 50, completionTokens: 30, totalTokens: 80 },
-          },
-        }
-      },
-    } as unknown as LLMClientWithModel
+    const mockLLMClient = createMockLLMClient(() => {
+      llmCallCount++
+    })
 
-    const mockToolRegistry = {
-      tools: [],
-      definitions: [
-        {
-          type: 'function',
-          function: {
-            name: 'return_value',
-            description: 'Return value',
-            parameters: { type: 'object', properties: { content: { type: 'string' }, result: { type: 'string' } } },
-          },
-        },
-      ],
-      execute: vi.fn().mockImplementation(async (name: string, args: Record<string, unknown>) => {
-        if (name === 'return_value') {
-          return {
-            success: true,
-            output: `Returned: ${args['content']} (${args['result']})`,
-            durationMs: 1,
-            truncated: false,
-          }
-        }
-        return { success: true, output: 'ok', durationMs: 1, truncated: false }
-      }),
-    } as unknown as ToolRegistry
+    const mockToolRegistry = createMockToolRegistry()
 
     const mockOnMessage = vi.fn()
 
-    const mockTurnMetrics = {
-      addLLMCall: vi.fn(),
-      addToolTime: vi.fn(),
-      buildStats: vi.fn().mockReturnValue({ totalDurationMs: 100, llmCalls: 1 }),
-    } as unknown as TurnMetrics
+    const mockTurnMetrics = createMockTurnMetrics()
 
     const result = await executeSubAgent({
       subAgentType: 'explorer',
@@ -174,7 +207,7 @@ describe('SubAgentManager', () => {
       llmClient: mockLLMClient,
       toolRegistry: mockToolRegistry,
       turnMetrics: mockTurnMetrics,
-      statsIdentity: { providerId: 'mock', providerName: 'mock', backend: 'ollama', model: 'test' },
+      statsIdentity: TEST_STATS_IDENTITY,
       onMessage: mockOnMessage,
     })
 
@@ -193,6 +226,137 @@ describe('SubAgentManager', () => {
     const messageUpdatedPayload = (messageUpdatedMessages[0]![0] as { payload: { updates: { stats?: unknown } } })
       .payload
     expect('stats' in messageUpdatedPayload.updates).toBe(true)
+  })
+
+  describe('model overrides', () => {
+    beforeEach(() => {
+      resolveLLMClientForAgentMock.mockReset()
+    })
+
+    function createMockProviderManager(client?: LLMClientWithModel): ProviderManager {
+      return {
+        createClient: vi.fn(() => client),
+        getProviders: vi.fn(() => []),
+        getModelSettings: vi.fn(() => undefined),
+      } as unknown as ProviderManager
+    }
+
+    it('uses the parent client when no override exists', async () => {
+      resolveLLMClientForAgentMock.mockReturnValue({
+        client: createMockLLMClient(),
+        usedOverride: false,
+      })
+      const pm = createMockProviderManager(createMockLLMClient())
+      const parentClient = createMockLLMClient()
+
+      const result = await executeSubAgent({
+        subAgentType: 'explorer',
+        prompt: 'Explore.',
+        sessionManager: createMockSessionManager(),
+        sessionId: 'test-session',
+        llmClient: parentClient,
+        toolRegistry: createMockToolRegistry(),
+        turnMetrics: createMockTurnMetrics(),
+        statsIdentity: TEST_STATS_IDENTITY,
+        providerManager: pm,
+      })
+
+      expect(result.content).toBe('Test result content')
+      expect(pm.createClient).not.toHaveBeenCalled()
+    })
+
+    it('uses a dedicated client when an override resolves', async () => {
+      resolveLLMClientForAgentMock.mockReturnValue({
+        client: createMockLLMClient(),
+        usedOverride: true,
+        override: { providerId: 'p1', model: 'claude-x' },
+      })
+      const dedicatedClient = createMockLLMClient()
+      const pm = createMockProviderManager(dedicatedClient)
+      const parentClient = createMockLLMClient()
+
+      const result = await executeSubAgent({
+        subAgentType: 'explorer',
+        prompt: 'Explore.',
+        sessionManager: createMockSessionManager(),
+        sessionId: 'test-session',
+        llmClient: parentClient,
+        toolRegistry: createMockToolRegistry(),
+        turnMetrics: createMockTurnMetrics(),
+        statsIdentity: TEST_STATS_IDENTITY,
+        providerManager: pm,
+      })
+
+      expect(resolveLLMClientForAgentMock).toHaveBeenCalled()
+      expect(result.content).toBe('Test result content')
+    })
+
+    it('falls back to the parent client with a visible warning when the override is invalid', async () => {
+      resolveLLMClientForAgentMock.mockReturnValue({
+        client: createMockLLMClient(),
+        usedOverride: false,
+        override: { providerId: 'gone', model: 'claude-x' },
+        warning:
+          "Agent 'explorer' is configured to use model 'claude-x' from provider 'gone', but it is no longer available. Falling back to the session model.",
+      })
+      const pm = createMockProviderManager(undefined)
+      let parentCalls = 0
+      const parentClient = createMockLLMClient(() => {
+        parentCalls++
+      })
+      const onMessage = vi.fn()
+
+      const result = await executeSubAgent({
+        subAgentType: 'explorer',
+        prompt: 'Explore.',
+        sessionManager: createMockSessionManager(),
+        sessionId: 'test-session',
+        llmClient: parentClient,
+        toolRegistry: createMockToolRegistry(),
+        turnMetrics: createMockTurnMetrics(),
+        statsIdentity: TEST_STATS_IDENTITY,
+        providerManager: pm,
+        onMessage,
+      })
+
+      expect(result.content).toBe('Test result content')
+      expect(parentCalls).toBe(1)
+
+      const warningMessages = (onMessage.mock.calls as Array<[unknown]>)
+        .map(([msg]) => msg as { type: string; payload?: { message?: { content?: string } } })
+        .filter(
+          (msg) =>
+            msg.type === 'chat.message' &&
+            typeof msg.payload?.message?.content === 'string' &&
+            msg.payload.message.content.includes('gone'),
+        )
+      expect(warningMessages.length).toBeGreaterThan(0)
+    })
+
+    it('does not mutate the session provider when an override is used', async () => {
+      resolveLLMClientForAgentMock.mockReturnValue({
+        client: createMockLLMClient(),
+        usedOverride: true,
+        override: { providerId: 'p1', model: 'claude-x' },
+      })
+      const pm = createMockProviderManager(createMockLLMClient())
+      const sessionManager = createMockSessionManager()
+
+      await executeSubAgent({
+        subAgentType: 'explorer',
+        prompt: 'Explore.',
+        sessionManager,
+        sessionId: 'test-session',
+        llmClient: createMockLLMClient(),
+        toolRegistry: createMockToolRegistry(),
+        turnMetrics: createMockTurnMetrics(),
+        statsIdentity: TEST_STATS_IDENTITY,
+        providerManager: pm,
+      })
+
+      const sm = sessionManager as unknown as Record<string, ReturnType<typeof vi.fn>>
+      expect(sm['setSessionProvider']).toBeUndefined()
+    })
   })
 
   it('should have verifier available in agent registry', async () => {

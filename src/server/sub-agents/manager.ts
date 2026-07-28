@@ -11,12 +11,14 @@
 import type { StatsIdentity } from '../../shared/types.js'
 import type { SessionManager } from '../session/index.js'
 import type { LLMClientWithModel } from '../llm/client.js'
+import type { ProviderManager } from '../provider-manager.js'
 import type { ToolRegistry } from '../tools/types.js'
 import type { ServerMessage } from '../../shared/protocol.js'
 import type { AgentDefinition } from '../agents/types.js'
 import { readFile, access } from 'node:fs/promises'
 import { join, dirname, isAbsolute } from 'node:path'
 import { loadAllAgentsDefault, findAgentById } from '../agents/registry.js'
+import { resolveLLMClientForAgent } from '../agents/model-overrides.js'
 import { buildBasePrompt } from '../chat/prompts.js'
 import { TurnMetrics, createMessageStartEvent } from '../chat/stream-pure.js'
 import { runTopLevelAgentLoop } from '../chat/agent-loop.js'
@@ -50,6 +52,7 @@ export interface SubAgentExecutionOptions {
   toolRegistry: ToolRegistry
   turnMetrics: TurnMetrics
   statsIdentity: StatsIdentity
+  providerManager?: ProviderManager | undefined
   signal?: AbortSignal
   onMessage?: (msg: ServerMessage) => void
 }
@@ -137,10 +140,11 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
     prompt,
     sessionManager,
     sessionId,
-    llmClient,
+    llmClient: parentLlmClient,
     toolRegistry,
     turnMetrics,
-    statsIdentity,
+    statsIdentity: parentStatsIdentity,
+    providerManager,
     signal,
     onMessage,
   } = options
@@ -150,6 +154,56 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
   const subAgentId = crypto.randomUUID()
   const session = sessionManager.requireSession(sessionId)
   const windowOptions = getWindowOptions(sessionId)
+
+  // --- Resolve model override (per-user setting, sub-agent scoped: session untouched) ---
+
+  let llmClient = parentLlmClient
+  let statsIdentity = parentStatsIdentity
+  let hasOverride = false
+  let overrideModelSettings: Record<string, unknown> | undefined
+  if (providerManager) {
+    const resolved = resolveLLMClientForAgent(subAgentType, parentLlmClient, providerManager)
+    if (resolved.usedOverride && resolved.override) {
+      hasOverride = true
+      llmClient = resolved.client
+      const provider = providerManager.getProviders().find((p) => p.id === resolved.override!.providerId)
+      statsIdentity = {
+        providerId: resolved.override.providerId,
+        providerName: provider?.name ?? resolved.override.providerId,
+        backend: provider?.backend ?? resolved.client.getBackend(),
+        model: resolved.override.model,
+      }
+      // Use model settings from the override provider/model, not the session model
+      overrideModelSettings = providerManager.getModelSettings(resolved.override.providerId, resolved.override.model)
+      logger.info('Sub-agent using model override', { subAgentType, ...resolved.override })
+    } else if (resolved.warning) {
+      logger.warn('Sub-agent model override unavailable, falling back', { subAgentType, warning: resolved.warning })
+      const warningMsgId = crypto.randomUUID()
+      eventStore.append(
+        sessionId,
+        createMessageStartEvent(warningMsgId, 'system', resolved.warning, {
+          ...(windowOptions ?? {}),
+          isSystemGenerated: true,
+          subAgentId,
+          subAgentType,
+        }),
+      )
+      eventStore.append(sessionId, { type: 'message.done', data: { messageId: warningMsgId } })
+      if (onMessage) {
+        onMessage(
+          createChatMessageMessage({
+            id: warningMsgId,
+            role: 'system',
+            content: resolved.warning,
+            timestamp: new Date().toISOString(),
+            isSystemGenerated: true,
+            subAgentId,
+            subAgentType,
+          }),
+        )
+      }
+    }
+  }
 
   logger.debug('Sub-agent starting', { subAgentType, subAgentId, sessionId })
 
@@ -236,6 +290,9 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
       sessionId,
       llmClient,
       statsIdentity,
+      providerManager,
+      // When an override is active, use its model settings (or empty to avoid leaking session settings)
+      ...(hasOverride ? { modelSettings: overrideModelSettings ?? {} } : {}),
       signal,
       onMessage,
       assembleRequest: async (input) =>

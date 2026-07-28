@@ -13,6 +13,9 @@ import { tmpdir } from 'node:os'
 import { createServer, type Server } from 'node:http'
 import type { AgentDefinition } from './types.js'
 import { loadAllAgents, findAgentById, saveAgent, deleteAgent, agentExists } from './registry.js'
+import { closeDatabase, initDatabase } from '../db/index.js'
+import { loadConfig } from '../config.js'
+import { getAgentModelOverride, setAgentModelOverride } from './model-overrides.js'
 
 let tempDir: string
 let server: Server
@@ -77,6 +80,30 @@ function mountAgentRoutes(app: express.Express, configDir: string) {
     }
     res.json({ success: true })
   })
+
+  // Agent model override routes (stored in DB settings)
+  app.get('/api/agents/:id/model', (req, res) => {
+    const { id } = req.params
+    const override = getAgentModelOverride(id)
+    res.json(override ?? { providerId: null, model: null })
+  })
+
+  app.put('/api/agents/:id/model', (req, res) => {
+    const { id } = req.params
+    const { providerId, model } = req.body as { providerId?: string; model?: string }
+    if (providerId && model) {
+      setAgentModelOverride(id, { providerId, model })
+    } else {
+      setAgentModelOverride(id, null)
+    }
+    res.json({ success: true })
+  })
+
+  app.delete('/api/agents/:id/model', (req, res) => {
+    const { id } = req.params
+    setAgentModelOverride(id, null)
+    res.json({ success: true })
+  })
 }
 
 async function request(method: string, path: string, body?: unknown): Promise<{ status: number; json: unknown }> {
@@ -89,6 +116,12 @@ async function request(method: string, path: string, body?: unknown): Promise<{ 
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'agent-api-test-'))
+
+  // Init DB for model override tests
+  closeDatabase()
+  const config = loadConfig()
+  config.database.path = ':memory:'
+  initDatabase(config)
 
   const app = express()
   mountAgentRoutes(app, tempDir)
@@ -106,6 +139,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()))
   await rm(tempDir, { recursive: true, force: true })
+  closeDatabase()
 })
 
 describe('GET /api/agents', () => {
@@ -229,5 +263,67 @@ describe('DELETE /api/agents/:id', () => {
   it('returns 403 for built-in default agents', async () => {
     const { status } = await request('DELETE', '/api/agents/verifier')
     expect(status).toBe(403)
+  })
+})
+
+describe('Agent model override API', () => {
+  it('GET returns null providerId and model for agent without override', async () => {
+    const { status, json } = await request('GET', '/api/agents/planner/model')
+    expect(status).toBe(200)
+    const data = json as any
+    expect(data.providerId).toBeNull()
+    expect(data.model).toBeNull()
+  })
+
+  it('PUT sets override, GET returns it', async () => {
+    const putRes = await request('PUT', '/api/agents/planner/model', {
+      providerId: 'local',
+      model: 'qwen3-coder',
+    })
+    expect(putRes.status).toBe(200)
+
+    const getRes = await request('GET', '/api/agents/planner/model')
+    expect(getRes.status).toBe(200)
+    const data = getRes.json as any
+    expect(data.providerId).toBe('local')
+    expect(data.model).toBe('qwen3-coder')
+  })
+
+  it('PUT without providerId/model clears override', async () => {
+    await request('PUT', '/api/agents/planner/model', { providerId: 'local', model: 'qwen3-coder' })
+    await request('PUT', '/api/agents/planner/model', {})
+
+    const getRes = await request('GET', '/api/agents/planner/model')
+    const data = getRes.json as any
+    expect(data.providerId).toBeNull()
+    expect(data.model).toBeNull()
+  })
+
+  it('DELETE clears override', async () => {
+    await request('PUT', '/api/agents/planner/model', { providerId: 'local', model: 'qwen3-coder' })
+    const delRes = await request('DELETE', '/api/agents/planner/model')
+    expect(delRes.status).toBe(200)
+
+    const getRes = await request('GET', '/api/agents/planner/model')
+    const data = getRes.json as any
+    expect(data.providerId).toBeNull()
+    expect(data.model).toBeNull()
+  })
+
+  it('overrides are independent per agent', async () => {
+    await request('PUT', '/api/agents/planner/model', { providerId: 'local', model: 'qwen3-coder' })
+    await request('PUT', '/api/agents/verifier/model', { providerId: 'remote', model: 'deepseek' })
+
+    const p1 = await request('GET', '/api/agents/planner/model')
+    expect((p1.json as any).providerId).toBe('local')
+    expect((p1.json as any).model).toBe('qwen3-coder')
+
+    const p2 = await request('GET', '/api/agents/verifier/model')
+    expect((p2.json as any).providerId).toBe('remote')
+    expect((p2.json as any).model).toBe('deepseek')
+
+    const p3 = await request('GET', '/api/agents/builder/model')
+    expect((p3.json as any).providerId).toBeNull()
+    expect((p3.json as any).model).toBeNull()
   })
 })

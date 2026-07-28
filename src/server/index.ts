@@ -1034,6 +1034,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { getEventStore, combineEventsWithSnapshot: combineEv } = await import('./events/index.js')
     const { buildMessagesFromStoredEvents } = await import('./events/folding.js')
     const { getMaxVisibleItems } = await import('./db/settings.js')
+    const { getAgentModelOverride } = await import('./agents/model-overrides.js')
+    const { updateSessionProvider } = await import('./db/sessions.js')
 
     const sessionId = req.params.id
     const session = sessionManager.getSession(sessionId)
@@ -1052,6 +1054,14 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     }
 
     sessionManager.setMode(sessionId, mode)
+
+    // Auto-set session provider/model: override if agent has one, else reset to default
+    const override = getAgentModelOverride(mode)
+    if (override) {
+      updateSessionProvider(sessionId, override.providerId, override.model)
+    } else {
+      updateSessionProvider(sessionId, null, null)
+    }
 
     const eventStore = getEventStore()
     const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(sessionId)

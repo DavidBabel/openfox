@@ -6,6 +6,7 @@ export function AgentListItem({
   isBuiltIn,
   isConfirmingDelete,
   alwaysAllowedNames,
+  model,
   onView,
   onEdit,
   onDuplicate,
@@ -16,6 +17,7 @@ export function AgentListItem({
   isBuiltIn: boolean
   isConfirmingDelete: boolean
   alwaysAllowedNames?: Set<string>
+  model?: string
   onView: () => void
   onEdit?: () => void
   onDuplicate: () => void
@@ -23,6 +25,7 @@ export function AgentListItem({
   onCancelDelete?: () => void
 }) {
   const displayTools = agent.allowedTools.filter((t) => !alwaysAllowedNames?.has(t))
+  const shortModel = model ? model.split('/').pop()?.replace(/-/g, ' ') : undefined
   return (
     <CRUDListItem
       isBuiltIn={isBuiltIn}
@@ -42,6 +45,11 @@ export function AgentListItem({
         <span className="text-text-muted text-xs font-mono">{agent.id}</span>
         {isBuiltIn && (
           <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-bg-primary text-text-muted">Built-in</span>
+        )}
+        {shortModel && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent-primary/10 text-accent-primary">
+            {shortModel}
+          </span>
         )}
       </div>
       {agent.description && <p className="text-text-secondary text-xs mt-0.5 truncate">{agent.description}</p>}
@@ -65,6 +73,7 @@ export function AgentGroup({
   subagents,
   isBuiltIn,
   alwaysAllowedNames,
+  modelOverrides,
   onView,
   onDuplicate,
   onEdit,
@@ -77,6 +86,7 @@ export function AgentGroup({
   subagents: AgentInfo[]
   isBuiltIn: boolean
   alwaysAllowedNames?: Set<string>
+  modelOverrides?: Record<string, string>
   onView: (id: string) => void
   onDuplicate: (id: string) => void
   onEdit?: (id: string) => void
@@ -89,11 +99,12 @@ export function AgentGroup({
     <AgentListItem
       key={agent.id}
       agent={agent}
+      model={modelOverrides?.[agent.id]}
       isBuiltIn={isBuiltIn}
       isConfirmingDelete={isConfirmingDelete?.(agent.id) ?? false}
       alwaysAllowedNames={alwaysAllowedNames}
       onView={() => onView(agent.id)}
-      onEdit={isBuiltIn ? undefined : () => onEdit?.(agent.id)}
+      onEdit={onEdit ? () => onEdit(agent.id) : undefined}
       onDuplicate={() => onDuplicate(agent.id)}
       onDelete={isBuiltIn ? undefined : () => onDelete?.(agent.id)}
       onCancelDelete={isBuiltIn ? undefined : () => onCancelDelete?.(agent.id)}

@@ -111,20 +111,20 @@ export interface OrchestratorOptions {
 }
 
 function resolveStatsIdentity(options: OrchestratorOptions): StatsIdentity {
-  const model = options.llmClient.getModel()
+  const clientModel = options.llmClient.getModel()
 
   if (options.statsIdentity) {
     return {
       ...options.statsIdentity,
-      model,
+      model: options.statsIdentity.model ?? clientModel,
     }
   }
 
   return {
-    providerId: `provider:${model}`,
+    providerId: `provider:${clientModel}`,
     providerName: 'Unknown Provider',
     backend: 'unknown',
-    model,
+    model: clientModel,
   }
 }
 
@@ -334,9 +334,13 @@ export async function runAgentTurn(
     onToolExecuted?: (toolCall: ToolCall, toolResult: ToolResult) => void
   },
 ): Promise<{ returnValueContent?: string; returnValueResult?: string }> {
-  const statsIdentity = resolveStatsIdentity(options)
   const allAgents = await loadAllAgentsDefault()
   const agentDef = findAgentById(agentId, allAgents) ?? findAgentById(resolveDefaultAgentId(), allAgents)!
+
+  // Resolve per-agent model override (dedicated LLM client if configured).
+  // Pass options.llmClient as preferred fallback so mock/test clients are preserved.
+  const agentLlmClient = options.sessionManager.createClientForAgent(agentId, options.llmClient)
+  const statsIdentity = resolveStatsIdentity({ ...options, llmClient: agentLlmClient })
 
   if (!options.warmup) {
     injectAgentReminder(options.sessionId, agentDef)
@@ -357,8 +361,9 @@ export async function runAgentTurn(
       ...(await buildRetryPatterns()),
       sessionManager: options.sessionManager,
       sessionId: options.sessionId,
-      llmClient: options.llmClient,
+      llmClient: agentLlmClient,
       statsIdentity,
+      providerManager: options.sessionManager.getProviderManager(),
       signal: options.signal,
       onMessage: options.onMessage,
       assembleRequest: async (input) => {
@@ -394,7 +399,7 @@ export async function runAgentTurn(
         })
       },
       getToolRegistry: () => getToolRegistryForAgent(agentDef, options.sessionId),
-      getConversationMessages: buildGetConversationMessages(options.sessionId, options.llmClient, append),
+      getConversationMessages: buildGetConversationMessages(options.sessionId, agentLlmClient, append),
       injectAgentReminder: () => injectAgentReminder(options.sessionId, agentDef),
       ...(options.initialCompacting ? { initialCompacting: true } : {}),
       ...(callbacks?.injectKickoff ? { injectKickoff: callbacks.injectKickoff } : {}),

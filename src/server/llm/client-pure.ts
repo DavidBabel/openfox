@@ -282,7 +282,11 @@ async function buildChatCompletionCreateParams(
       ;(params as unknown as Record<string, unknown>)['reasoning_effort'] = resolvedEffort
     }
 
-    if (resolvedEffort && capabilities.supportsChatTemplateKwargs) {
+    // Only inject chat_template_kwargs when the request explicitly asks for
+    // reasoning (per-request), not when it comes from the client config alone.
+    // This prevents session model thinking config from leaking into requests
+    // to override models (sub-agent model overrides to different providers).
+    if (request.reasoningEffort && capabilities.supportsChatTemplateKwargs) {
       ;(params as unknown as Record<string, unknown>)['chat_template_kwargs'] = {
         enable_thinking: true,
       }

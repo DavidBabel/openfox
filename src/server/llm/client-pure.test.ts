@@ -352,5 +352,24 @@ describe('llm client pure helpers', () => {
         maxTokens: 5000,
       },
     })
+
+    // REGRESSION TEST: When modelSettings has only maxTokens (no chatTemplateKwargs, no queryParams)
+    // and reasoningEffort leaks from the session model config, chat_template_kwargs must NOT be injected.
+    // The modelSettings don't explicitly request thinking, so the else branch must NOT add it.
+    // This ensures sub-agent model overrides to different providers don't inherit thinking config.
+    const result = await buildNonStreamingCreateParams({
+      model: 'override-model',
+      request: {
+        messages: [{ role: 'user' as const, content: 'hello' }],
+        // Simulates sub-agent override: modelSettings has only maxTokens (added by agent-loop.ts)
+        modelSettings: { maxTokens: 5000 },
+      },
+      profile,
+      // reasoningEffort simulates session model's thinking config leaking into override client
+      reasoningEffort: 'low',
+      capabilities: { supportsTopK: true, supportsChatTemplateKwargs: true },
+    })
+    // chat_template_kwargs must NOT be here — the modelSettings don't request it
+    expect(result.params).not.toHaveProperty('chat_template_kwargs')
   })
 })

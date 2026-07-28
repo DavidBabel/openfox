@@ -12,6 +12,7 @@ import type { InjectedFile, StatsIdentity, ToolCall, ToolMode, ToolResult } from
 import type { ServerMessage } from '../../shared/protocol.js'
 import type { LLMClientWithModel } from '../llm/client.js'
 import type { LLMToolDefinition } from '../llm/types.js'
+import type { ProviderManager } from '../provider-manager.js'
 import type { SessionManager } from '../session/index.js'
 import type { ToolRegistry } from '../tools/types.js'
 import type { RequestContextMessage, MinimalMessage } from './request-context.js'
@@ -100,6 +101,18 @@ export interface TopLevelLoopConfig {
   sessionId: string
   llmClient: LLMClientWithModel
   statsIdentity: StatsIdentity
+  providerManager?: ProviderManager | undefined
+  /** Override model settings (e.g. for sub-agents with model override).
+   *  When set, these are used instead of sessionManager.getCurrentModelSettings(). */
+  modelSettings?: {
+    temperature?: number
+    topP?: number
+    topK?: number
+    maxTokens?: number
+    supportsVision?: boolean
+    chatTemplateKwargs?: Record<string, unknown>
+    queryParams?: Record<string, unknown>
+  }
   signal?: AbortSignal | undefined
   onMessage?: ((msg: ServerMessage) => void) | undefined
   assembleRequest: (input: {
@@ -271,9 +284,10 @@ export async function runTopLevelAgentLoop(
     const availableForOutput = Math.max(256, contextWindow - contextState.currentTokens)
 
     let modelSettings =
-      currentMaxTokensOverride !== undefined
+      config.modelSettings ??
+      (currentMaxTokensOverride !== undefined
         ? { ...sessionManager.getCurrentModelSettings(sessionId), maxTokens: currentMaxTokensOverride }
-        : sessionManager.getCurrentModelSettings(sessionId)
+        : sessionManager.getCurrentModelSettings(sessionId))
 
     if (modelSettings) {
       const requestedMaxTokens = modelSettings.maxTokens ?? 16384
@@ -475,6 +489,9 @@ ${COMPACTION_PROMPT}`,
         }
         if (config.subAgentMetadata) {
           batchContext.isSubAgent = true
+        }
+        if (config.providerManager) {
+          batchContext.providerManager = config.providerManager
         }
         batchContext.agentTimeout = getRuntimeConfig().agent.toolTimeout
         const batchResult = await executeTools(assistantMsgId, result.toolCalls, batchContext, append)
