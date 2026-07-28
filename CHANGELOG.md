@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.101 - 2026-07-28
+
+### Features
+
+- **Editable step names in workflow editor** — each workflow step now has a customizable Name field instead of being locked to the agent or sub-agent name.
+
+### Enhancements
+
+- **First workflow step renamed to "Implement"** — the build step now clearly communicates its purpose instead of the generic "Builder" label.
+
+### Bug Fixes
+
+- **Add-criteria command no longer forces planner mode** — launching the command keeps your current agent instead of switching to planner.
+- **Workflow button shows regardless of current agent** — the Build & Verify button appears whenever pending criteria exist, not only in planner mode.
+- **Workflow button only shows for pending criteria** — completed, passed, or failed criteria no longer keep the button visible.
+
 ## 2.0.100 - 2026-07-28
 
 ### Features
