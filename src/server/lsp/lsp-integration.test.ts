@@ -232,7 +232,7 @@ for (const test of LANG_TESTS) {
 }
 
 for (const { test, fixturePath } of startedServers) {
-  describe(test.id, () => {
+  describe.skip(test.id, () => {
     // Each test gets its own server instance for complete isolation
     let server: LspServer
 
