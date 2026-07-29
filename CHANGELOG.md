@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.0.102 - 2026-07-29
+
+### Features
+
+- **Assign any agent a specific model override** — each agent can now be assigned a provider+model that kicks in when that agent is selected, overriding the session or global model.
+- **Control MCP tool access per agent** — choose All, None, or pick individual MCP tools for each agent with a three-state permission selector.
+
+### Enhancements
+
+- **Browser skill updated to @playwright/cli v1.1.0** — the browser-control skill now references the official Playwright CLI package.
+
+### Bug Fixes
+
+- **Workflow step_done nudge fires on every iteration after resume** — when a resumed workflow loops back, the step_done reminder is now injected on every subsequent turn, not just the first.
+- **Systemd service works in headless/SSH environments** — dropped the dependency on `graphical-session.target` so the service installs and runs without a desktop session. Auto-detects headless mode, with `--headless`/`--desktop` flags for explicit control.
+- **Project agents appear in the mode switcher dropdown** — project-scoped custom agents are now listed alongside built-in and global agents.
+- **Project-scoped items save to the correct directory** — fixes items being written to the wrong project root when saving to `.openfox/`.
+
 ## 2.0.101 - 2026-07-28
 
 ### Features
