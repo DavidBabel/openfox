@@ -2,7 +2,7 @@
 name: browser
 description: Interactive browser control via playwright-cli commands (open, snapshot, click, fill, screenshot, etc.)
 metadata:
-  version: 1.0.0
+  version: 1.1.0
   openfox:
     displayName: Browser
 ---
@@ -11,6 +11,13 @@ metadata:
 
 You have access to `npx playwright-cli` for interactive browser automation via the terminal.
 Use `run_command` to execute these commands.
+
+> **Package:** [`@playwright/cli`](https://www.npmjs.com/package/@playwright/cli) (official Microsoft package).
+> The unscoped `playwright-cli` package is deprecated — install the scoped one instead.
+>
+> ```bash
+> npm install -g @playwright/cli@latest    # Install or update
+> ```
 
 ## Core Workflow
 
