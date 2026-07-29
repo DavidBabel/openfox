@@ -170,13 +170,13 @@ export async function setSetting(baseUrl: string, key: string, value: string): P
 }
 
 /**
- * Set session mode via REST API and optionally reload via WS
+ * Set session mode via REST API.
  */
 export async function setSessionMode(
   baseUrl: string,
   sessionId: string,
   mode: 'planner' | 'builder',
-  wsUrl?: string,
+  _wsUrl?: string,
 ): Promise<{ session: Session; messages: unknown[] }> {
   const response = await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
     method: 'PUT',
@@ -189,33 +189,7 @@ export async function setSessionMode(
     throw new Error(error.error || `Failed to set session mode: ${response.status}`)
   }
 
-  const result = response.json() as Promise<{ session: Session; messages: unknown[] }>
-
-  // If WS URL provided, briefly connect to trigger event subscription
-  // This ensures the mode.changed event gets broadcast to subscribers
-  if (wsUrl) {
-    const wsBaseUrl = wsUrl.split('?')[0]!
-    const ws = new (await import('ws')).default(wsBaseUrl)
-    try {
-      await new Promise<void>((resolve, reject) => {
-        ws.on('open', () => {
-          ws.send(JSON.stringify({ id: 'sub', type: 'session.load', payload: { sessionId } }))
-          setTimeout(() => resolve(), 500) // Brief delay to receive events
-        })
-        ws.on('error', () => {
-          // Ignore connection errors - we're just triggering subscription
-          resolve()
-        })
-        setTimeout(() => reject(new Error('Timeout')), 3000)
-      })
-    } catch {
-      // Timeout is OK - we just needed to trigger the subscription briefly
-    } finally {
-      ws.close()
-    }
-  }
-
-  return result
+  return response.json() as Promise<{ session: Session; messages: unknown[] }>
 }
 
 /**

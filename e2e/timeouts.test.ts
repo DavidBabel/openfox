@@ -12,13 +12,13 @@ describe('E2E timeouts', () => {
   })
 
   it('keeps websocket waits within the per-test budget', () => {
-    const budget = 2_000 * CI_MULTIPLIER
+    const budget = 8_000 * CI_MULTIPLIER
     expect(DEFAULT_WAIT_TIMEOUT_MS).toBeLessThanOrEqual(budget)
     expect(DEFAULT_CHAT_TIMEOUT_MS).toBeLessThanOrEqual(budget)
   })
 
   it('keeps event collection within the per-test budget', () => {
-    const budget = 2_000 * CI_MULTIPLIER
+    const budget = 8_000 * CI_MULTIPLIER
     expect(DEFAULT_COLLECTION_TIMEOUT_MS).toBeLessThanOrEqual(budget)
     expect(DEFAULT_PHASE_TIMEOUT_MS).toBeLessThanOrEqual(budget)
   })

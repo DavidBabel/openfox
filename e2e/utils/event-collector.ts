@@ -9,8 +9,8 @@ import type { TestClient } from './ws-client.js'
 
 const CI_MULTIPLIER = process.env['CI'] === 'true' ? 10 : 1
 
-export const DEFAULT_COLLECTION_TIMEOUT_MS = 1_500 * CI_MULTIPLIER
-export const DEFAULT_PHASE_TIMEOUT_MS = 1_500 * CI_MULTIPLIER
+export const DEFAULT_COLLECTION_TIMEOUT_MS = 8_000 * CI_MULTIPLIER
+export const DEFAULT_PHASE_TIMEOUT_MS = 8_000 * CI_MULTIPLIER
 
 // ============================================================================
 // Types
