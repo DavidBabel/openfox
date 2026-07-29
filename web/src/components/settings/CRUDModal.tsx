@@ -138,7 +138,7 @@ interface ModalActionsProps {
 
 export function ModalActions({ onCancel, onSave, saving, saveDisabled }: ModalActionsProps) {
   return (
-    <div className="flex justify-end gap-2 pt-2 border-t border-border">
+    <div className="flex justify-end gap-2 pt-2">
       <Button variant="secondary" onClick={onCancel}>
         Cancel
       </Button>

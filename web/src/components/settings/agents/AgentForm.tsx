@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { FormField, ModalActions, ErrorBanner } from '../CRUDModal'
+import { FormField, ErrorBanner } from '../CRUDModal'
 import { DropdownMenu } from '../../shared/DropdownMenu'
 import { ModelPicker } from '../../shared/ModelPicker'
 import { Toggle } from '../../shared/Toggle'
@@ -16,8 +16,6 @@ interface AgentFormProps {
   formModel: string | undefined
   formPrompt: string
   formError: string
-  saving: boolean
-  loadingModel?: boolean
   isReadOnly: boolean
   availableTools: { name: string; actions: string[]; topLevelOnly?: boolean; isMcp?: boolean; mcpServer?: string }[]
   providers: Provider[]
@@ -29,9 +27,6 @@ interface AgentFormProps {
   onColorChange: (color: string) => void
   onModelChange: (model: string | undefined) => void
   onPromptChange: (prompt: string) => void
-  onSave: () => void
-  onCancel: () => void
-  onDuplicate: () => void
 }
 
 export function AgentForm({
@@ -44,8 +39,6 @@ export function AgentForm({
   formModel,
   formPrompt,
   formError,
-  saving,
-  loadingModel,
   isReadOnly,
   availableTools,
   providers,
@@ -57,9 +50,6 @@ export function AgentForm({
   onColorChange,
   onModelChange,
   onPromptChange,
-  onSave,
-  onCancel,
-  onDuplicate,
 }: AgentFormProps) {
   const granularTools = parseAllowedTools(formTools)
   const filteredTools = availableTools.filter((t) => !(formSubagent && t.topLevelOnly) && !t.isMcp)
@@ -374,7 +364,6 @@ export function AgentForm({
                               onKeyDown={handleKeyDown}
                               placeholder="Search MCP tools..."
                               className="w-full px-2 py-1 text-xs bg-bg-primary border border-border rounded font-mono focus:outline-none focus:ring-1 focus:ring-accent-primary"
-                              autoFocus
                             />
                           </div>
                           <div ref={listRef} className="max-h-60 overflow-y-auto">
@@ -426,23 +415,6 @@ export function AgentForm({
           className={`h-80 w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-primary ${isReadOnly ? 'opacity-60' : ''}`}
         />
       </div>
-
-      <ModalActions
-        onCancel={onCancel}
-        onSave={onSave}
-        saving={saving}
-        saveDisabled={!formName || !formPrompt || isReadOnly || loadingModel}
-      />
-      {isReadOnly && (
-        <div className="flex justify-end mt-2">
-          <button
-            onClick={onDuplicate}
-            className="px-3 py-1.5 rounded bg-accent-primary/20 text-sm text-accent-primary font-medium hover:bg-accent-primary/30 transition-colors"
-          >
-            Duplicate & Customize
-          </button>
-        </div>
-      )}
     </div>
   )
 }

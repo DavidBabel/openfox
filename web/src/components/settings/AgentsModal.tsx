@@ -4,7 +4,7 @@ import { useAgentsStore, type AgentFull } from '../../stores/agents'
 import { useConfigStore } from '../../stores/config'
 import { useSessionStore } from '../../stores/session'
 import { authFetch } from '../../lib/api'
-import { CRUDListHeader, useConfirmDialog, DestinationSelector } from './CRUDModal'
+import { CRUDListHeader, useConfirmDialog, DestinationSelector, ModalActions } from './CRUDModal'
 import { AgentGroup } from './agents/AgentListItem'
 import { AgentForm } from './agents/AgentForm'
 import { ModelPicker } from '../shared/ModelPicker'
@@ -283,6 +283,30 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
           onClose={handleCancel}
           title={isReadOnly ? `${formName}` : editingId ? 'Edit Agent' : 'New Agent'}
           size="xl"
+          footer={
+            isReadOnly ? (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setFormName(formName + ' (copy)')
+                    setFormId(`${editingId}-copy-${Date.now()}`)
+                    setEditingId(null)
+                    setIsReadOnly(false)
+                  }}
+                  className="px-3 py-1.5 rounded bg-accent-primary/20 text-sm text-accent-primary font-medium hover:bg-accent-primary/30 transition-colors"
+                >
+                  Duplicate & Customize
+                </button>
+              </div>
+            ) : (
+              <ModalActions
+                onCancel={handleCancel}
+                onSave={handleSave}
+                saving={saving}
+                saveDisabled={!formName || !formPrompt || loadingModel}
+              />
+            )
+          }
         >
           {!editingId && !isReadOnly && <DestinationSelector value={formDestination} onChange={setFormDestination} />}
           <AgentForm
@@ -295,8 +319,6 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
             formModel={formModel}
             formPrompt={formPrompt}
             formError={formError}
-            saving={saving}
-            loadingModel={loadingModel}
             isReadOnly={isReadOnly}
             availableTools={availableTools}
             providers={useConfigStore.getState().providers}
@@ -313,14 +335,6 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
             onColorChange={setFormColor}
             onModelChange={setFormModel}
             onPromptChange={setFormPrompt}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            onDuplicate={() => {
-              setFormName(formName + ' (copy)')
-              setFormId(`${editingId}-copy-${Date.now()}`)
-              setEditingId(null)
-              setIsReadOnly(false)
-            }}
           />
         </Modal>
         <BuiltInModelModal

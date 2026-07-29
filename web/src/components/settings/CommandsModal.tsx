@@ -12,6 +12,7 @@ import {
   DuplicateIcon,
   ErrorBanner,
   DestinationSelector,
+  ModalActions,
 } from './CRUDModal'
 import { ItemsHeader } from '../shared/ItemsHeader'
 import { CRUDListHeader } from './CRUDListHeader'
@@ -344,7 +345,20 @@ export function CommandsModal({ isOpen, onClose, initialEditId }: CommandsModalP
 
   if (view === 'edit') {
     return (
-      <Modal isOpen={isOpen} onClose={handleCancel} title={editingId ? 'Edit Command' : 'New Command'} size="xl">
+      <Modal
+        isOpen={isOpen}
+        onClose={handleCancel}
+        title={editingId ? 'Edit Command' : 'New Command'}
+        size="xl"
+        footer={
+          <ModalActions
+            onCancel={handleCancel}
+            onSave={handleSave}
+            saving={saving}
+            saveDisabled={!formData.name || !formData.prompt}
+          />
+        }
+      >
         <div className="flex flex-col h-full">
           {formError && <ErrorBanner message={formError} />}
 
@@ -395,15 +409,6 @@ export function CommandsModal({ isOpen, onClose, initialEditId }: CommandsModalP
               placeholder="The message that will be sent when this command is triggered..."
               className="h-80 w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-primary"
             />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 mt-3 border-t border-border flex-shrink-0">
-            <Button variant="secondary" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleSave} disabled={saving || !formData.name || !formData.prompt}>
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
           </div>
         </div>
       </Modal>
