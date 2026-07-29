@@ -95,19 +95,26 @@ vi.mock('../shared/ProviderModal', () => ({
   providerFormPayload: (data: any) => data,
 }))
 
-vi.mock('../../stores/agents', () => ({
-  useAgentsStore: (selector: any) => {
-    const state = {
-      defaults: [
-        { id: 'planner', name: 'Planner', color: '#a855f7', subagent: false, allowedTools: [], description: '' },
-        { id: 'builder', name: 'Builder', color: '#3b82f6', subagent: false, allowedTools: [], description: '' },
-      ],
-      userItems: [],
-    }
+vi.mock('../../stores/agents', () => {
+  let state = {
+    defaults: [
+      { id: 'planner', name: 'Planner', color: '#a855f7', subagent: false, allowedTools: [], description: '' },
+      { id: 'builder', name: 'Builder', color: '#3b82f6', subagent: false, allowedTools: [], description: '' },
+    ],
+    userItems: [],
+    modelOverrides: {},
+  }
+  const fn = vi.fn((selector?: (s: typeof state) => any) => {
     return selector ? selector(state) : state
-  },
-  getAgentColor: () => '#a855f7',
-}))
+  })
+  ;(fn as any).setState = (partial: Record<string, any>) => {
+    state = { ...state, ...partial }
+  }
+  return {
+    useAgentsStore: fn,
+    getAgentColor: () => '#a855f7',
+  }
+})
 
 vi.mock('../../hooks/useKeybindings', () => ({
   useKeybindings: () => ({
@@ -135,6 +142,11 @@ async function setConfigState(partial: Record<string, any>) {
 async function setSessionState(partial: Record<string, any>) {
   const { useSessionStore } = await import('../../stores/session')
   ;(useSessionStore as unknown as MockStore).setState(partial)
+}
+
+async function setAgentsState(partial: Record<string, any>) {
+  const { useAgentsStore } = await import('../../stores/agents')
+  ;(useAgentsStore as unknown as MockStore).setState(partial)
 }
 
 describe('ProviderSelector', () => {
@@ -278,6 +290,118 @@ describe('ProviderSelector', () => {
     expect(button.textContent).toContain('Anthropic')
     expect(button.textContent).toContain('claude opus 4')
     expect(button.textContent).toContain('•')
+  })
+
+  it('[AUTOMATED] shows agent override indicator when current agent has model override in store', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({
+      modelOverrides: { planner: 'provider-1/gpt-4' },
+    })
+    render(<ProviderSelector />)
+    // Colored dot should be rendered (indicates override is active)
+    const dot = document.querySelector('.w-2\\.5')
+    expect(dot).toBeTruthy()
+  })
+
+  it('[AUTOMATED] no agent override indicator when agent has no model override', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({
+      modelOverrides: {},
+    })
+    render(<ProviderSelector />)
+    const dot = document.querySelector('.w-2\\.5')
+    expect(dot).toBeFalsy()
+  })
+
+  it('[AUTOMATED] reacts to modelOverrides store changes', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({
+      modelOverrides: {},
+    })
+    const { rerender } = render(<ProviderSelector />)
+
+    // Initially no dot
+    let dot = document.querySelector('.w-2\\.5')
+    expect(dot).toBeFalsy()
+
+    // Update store with override
+    await setAgentsState({
+      modelOverrides: { planner: 'provider-1/gpt-4' },
+    })
+    rerender(<ProviderSelector />)
+
+    // Dot should appear
+    dot = document.querySelector('.w-2\\.5')
+    expect(dot).toBeTruthy()
   })
 })
 

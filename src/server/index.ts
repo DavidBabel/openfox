@@ -811,10 +811,23 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { buildMessagesFromStoredEvents, foldPendingConfirmations } = await import('./events/folding.js')
     const { getPendingQuestionsForSession } = await import('./tools/index.js')
     const { getMaxVisibleItems } = await import('./db/settings.js')
+    const { getAgentModelOverride } = await import('./agents/model-overrides.js')
+    const { updateSessionProvider } = await import('./db/sessions.js')
 
-    const session = sessionManager.getSession(req.params.id)
+    let session = sessionManager.getSession(req.params.id)
     if (!session) {
       return res.status(404).json({ error: 'Session not found' })
+    }
+
+    // If session has no explicit provider but the current agent has a model override, apply it.
+    // This ensures the ProviderSelector always shows the correct model on page load.
+    // Manual selections (non-null providerId) are never overwritten.
+    if (!session.providerId && session.mode) {
+      const override = getAgentModelOverride(session.mode)
+      if (override) {
+        updateSessionProvider(session.id, override.providerId, override.model)
+        session = sessionManager.getSession(session.id)
+      }
     }
 
     const eventStore = getEventStore()
@@ -1059,12 +1072,24 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     sessionManager.setMode(sessionId, mode)
 
-    // Auto-set session provider/model: override if agent has one, else reset to default
+    // Auto-set session provider/model: override if agent has one, else reset to default.
+    // When resetting to default, also activate the global default provider/model so the
+    // LLM client is ready for the next turn — otherwise a stale override client lingers.
     const override = getAgentModelOverride(mode)
     if (override) {
       updateSessionProvider(sessionId, override.providerId, override.model)
     } else {
       updateSessionProvider(sessionId, null, null)
+      const { providerId: defaultProviderId, model: defaultModel } = parseDefaultModelSelection(
+        config.defaultModelSelection,
+      )
+      if (defaultProviderId && defaultModel) {
+        const currentActiveProviderId = providerManager.getActiveProviderId()
+        const currentModel = providerManager.getCurrentModel()
+        if (currentActiveProviderId !== defaultProviderId || currentModel !== defaultModel) {
+          await providerManager.activateProvider(defaultProviderId, { model: defaultModel })
+        }
+      }
     }
 
     const eventStore = getEventStore()

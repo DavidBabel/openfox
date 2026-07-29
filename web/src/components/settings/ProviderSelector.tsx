@@ -96,51 +96,32 @@ export function ProviderSelector() {
   const keybindings = useKeybindings()
   useBinding(keybindings.modelSelector, () => setIsOpen((prev) => !prev))
 
-  // Derive effective provider and model: session override wins, else global default
+  // Derive effective provider and model:
+  // Agent override takes precedence, then session, then global default
   const sessionProviderId = currentSession?.providerId ?? null
   const sessionModel = currentSession?.providerModel ?? null
   const defaultProviderId = defaultModelSelection?.split('/')[0] ?? null
   const defaultModel = defaultModelSelection?.split('/').slice(1).join('/') ?? null
 
-  const effectiveProviderId = sessionProviderId ?? defaultProviderId
-  const effectiveModel = sessionModel ?? defaultModel
-  const shortModelName = effectiveModel
-    ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
-    : 'No model'
-
-  // Agent model override indicator
+  // Agent model override — sourced from the agents store (populated via fetchAgents)
   const agentDefaults = useAgentsStore((state) => state.defaults)
   const agentUserItems = useAgentsStore((state) => state.userItems)
+  const modelOverrides = useAgentsStore((state) => state.modelOverrides)
   const currentAgentId = currentSession?.mode
   const currentAgent = currentAgentId
     ? (agentDefaults.find((a) => a.id === currentAgentId) ?? agentUserItems.find((a) => a.id === currentAgentId))
     : undefined
-  const [agentOverride, setAgentOverride] = useState<string | undefined>(undefined)
+  const agentOverride = currentAgentId ? (modelOverrides[currentAgentId] ?? undefined) : undefined
+  const agentOverrideProviderId = agentOverride ? (agentOverride.split('/')[0] ?? null) : null
+  const agentOverrideModel = agentOverride ? (agentOverride.split('/').slice(1).join('/') ?? null) : null
   const agentColor = currentAgentId ? getAgentColor([...agentDefaults, ...agentUserItems], currentAgentId) : undefined
 
-  // Fetch the agent's model override when the session mode changes
-  useEffect(() => {
-    if (!currentAgentId) {
-      setAgentOverride(undefined)
-      return
-    }
-    authFetch(`/api/agents/${currentAgentId}/model`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.providerId && data.model) {
-          setAgentOverride(`${data.providerId}/${data.model}`)
-        } else {
-          setAgentOverride(undefined)
-        }
-      })
-      .catch(() => setAgentOverride(undefined))
-  }, [currentAgentId])
-
-  const isAgentOverrideActive = !!(
-    agentOverride &&
-    sessionModel &&
-    agentOverride === `${sessionProviderId}/${sessionModel}`
-  )
+  const isAgentOverrideActive = !!agentOverride
+  const effectiveProviderId = agentOverrideProviderId ?? sessionProviderId ?? defaultProviderId
+  const effectiveModel = agentOverrideModel ?? sessionModel ?? defaultModel
+  const shortModelName = effectiveModel
+    ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
+    : 'No model'
 
   const [settingDefault, setSettingDefault] = useState(false)
 
@@ -382,6 +363,18 @@ export function ProviderSelector() {
   }
 
   const handleModelClick = async (providerId: string, newModel: string) => {
+    // When user manually picks a model that differs from the agent override, clear the override
+    // so their selection truly sticks (the server always prefers the override at runtime).
+    if (currentAgentId && agentOverride && agentOverride !== `${providerId}/${newModel}`) {
+      authFetch(`/api/agents/${currentAgentId}/model`, { method: 'DELETE' }).catch(() => {})
+      // Optimistically update the store so the UI reflects the change immediately
+      useAgentsStore.setState((state) => {
+        const next = { ...state.modelOverrides }
+        delete next[currentAgentId]
+        return { modelOverrides: next }
+      })
+    }
+
     if (currentSession) {
       useSessionStore.setState((state) => ({
         currentSession: state.currentSession ? { ...state.currentSession, providerId, providerModel: newModel } : null,

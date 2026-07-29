@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { useAgentsStore, type AgentFull } from '../../stores/agents'
 import { useConfigStore } from '../../stores/config'
+import { useSessionStore } from '../../stores/session'
 import { authFetch } from '../../lib/api'
 import { CRUDListHeader, useConfirmDialog, DestinationSelector } from './CRUDModal'
 import { AgentGroup } from './agents/AgentListItem'
@@ -236,6 +237,14 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
     // Re-fetch agents so the list reflects the updated model override badge
     await fetchAgents()
 
+    // Propagate to current session if this agent is active
+    const agentId = editingId ?? formId
+    const currentSession = useSessionStore.getState().currentSession
+    if (currentSession?.mode === agentId && formModel) {
+      const { providerId, model } = parseModelOverride(formModel)
+      useSessionStore.getState().setSessionProvider(providerId, model)
+    }
+
     setSaving(false)
 
     if (initialEditId) onClose()
@@ -458,6 +467,14 @@ function BuiltInModelModal({
     setError(null)
     try {
       await saveAgentModelOverride(agentId, value)
+
+      // Propagate to current session if this agent is active
+      const currentSession = useSessionStore.getState().currentSession
+      if (currentSession?.mode === agentId && value) {
+        const { providerId, model } = parseModelOverride(value)
+        useSessionStore.getState().setSessionProvider(providerId, model)
+      }
+
       onSaved()
       onClose()
     } catch {
