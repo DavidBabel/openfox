@@ -249,6 +249,10 @@ export async function executeWorkflow(
   // Resume support: if resuming from a user step, start from that step with accumulated output
   const resumeFromStep = options.resumeFromStep
   const isResume = !!resumeFromStep
+  // Tracks whether we've already done the "skip prompt/nudge because we're resuming"
+  // for this resume. After the first resumed runAgentTurn completes, this flips to
+  // true so subsequent iterations of the same step get the nudge.
+  let resumeConsumed = false
   let currentStepId = isResume
     ? resumeFromStep
     : subGroup
@@ -437,7 +441,7 @@ export async function executeWorkflow(
         // When resuming from the same step after abort, skip re-injecting the prompt
         // or nudge — the agent already knows what step it's in and the user's message
         // (which triggered the resume) is already in context. Just let it continue naturally.
-        const isResumingCurrentStep = isResume && step.id === resumeFromStep
+        const isResumingCurrentStep = isResume && step.id === resumeFromStep && !resumeConsumed
 
         if (!firstEntryForStep.has(step.id) && agentStep.prompt && !isResumingCurrentStep) {
           const resolvedPrompt = resolveTemplate(agentStep.prompt, templateCtx)
@@ -514,6 +518,9 @@ export async function executeWorkflow(
         )
 
         firstEntryForStep.add(step.id)
+        // After the first resumed turn completes, mark resume as consumed so
+        // subsequent iterations of this step get the nudge if step_done wasn't called.
+        resumeConsumed = true
         const agentReturnValue = agentResult.returnValueResult ?? 'completed'
         lastStepOutput = {
           ...(agentResult.returnValueContent ? { content: agentResult.returnValueContent } : {}),
