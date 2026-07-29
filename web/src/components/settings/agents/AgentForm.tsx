@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { FormField, ModalActions, ErrorBanner } from '../CRUDModal'
 import { DropdownMenu } from '../../shared/DropdownMenu'
 import { ModelPicker } from '../../shared/ModelPicker'
@@ -71,17 +71,6 @@ export function AgentForm({
     const group = mcpGroups.get(server) ?? []
     group.push(tool)
     mcpGroups.set(server, group)
-  }
-
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-
-  const toggleGroup = (server: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(server)) next.delete(server)
-      else next.add(server)
-      return next
-    })
   }
 
   const toggleToolAction = (toolName: string, action: string) => {
@@ -284,66 +273,150 @@ export function AgentForm({
           </div>
         </div>
 
-        {mcpGroups.size > 0 && (
-          <div>
-            <label className="block text-xs text-text-secondary mb-1">
-              MCP Tools <span className="text-text-muted font-normal">— from connected MCP servers</span>
-            </label>
-            <div className="bg-bg-tertiary border border-border rounded overflow-hidden">
-              {Array.from(mcpGroups.entries()).map(([server, tools]) => {
-                const isExpanded = expandedGroups.has(server)
-                const selectedCount = tools.filter((t) => granularTools.has(t.name)).length
-                return (
-                  <div key={server} className="border-b border-border last:border-b-0">
-                    <button
-                      onClick={() => toggleGroup(server)}
-                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-bg-primary/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-text-primary">{server}</span>
-                        <span className="text-xs text-text-muted">
-                          ({selectedCount}/{tools.length})
+        {mcpGroups.size > 0 &&
+          (() => {
+            const allMcpToolNames = new Set(mcpTools.map((t) => t.name))
+            const hasMcpNone = granularTools.has('__mcp_none__')
+            const hasMcpSpecific = [...granularTools.keys()].some((k) => allMcpToolNames.has(k))
+            const mcpMode: 'all' | 'none' | 'partial' = hasMcpNone ? 'none' : hasMcpSpecific ? 'partial' : 'all'
+
+            const setMcpMode = (mode: 'all' | 'none' | 'partial') => {
+              const next = new Map(granularTools)
+              for (const k of next.keys()) {
+                if (k === '__mcp_none__' || allMcpToolNames.has(k)) {
+                  next.delete(k)
+                }
+              }
+              if (mode === 'none') {
+                next.set('__mcp_none__', new Set())
+              }
+              if (mode === 'partial') {
+                for (const name of allMcpToolNames) {
+                  next.set(name, new Set())
+                }
+              }
+              onToolsChange(serializeTools(next))
+            }
+
+            return (
+              <div>
+                <label className="block text-xs text-text-secondary mb-1">
+                  MCP Tools <span className="text-text-muted font-normal">— from connected MCP servers</span>
+                </label>
+                <div className="bg-bg-tertiary border border-border rounded overflow-hidden">
+                  <div className="flex items-center gap-4 px-3 py-1.5">
+                    {(['all', 'none', 'partial'] as const).map((mode) => (
+                      <label
+                        key={mode}
+                        className={`flex items-center gap-1.5 text-xs cursor-pointer ${isReadOnly ? 'pointer-events-none opacity-60' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="mcp-mode"
+                          checked={mcpMode === mode}
+                          onChange={() => setMcpMode(mode)}
+                          disabled={isReadOnly}
+                          className="w-3 h-3 accent-accent-primary"
+                        />
+                        <span className={mcpMode === mode ? 'text-text-primary font-medium' : 'text-text-muted'}>
+                          {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                          {mode === 'partial' && allMcpToolNames.size > 0 && (
+                            <span className="ml-1 text-text-muted font-normal">
+                              ({[...granularTools.keys()].filter((k) => allMcpToolNames.has(k)).length}/
+                              {allMcpToolNames.size})
+                            </span>
+                          )}
                         </span>
-                      </div>
-                      <span className="text-xs text-text-muted">{isExpanded ? '▲' : '▼'}</span>
-                    </button>
-                    {isExpanded && (
-                      <div className="border-t border-border px-2 py-1 space-y-0.5">
-                        {tools.map((tool) => {
-                          const isSelected = granularTools.has(tool.name)
-                          const shortName = tool.mcpServer
-                            ? tool.name.slice(tool.mcpServer.length + 1) || tool.name
-                            : tool.name
-                          return (
-                            <div
-                              key={tool.name}
-                              className="flex items-center justify-between py-1 px-1 rounded hover:bg-bg-primary/50 transition-colors"
-                            >
-                              <span
-                                className={`text-xs font-mono ${isSelected ? 'text-text-primary' : 'text-text-muted'}`}
-                              >
-                                {shortName}
-                              </span>
-                              <Toggle
-                                enabled={isSelected}
-                                onClick={() => !isReadOnly && toggleTool(tool.name)}
-                                disabled={isReadOnly}
-                                label={tool.name}
-                              />
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                      </label>
+                    ))}
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+                  {mcpMode === 'partial' &&
+                    (() => {
+                      const [search, setSearch] = useState('')
+                      const [focusIdx, setFocusIdx] = useState(0)
+                      const listRef = useRef<HTMLDivElement>(null)
+
+                      const scrollToFocus = (idx: number) => {
+                        const el = listRef.current?.querySelector(`[data-idx="${idx}"]`)
+                        el?.scrollIntoView({ block: 'nearest' })
+                      }
+
+                      useEffect(() => {
+                        scrollToFocus(focusIdx)
+                      }, [focusIdx])
+                      const filtered = search
+                        ? mcpTools.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
+                        : mcpTools
+
+                      const handleKeyDown = (e: { key: string; preventDefault: () => void }) => {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault()
+                          setFocusIdx((i) => Math.min(i + 1, filtered.length - 1))
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault()
+                          setFocusIdx((i) => Math.max(i - 1, 0))
+                        } else if (e.key === 'Enter' && filtered[focusIdx]) {
+                          e.preventDefault()
+                          toggleTool(filtered[focusIdx].name)
+                        }
+                      }
+
+                      return (
+                        <div>
+                          <div className="px-3 py-2 border-b border-border">
+                            <input
+                              type="text"
+                              value={search}
+                              onChange={(e) => {
+                                setSearch(e.target.value)
+                                setFocusIdx(0)
+                              }}
+                              onKeyDown={handleKeyDown}
+                              placeholder="Search MCP tools..."
+                              className="w-full px-2 py-1 text-xs bg-bg-primary border border-border rounded font-mono focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                              autoFocus
+                            />
+                          </div>
+                          <div ref={listRef} className="max-h-60 overflow-y-auto">
+                            {filtered.map((tool, idx) => {
+                              const isSelected = granularTools.has(tool.name)
+                              const isFocused = idx === focusIdx
+                              return (
+                                <div
+                                  key={tool.name}
+                                  data-idx={idx}
+                                  className={`flex items-center justify-between px-3 py-1.5 transition-colors ${
+                                    isFocused ? 'bg-bg-primary' : 'hover:bg-bg-primary/30'
+                                  }`}
+                                  onMouseEnter={() => setFocusIdx(idx)}
+                                >
+                                  <span
+                                    className={`text-xs font-mono ${isSelected ? 'text-text-primary' : 'text-text-muted'}`}
+                                  >
+                                    {tool.name}
+                                  </span>
+                                  <Toggle
+                                    enabled={isSelected}
+                                    onClick={() => toggleTool(tool.name)}
+                                    label={tool.name}
+                                  />
+                                </div>
+                              )
+                            })}
+                            {filtered.length === 0 && (
+                              <div className="px-3 py-2 text-xs text-text-muted">No MCP tools match your search.</div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                </div>
+              </div>
+            )
+          })()}
       </div>
 
-      <div className="flex-1 min-h-[150px] border-t border-border pt-3 flex flex-col">
+      <div className="flex-1 min-h-[150px] pt-3 flex flex-col">
         <label className="block text-xs text-text-secondary mb-1">Prompt</label>
         <textarea
           value={formPrompt}

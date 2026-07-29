@@ -427,6 +427,62 @@ describe('tool registries', () => {
     setMcpTools([])
   })
 
+  it('MCP tools can be restricted to none via __mcp_none__', async () => {
+    const { setMcpTools, createRegistryFromTools } = await import('./index.js')
+    const mcpTool = {
+      name: 'everything_echo',
+      definition: {
+        type: 'function' as const,
+        function: { name: 'everything_echo', description: 'Echo', parameters: {} },
+      },
+      execute: vi.fn(async () => ({ success: true, output: 'echo', durationMs: 1, truncated: false })),
+    }
+    setMcpTools([mcpTool])
+
+    const registry = createRegistryFromTools([mcpTool], ['__mcp_none__'])
+    const context = { workdir: '/tmp/project', sessionId: 'session-1', sessionManager: {} as never }
+
+    const result = await registry.execute('everything_echo', { message: 'hi' }, context)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not in your allowed tools list')
+
+    setMcpTools([])
+  })
+
+  it('MCP tools can be restricted to specific tools only', async () => {
+    const { setMcpTools, createRegistryFromTools } = await import('./index.js')
+    const echoTool = {
+      name: 'everything_echo',
+      definition: {
+        type: 'function' as const,
+        function: { name: 'everything_echo', description: 'Echo', parameters: {} },
+      },
+      execute: vi.fn(async () => ({ success: true, output: 'echo', durationMs: 1, truncated: false })),
+    }
+    const addTool = {
+      name: 'everything_add',
+      definition: {
+        type: 'function' as const,
+        function: { name: 'everything_add', description: 'Add', parameters: {} },
+      },
+      execute: vi.fn(async () => ({ success: true, output: 'sum', durationMs: 1, truncated: false })),
+    }
+    setMcpTools([echoTool, addTool])
+
+    const registry = createRegistryFromTools([echoTool, addTool], ['everything_echo'])
+    const context = { workdir: '/tmp/project', sessionId: 'session-1', sessionManager: {} as never }
+
+    const allowed = await registry.execute('everything_echo', { message: 'hi' }, context)
+    expect(allowed).toMatchObject({ success: true, output: 'echo' })
+
+    const denied = await registry.execute('everything_add', { a: 1, b: 2 }, context)
+    expect(denied.success).toBe(false)
+    expect(denied.error).toContain('not in your allowed tools list')
+
+    setMcpTools([])
+  })
+
   it('builder can still use write_file (unchanged)', async () => {
     const registry = getToolRegistryForAgent(builderDef)
     const context = { workdir: '/tmp/project', sessionId: 'session-1', sessionManager: {} as never }

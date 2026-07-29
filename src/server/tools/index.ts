@@ -163,12 +163,45 @@ export function createRegistryFromTools(
       const tool = toolMap.get(name)
 
       if (tool) {
-        // MCP tools are user-configured and always allowed for top-level agents
         const isMcpTool = !getBuiltInToolNames().has(name)
 
         // allowedTools === undefined → no restrictions (all tools allowed)
-        // allowedTools === [...] → only effective tools + MCP tools allowed
         const hasRestrictions = allowedTools !== undefined
+
+        if (isMcpTool && hasRestrictions) {
+          // Check if MCP tools are explicitly restricted
+          const hasMcpNone = allowedTools!.includes('__mcp_none__')
+          const hasMcpSpecific = allowedTools!.some((t) => !getBuiltInToolNames().has(t) && t !== '__mcp_none__')
+
+          if (hasMcpNone) {
+            // __mcp_none__ → all MCP tools denied
+            logger.debug('Permission denied: MCP tools disabled for this agent', {
+              tool: name,
+              allowedTools,
+            })
+            return {
+              success: false,
+              error: createPermissionErrorMessage(name, allowedTools, agentId, isSubAgent),
+              durationMs: 0,
+              truncated: false,
+            }
+          }
+
+          if (hasMcpSpecific && !allowedTools!.includes(name)) {
+            // Specific MCP tools listed → only those are allowed
+            logger.debug('Permission denied: MCP tool not in allowed list', {
+              tool: name,
+              allowedTools,
+            })
+            return {
+              success: false,
+              error: createPermissionErrorMessage(name, allowedTools, agentId, isSubAgent),
+              durationMs: 0,
+              truncated: false,
+            }
+          }
+          // No MCP restrictions → all MCP tools allowed (default)
+        }
 
         if (!isMcpTool && hasRestrictions) {
           const effectiveTools = computeEffectiveTools(allowedTools!, isSubAgent ? 'sub-agent' : 'agent')
