@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdir, writeFile, rm, access, constants } from 'node:fs/promises'
+
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -45,7 +46,62 @@ function exec(command: string, args: string[] = []): Promise<void> {
   })
 }
 
-async function createWrapperScript(): Promise<void> {
+const DISPLAY_POLLING_BLOCK = `
+if [ -z "$DISPLAY" ] || [ -z "$WAYLAND_DISPLAY" ]; then
+  for _ in 0 1 2 3 4; do
+    if [ -z "$DISPLAY" ]; then
+      xdisplay=$(
+        ps aux --no-headers 2>/dev/null \\
+          | grep -v grep \\
+          | grep "Xwayland" \\
+          | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^:[0-9]+$/) print $i }'
+      )
+      if [ -n "$xdisplay" ]; then
+        export DISPLAY="$xdisplay"
+        for f in "$HOME/.Xauthority" "\${XDG_RUNTIME_DIR}"/xauth_*; do
+          [ -f "$f" ] && export XAUTHORITY="$f" && break
+        done 2>/dev/null
+      fi
+    fi
+
+    if [ -z "$WAYLAND_DISPLAY" ]; then
+      socket="\${XDG_RUNTIME_DIR}/wayland-0"
+      [ -e "$socket" ] || socket="\${XDG_RUNTIME_DIR}/wayland-1"
+      [ -e "$socket" ] && export WAYLAND_DISPLAY="\${socket##*/}"
+    fi
+
+    [ -n "$DISPLAY" ] && [ -n "$WAYLAND_DISPLAY" ] && break
+    sleep 2
+  done
+fi
+`
+
+export async function detectHeadless(): Promise<boolean> {
+  if (process.env['DISPLAY'] || process.env['WAYLAND_DISPLAY']) {
+    return false
+  }
+
+  try {
+    await access('/tmp/.X11-unix/X0', constants.F_OK)
+    return false
+  } catch {
+    // ignore
+  }
+
+  const runtimeDir = process.env['XDG_RUNTIME_DIR']
+  if (runtimeDir) {
+    try {
+      await access(join(runtimeDir, 'wayland-0'), constants.F_OK)
+      return false
+    } catch {
+      // ignore
+    }
+  }
+
+  return true
+}
+
+async function createWrapperScript(headless: boolean): Promise<void> {
   const binDir = expandPath('~/.local/state/openfox/bin')
   await mkdir(binDir, { recursive: true })
 
@@ -53,7 +109,7 @@ async function createWrapperScript(): Promise<void> {
   const scriptContent = `#!/bin/bash
 source ~/.profile 2>/dev/null || true
 source ~/.bashrc 2>/dev/null || true
-
+${headless ? '' : DISPLAY_POLLING_BLOCK}
 # Find openfox - respect user's PATH, fallback to nvm search for non-interactive cases
 if ! openfox_bin=$(which openfox 2>/dev/null); then
   openfox_bindir=""
@@ -80,14 +136,17 @@ exec "$openfox_bin" "$@"
   console.log(`Created: ${scriptPath}`)
 }
 
-async function createSystemdService(): Promise<void> {
+async function createSystemdService(headless: boolean): Promise<void> {
   const serviceDir = expandPath('~/.config/systemd/user')
   await mkdir(serviceDir, { recursive: true })
+
+  const target = headless ? 'default.target' : 'graphical-session.target'
+  const wants = headless ? '' : '\nWants=graphical-session.target'
 
   const servicePath = expandPath(SERVICE_PATH)
   const serviceContent = `[Unit]
 Description=OpenFox Agentic Coding Assistant
-After=default.target
+After=${target}${wants}
 
 [Service]
 Type=simple
@@ -98,7 +157,7 @@ KillMode=control-group
 Environment=OPENFOX_SERVICE=true
 
 [Install]
-WantedBy=default.target
+WantedBy=${target}
 `
   await writeFile(servicePath, serviceContent, 'utf-8')
   console.log(`Created: ${servicePath}`)
@@ -115,10 +174,23 @@ export async function runServiceCommand(_mode: Mode, subcommand?: string, ...arg
     return
   }
 
+  const headlessFlag = args.includes('--headless')
+  const desktopFlag = args.includes('--desktop')
+
   switch (subcommand) {
-    case 'install':
-      await serviceInstall()
+    case 'install': {
+      let headlessOverride: boolean | undefined
+      if (headlessFlag && desktopFlag) {
+        console.error('Cannot use both --headless and --desktop')
+        process.exit(1)
+      } else if (headlessFlag) {
+        headlessOverride = true
+      } else if (desktopFlag) {
+        headlessOverride = false
+      }
+      await serviceInstall(headlessOverride)
       break
+    }
     case 'start':
       await serviceStart()
       break
@@ -153,6 +225,8 @@ Usage:
 
 Commands:
   install    Install and enable the systemd service
+             Use --headless for headless/CLI-only servers
+             Use --desktop to force desktop mode (default when display detected)
   start      Start the service (if installed)
   stop       Stop the service (if installed)
   restart    Restart the service (if installed)
@@ -162,8 +236,15 @@ Commands:
 `)
 }
 
-async function serviceInstall(): Promise<void> {
-  console.log('Installing OpenFox service...\n')
+async function serviceInstall(headlessOverride?: boolean): Promise<void> {
+  const headless = headlessOverride ?? (await detectHeadless())
+
+  if (headless) {
+    console.log('Installing OpenFox service (headless mode)...\n')
+  } else {
+    console.log('Installing OpenFox service (desktop mode)...\n')
+    console.log('  Tip: Use --headless for headless/CLI-only servers')
+  }
 
   const installed = await pathExists(SERVICE_PATH)
   if (installed) {
@@ -176,8 +257,8 @@ async function serviceInstall(): Promise<void> {
     await serviceUninstall()
   }
 
-  await createWrapperScript()
-  await createSystemdService()
+  await createWrapperScript(headless)
+  await createSystemdService(headless)
 
   systemctl(['daemon-reload'])
   systemctl(['enable', SERVICE_NAME])

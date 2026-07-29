@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { spawnSync, spawn } from 'node:child_process'
-import { runServiceCommand } from './service.js'
+import { runServiceCommand, detectHeadless } from './service.js'
 
 vi.mock('node:fs/promises', () => ({
   access: vi.fn(),
@@ -40,6 +40,146 @@ describe('service on Windows', () => {
     expect(process.exitCode).toBe(1)
     expect(mockSpawnSync).not.toHaveBeenCalled()
     expect(mockSpawn).not.toHaveBeenCalled()
+    mockLog.mockRestore()
+  })
+})
+
+describe('detectHeadless', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    setPlatform('linux')
+  })
+
+  afterEach(() => {
+    setPlatform(realPlatform)
+    delete process.env['DISPLAY']
+    delete process.env['WAYLAND_DISPLAY']
+    delete process.env['XDG_RUNTIME_DIR']
+  })
+
+  it('returns false when DISPLAY is set', async () => {
+    process.env['DISPLAY'] = ':0'
+    await expect(detectHeadless()).resolves.toBe(false)
+  })
+
+  it('returns false when WAYLAND_DISPLAY is set', async () => {
+    process.env['WAYLAND_DISPLAY'] = 'wayland-0'
+    await expect(detectHeadless()).resolves.toBe(false)
+  })
+
+  it('returns true when no display env vars and no sockets', async () => {
+    const { access } = vi.mocked(await import('node:fs/promises'))
+    access.mockRejectedValue(new Error('not found'))
+    await expect(detectHeadless()).resolves.toBe(true)
+  })
+})
+
+describe('service install', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    setPlatform('linux')
+    const { access, mkdir, writeFile } = vi.mocked(await import('node:fs/promises'))
+    access.mockRejectedValue(new Error('not found'))
+    mkdir.mockResolvedValue(undefined)
+    writeFile.mockResolvedValue(undefined)
+    mockSpawnSync.mockReturnValue({
+      stdout: '',
+      stderr: '',
+      status: 0,
+      pid: 0,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>)
+    mockSpawn.mockReturnValue({
+      on: vi.fn((event, cb) => {
+        if (event === 'exit') cb(0)
+        return undefined!
+      }),
+      stdout: null,
+      stderr: null,
+      pid: 999,
+      stdin: null,
+      connected: false,
+      exitCode: null,
+      signalCode: null,
+      killed: false,
+      kill: vi.fn(),
+      ref: vi.fn(),
+      unref: vi.fn(),
+    } as unknown as ReturnType<typeof spawn>)
+    delete process.env['DISPLAY']
+    delete process.env['WAYLAND_DISPLAY']
+  })
+
+  afterEach(() => {
+    setPlatform(realPlatform)
+  })
+
+  it('installs desktop-mode service by default when DISPLAY is set', async () => {
+    process.env['DISPLAY'] = ':0'
+
+    await runServiceCommand('production', 'install')
+
+    const { writeFile } = vi.mocked(await import('node:fs/promises'))
+    const calls = writeFile.mock.calls as [string, string, unknown][]
+
+    const serviceCall = calls.find(([p]) => p.includes('openfox.service'))
+    expect(serviceCall).toBeDefined()
+    expect(serviceCall![1]).toContain('graphical-session.target')
+    expect(serviceCall![1]).toContain('Wants=graphical-session.target')
+
+    const wrapperCall = calls.find(([p]) => p.includes('run.sh'))
+    expect(wrapperCall).toBeDefined()
+    expect(wrapperCall![1]).toContain('Xwayland')
+  })
+
+  it('installs headless-mode service when --headless flag given', async () => {
+    await runServiceCommand('production', 'install', '--headless')
+
+    const { writeFile } = vi.mocked(await import('node:fs/promises'))
+    const calls = writeFile.mock.calls as [string, string, unknown][]
+
+    const serviceCall = calls.find(([p]) => p.includes('openfox.service'))
+    expect(serviceCall).toBeDefined()
+    expect(serviceCall![1]).toContain('default.target')
+    expect(serviceCall![1]).not.toContain('graphical-session.target')
+    expect(serviceCall![1]).not.toContain('Wants=')
+
+    const wrapperCall = calls.find(([p]) => p.includes('run.sh'))
+    expect(wrapperCall).toBeDefined()
+    expect(wrapperCall![1]).not.toContain('Xwayland')
+  })
+
+  it('installs desktop-mode service when --desktop flag given in headless env', async () => {
+    await runServiceCommand('production', 'install', '--desktop')
+
+    const { writeFile } = vi.mocked(await import('node:fs/promises'))
+    const calls = writeFile.mock.calls as [string, string, unknown][]
+
+    const serviceCall = calls.find(([p]) => p.includes('openfox.service'))
+    expect(serviceCall).toBeDefined()
+    expect(serviceCall![1]).toContain('graphical-session.target')
+    expect(serviceCall![1]).toContain('Wants=graphical-session.target')
+  })
+
+  it('outputs hint about --headless when installing desktop mode', async () => {
+    process.env['DISPLAY'] = ':0'
+    const mockLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await runServiceCommand('production', 'install')
+
+    const output = mockLog.mock.calls.flat().join('\n')
+    expect(output).toContain('--headless')
+    mockLog.mockRestore()
+  })
+
+  it('outputs confirmation when installing headless mode', async () => {
+    const mockLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await runServiceCommand('production', 'install', '--headless')
+
+    const output = mockLog.mock.calls.flat().join('\n')
+    expect(output).toContain('headless')
     mockLog.mockRestore()
   })
 })
