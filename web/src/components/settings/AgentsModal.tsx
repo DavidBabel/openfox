@@ -233,6 +233,9 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
     // Save model override separately
     await saveAgentModelOverride(editingId ?? formId, formModel)
 
+    // Re-fetch agents so the list reflects the updated model override badge
+    await fetchAgents()
+
     setSaving(false)
 
     if (initialEditId) onClose()
@@ -344,35 +347,45 @@ export function AgentsModal({ isOpen, onClose, initialEditId }: AgentsModalProps
               />
             )}
 
-            {[
-              { title: 'Custom', agents: userTopLevelAgents, subagents: userSubAgents },
-              { title: 'Project', agents: projectTopLevelAgents, subagents: projectSubAgents },
-            ].map(
-              (section) =>
-                section.agents.length > 0 && (
-                  <AgentGroup
-                    key={section.title}
-                    title={section.title}
-                    agents={section.agents}
-                    subagents={section.subagents}
-                    isBuiltIn={false}
-                    alwaysAllowedNames={alwaysAllowedNames}
-                    modelOverrides={modelOverrides}
-                    isConfirmingDelete={(id) => isConfirming(id, 'delete')}
-                    onView={handleView}
-                    onDuplicate={handleDuplicate}
-                    onEdit={handleEdit}
-                    onDelete={(id) => {
-                      if (isConfirming(id, 'delete')) {
-                        handleDelete(id)
-                        clearConfirm()
-                      } else {
-                        requestDelete(id)
-                      }
-                    }}
-                    onCancelDelete={clearConfirm}
-                  />
-                ),
+            {(userTopLevelAgents.length > 0 ||
+              userSubAgents.length > 0 ||
+              projectTopLevelAgents.length > 0 ||
+              projectSubAgents.length > 0) && (
+              <div>
+                <h3 className="text-xs font-medium text-text-secondary mb-2 uppercase tracking-wide">Custom</h3>
+                <div className="ml-3 space-y-3">
+                  {[
+                    { title: 'Global', agents: userTopLevelAgents, subagents: userSubAgents },
+                    { title: 'Project', agents: projectTopLevelAgents, subagents: projectSubAgents },
+                  ].map(
+                    (section) =>
+                      (section.agents.length > 0 || section.subagents.length > 0) && (
+                        <AgentGroup
+                          key={section.title}
+                          title={section.title}
+                          agents={section.agents}
+                          subagents={section.subagents}
+                          isBuiltIn={false}
+                          alwaysAllowedNames={alwaysAllowedNames}
+                          modelOverrides={modelOverrides}
+                          isConfirmingDelete={(id) => isConfirming(id, 'delete')}
+                          onView={handleView}
+                          onDuplicate={handleDuplicate}
+                          onEdit={handleEdit}
+                          onDelete={(id) => {
+                            if (isConfirming(id, 'delete')) {
+                              handleDelete(id)
+                              clearConfirm()
+                            } else {
+                              requestDelete(id)
+                            }
+                          }}
+                          onCancelDelete={clearConfirm}
+                        />
+                      ),
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </CRUDListHeader>

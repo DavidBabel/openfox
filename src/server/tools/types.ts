@@ -30,6 +30,7 @@ export interface Tool {
   definition: LLMToolDefinition
   execute: (args: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>
   permittedActions?: string[] // Actions this tool supports for granular permissions
+  mcpServer?: string
 }
 
 export interface ToolRegistry {
