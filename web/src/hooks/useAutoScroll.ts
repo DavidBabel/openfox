@@ -8,6 +8,7 @@ export const useAutoScroll = (
 ) => {
   const is_active = useRef(true)
   const startY = useRef<number | null>(null)
+  const programmaticRef = useRef(false)
   const [isAutoScrollActive, setIsAutoScrollActive] = useState(true)
 
   const getEffectiveScroller = useCallback((): HTMLElement | null => {
@@ -20,7 +21,13 @@ export const useAutoScroll = (
   const scroll_to_bottom = useCallback(() => {
     const scroller = getEffectiveScroller()
     if (scroller) {
+      programmaticRef.current = true
       scroller.scrollTop = scroller.scrollHeight
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          programmaticRef.current = false
+        })
+      })
     }
   }, [getEffectiveScroller])
 
@@ -70,6 +77,7 @@ export const useAutoScroll = (
     }
 
     const onScroll = () => {
+      if (programmaticRef.current) return
       const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
       const atEnd = distance < 2
       if (atEnd !== is_active.current) {
