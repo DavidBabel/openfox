@@ -74,7 +74,10 @@ export function createProviderAuthRoutes(
     const context = resolveAuthContext(req.params.providerId as string, res)
     if (!context) return
     const { provider, adapter } = context
-    if (provider.credentialRef && adapter) await adapter.logout(provider.credentialRef)
+    if (adapter) {
+      const ref = provider.credentialRef ?? provider.id
+      await adapter.logout(ref)
+    }
 
     const { loadGlobalConfig, saveGlobalConfig } = await import('../../cli/config.js')
     const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
