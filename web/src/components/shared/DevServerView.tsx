@@ -1,4 +1,6 @@
+import { ScrollArea } from './ScrollArea'
 import { memo } from 'react'
+import { tryParseResult } from './tryParseResult'
 
 interface DevServerViewProps {
   result: string
@@ -20,13 +22,9 @@ interface StatusData {
 }
 
 export const DevServerView = memo(function DevServerView({ result, action }: DevServerViewProps) {
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(result) as Record<string, unknown>
-  } catch {
-    console.warn('DevServerView: failed to parse result JSON', result.slice(0, 200))
-    return <pre className="text-xs bg-bg-primary p-1.5 rounded overflow-x-auto max-h-[60vh] break-words">{result}</pre>
-  }
+  const result_ = tryParseResult(result, 'DevServerView')
+  if (!result_.success) return result_.error
+  const parsed = result_.parsed
 
   if (action === 'logs') {
     return renderLogs(parsed as LogsData)
@@ -43,7 +41,7 @@ function renderLogs(data: LogsData) {
   const lines = data.logs.split('\n')
   return (
     <div className="space-y-2">
-      <div className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] overflow-y-auto break-words">
+      <ScrollArea className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] break-words">
         {lines.map((line, i) => {
           const isStderr = line.startsWith('[stderr] ')
           return (
@@ -52,7 +50,7 @@ function renderLogs(data: LogsData) {
             </div>
           )
         })}
-      </div>
+      </ScrollArea>
       {data.hasMore && (
         <div className="text-[10px] text-text-muted">
           Showing {data.limit} of {data.total} lines

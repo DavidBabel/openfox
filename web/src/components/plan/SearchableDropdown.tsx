@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { ChevronDownIcon } from '../shared/icons'
 
@@ -161,7 +162,7 @@ interface ListContainerProps {
 }
 
 export function ListContainer({ children, maxHeight = 'max-h-64' }: ListContainerProps) {
-  return <div className={`overflow-y-auto ${maxHeight} p-1`}>{children}</div>
+  return <ScrollArea className={`${maxHeight} p-1`}>{children}</ScrollArea>
 }
 
 interface EmptyMessageProps {

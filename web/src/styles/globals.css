@@ -3,6 +3,58 @@
 @import '@fontsource/jetbrains-mono/600.css';
 
 @import './theme.css';
+@import 'overlayscrollbars/styles/overlayscrollbars.css';
+
+/* OverlayScrollbars theme — reacts to app theme tokens automatically */
+.os-scrollbar {
+  --os-size: 12px;
+  --os-padding-perpendicular: 0;
+  --os-padding-axis: 0;
+  --os-track-border-radius: 0 !important;
+  --os-handle-border-radius: 3px !important;
+
+  /* Hover content: 3px handle (25% of 12px), right-aligned */
+  --os-handle-perpendicular-size: 25%;
+  /* Hover gutter: 6px handle (50% of 12px) */
+  --os-handle-perpendicular-size-hover: 50%;
+  --os-handle-perpendicular-size-active: 50%;
+
+  /* Gutter: invisible idle, visible on hover/active */
+  --os-track-bg: transparent;
+  --os-track-bg-hover: rgb(var(--color-text-primary) / 0.25);
+  --os-track-bg-active: rgb(var(--color-text-primary) / 0.25);
+
+  /* Handle: muted on content hover, primary on gutter hover & active */
+  --os-handle-bg: rgb(var(--color-text-primary) / 0.75);
+  --os-handle-bg-hover: rgb(var(--color-accent-primary) / 1);
+  --os-handle-bg-active: rgb(var(--color-accent-primary) / 1);
+}
+
+/* Remove built-in OS transitions */
+.os-scrollbar-track,
+.os-scrollbar-handle,
+.os-scrollbar-vertical .os-scrollbar-handle,
+.os-scrollbar-horizontal .os-scrollbar-handle {
+  transition: none !important;
+}
+
+/* Content hover: handle 1px from right edge */
+.os-scrollbar-vertical .os-scrollbar-handle {
+  right: 1px !important;
+}
+
+/* Gutter hover: center 6px handle in 12px track */
+.os-scrollbar-vertical:hover .os-scrollbar-handle {
+  right: 3px !important;
+}
+
+/* Ensure full scrollbar width is hoverable, not just the handle */
+.os-scrollbar-vertical {
+  pointer-events: auto !important;
+}
+.os-scrollbar-track {
+  pointer-events: auto !important;
+}
 
 @tailwind base;
 @tailwind components;

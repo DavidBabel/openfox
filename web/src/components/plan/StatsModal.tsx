@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { Fragment, useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { DualSparkline } from '../shared/Sparkline'
@@ -266,7 +267,7 @@ export function StatsModal({ isOpen, onClose, stats }: StatsModalProps) {
             <h3 className="text-sm font-semibold text-text-secondary mb-3 uppercase tracking-wide">
               Response Log ({currentStats.responseCount} responses)
             </h3>
-            <div className="overflow-y-auto bg-bg-tertiary/30 rounded">
+            <ScrollArea className="bg-bg-tertiary/30 rounded">
               <table className="w-full table-fixed border-separate border-spacing-0 text-xs">
                 <colgroup>
                   <col className="w-[7%]" />
@@ -311,7 +312,7 @@ export function StatsModal({ isOpen, onClose, stats }: StatsModalProps) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollArea>
           </section>
         )}
       </div>

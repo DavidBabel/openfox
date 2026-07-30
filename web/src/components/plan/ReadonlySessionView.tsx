@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useEffect, useMemo } from 'react'
 import { useRoute } from 'wouter'
 import { authFetch } from '../../lib/api'
@@ -100,7 +101,7 @@ export function ReadonlySessionView() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto print:overflow-visible scrollbar-stable">
+      <ScrollArea className="flex-1 print:overflow-visible">
         <div className="pt-4">
           <ChatFeedItems
             displayItems={displayItems}
@@ -112,7 +113,7 @@ export function ReadonlySessionView() {
           />
         </div>
         <div className="h-8" />
-      </div>
+      </ScrollArea>
     </div>
   )
 }

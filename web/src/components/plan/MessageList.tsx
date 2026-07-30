@@ -1,4 +1,6 @@
-import { memo, useState, useRef, useCallback, useEffect, useLayoutEffect, type RefObject } from 'react'
+import { memo, useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
+import { ScrollArea } from '../shared/ScrollArea'
 import { useSessionStore, useIsRunning } from '../../stores/session'
 import { useWorkflowsStore } from '../../stores/workflows'
 import { useDisplaySettings } from '../../stores/settings'
@@ -13,7 +15,7 @@ const EMPTY_CRITERIA: MetadataEntry[] = []
 
 interface MessageListProps {
   displayItems: DisplayItem[]
-  scrollContainerRef: RefObject<HTMLDivElement | null>
+  scrollContainerRef: React.RefObject<OverlayScrollbarsComponentRef<'div'> | null>
   highlightedMessageId: string | null
   onLaunchWorkflow: (workflowId: string, subGroup?: string, params?: Record<string, string>) => void
   onScrollToTop?: () => void
@@ -54,20 +56,24 @@ export const MessageList = memo(function MessageList({
   const [isScrollable, setIsScrollable] = useState(false)
   const [scrolledPastTop, setScrolledPastTop] = useState(false)
 
+  const getViewport = useCallback(() => {
+    return scrollContainerRef.current?.osInstance()?.elements().viewport ?? null
+  }, [scrollContainerRef])
+
   useLayoutEffect(() => {
-    const el = scrollContainerRef.current
+    const el = getViewport()
     if (!el) return
     setIsScrollable(el.scrollHeight > el.clientHeight + 1)
-  }, [scrollContainerRef, displayItems])
+  }, [getViewport, displayItems])
 
   useEffect(() => {
-    const el = scrollContainerRef.current
+    const el = getViewport()
     if (!el) return
     const onScroll = () => setScrolledPastTop(el.scrollTop > 4)
     onScroll()
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
-  }, [scrollContainerRef])
+  }, [getViewport])
 
   const openFullHistory = () => {
     if (!projectId || !sessionId) return
@@ -90,16 +96,12 @@ export const MessageList = memo(function MessageList({
 
   const scrollToTop = useCallback(() => {
     onScrollToTop?.()
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [scrollContainerRef, onScrollToTop])
+    getViewport()?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [getViewport, onScrollToTop])
 
   return (
     <div className="relative flex-1 min-w-0 group">
-      <div
-        ref={scrollContainerRef}
-        data-testid="chat-scroll-container"
-        className="absolute inset-0 overflow-y-auto bg-primary scrollbar-stable"
-      >
+      <ScrollArea ref={scrollContainerRef} data-testid="chat-scroll-container" className="absolute inset-0 bg-primary">
         <div className="pt-4">
           {hiddenCount > 0 && (
             <div className="px-2 md:px-4 pb-2 space-y-1">
@@ -193,7 +195,7 @@ export const MessageList = memo(function MessageList({
             </div>
           )}
         </div>
-      </div>
+      </ScrollArea>
 
       {isScrollable && scrolledPastTop && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">

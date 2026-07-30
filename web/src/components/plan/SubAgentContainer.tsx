@@ -1,3 +1,5 @@
+import { ScrollArea } from '../shared/ScrollArea'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { memo, useRef, useState, useCallback } from 'react'
 import type { Message, ContextState } from '@shared/types.js'
 import { AssistantMessage } from './AssistantMessage'
@@ -62,7 +64,7 @@ export const SubAgentContainer = memo(function SubAgentContainer({
   isStreaming: _isStreaming,
 }: SubAgentContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
   const [expanded, setExpanded] = useState(false)
   const agentDefaults = useAgentsStore((state) => state.defaults)
   const agentUserItems = useAgentsStore((state) => state.userItems)
@@ -70,7 +72,11 @@ export const SubAgentContainer = memo(function SubAgentContainer({
   const contextState = useSessionStore((state) => state.subAgentContextStates[subAgentId])
   const { showThinking, showVerboseToolOutput } = useDisplaySettings()
 
-  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollRef, null)
+  const getViewport = useCallback(() => {
+    return scrollRef.current?.osInstance()?.elements().viewport ?? null
+  }, [])
+
+  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollRef, null, getViewport)
 
   const handleToggleExpand = useCallback(() => {
     const willExpand = !expanded
@@ -118,9 +124,9 @@ export const SubAgentContainer = memo(function SubAgentContainer({
         </div>
       </div>
 
-      <div
+      <ScrollArea
         ref={scrollRef}
-        className={`${expanded ? 'max-h-[calc(100vh-10rem)]' : 'max-h-80'} overflow-y-auto p-2 transition-[max-height] duration-200`}
+        className={`${expanded ? 'max-h-[calc(100vh-10rem)]' : 'max-h-80'} p-2 transition-[max-height] duration-200`}
       >
         {displayMessages.map((message) => {
           if (message.role === 'assistant') {
@@ -137,7 +143,7 @@ export const SubAgentContainer = memo(function SubAgentContainer({
 
           return <ChatMessage key={message.id} message={message} isLastAssistantMessage={false} />
         })}
-      </div>
+      </ScrollArea>
     </div>
   )
 })

@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Modal } from './Modal'
 import { ArrowLeftIcon, ChevronDownIcon, FolderIcon, SearchIcon } from './icons'
@@ -159,7 +160,7 @@ export function DirectoryBrowser({ onSelect, onClose, initialPath }: DirectoryBr
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <ScrollArea className="flex-1">
           {loading ? (
             <div className="p-8 text-center">
               <Spinner size="sm" />
@@ -220,7 +221,7 @@ export function DirectoryBrowser({ onSelect, onClose, initialPath }: DirectoryBr
               ))}
             </div>
           )}
-        </div>
+        </ScrollArea>
       </div>
     </Modal>
   )

@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { memo, useEffect, useRef, useState } from 'react'
 import { ansiToReact } from '../../lib/ansiParser'
 
@@ -89,9 +90,8 @@ export const RunCommandView = memo(function RunCommandView({
 
       {/* Output display */}
       {(displayOutput || status === 'pending') && (
-        <pre
-          ref={outputRef}
-          className={`text-xs bg-bg-primary p-2 rounded max-h-64 overflow-y-auto ${
+        <ScrollArea
+          className={`text-xs bg-bg-primary p-2 rounded max-h-64 ${
             status === 'pending' ? 'border border-accent-warning/30' : ''
           }`}
           style={{ overflowX: 'hidden', whiteSpace: 'normal' }}
@@ -105,7 +105,7 @@ export const RunCommandView = memo(function RunCommandView({
               ))
             : // Render final output with ANSI color parsing
               ansiToReact(displayOutput)}
-        </pre>
+        </ScrollArea>
       )}
 
       {/* Error display */}

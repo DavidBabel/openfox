@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ChevronDownIcon } from '../shared/icons'
 import { Toggle } from '../shared/Toggle'
@@ -111,7 +112,7 @@ export function McpSelector() {
 
       {isOpen && (
         <div className="absolute bottom-full right-0 mb-1 min-w-72 max-w-[100vw] bg-bg-secondary border border-border rounded-lg shadow-lg z-50 flex flex-col max-h-[80vh]">
-          <div className="overflow-y-auto flex-1 min-h-0">
+          <ScrollArea className="flex-1 min-h-0">
             {servers.length === 0 ? (
               <div className="px-4 py-3 text-sm text-text-muted text-center">No MCP servers configured</div>
             ) : (
@@ -145,7 +146,7 @@ export function McpSelector() {
                 )
               })
             )}
-          </div>
+          </ScrollArea>
           <div className="border-t border-border px-3 py-2 flex-shrink-0">
             {toggleError ? (
               <div className="text-xs text-accent-error">{toggleError}</div>

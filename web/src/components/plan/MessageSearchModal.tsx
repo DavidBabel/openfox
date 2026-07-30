@@ -1,3 +1,5 @@
+import { ScrollArea } from '../shared/ScrollArea'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import type { ReactNode } from 'react'
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
@@ -137,7 +139,7 @@ export function MessageSearchModal({ isOpen, onClose, displayItems, onNavigate }
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(loadFilters)
   const searchRef = useRef<HTMLInputElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
   const selectedItemRef = useRef<HTMLButtonElement>(null)
 
   const toggleFilter = (key: FilterKey) => {
@@ -195,7 +197,10 @@ export function MessageSearchModal({ isOpen, onClose, displayItems, onNavigate }
 
   useEffect(() => {
     if (isOpen && listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
+      const viewport = listRef.current.osInstance()?.elements().viewport
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight
+      }
     }
   }, [isOpen])
 
@@ -277,7 +282,7 @@ export function MessageSearchModal({ isOpen, onClose, displayItems, onNavigate }
                 )
               })}
             </div>
-            <div ref={listRef} className="overflow-y-auto max-h-[60vh] p-2">
+            <ScrollArea ref={listRef} className="max-h-[60vh] p-2">
               {filteredItems.length === 0 ? (
                 <div className="px-3 py-4 text-center text-text-muted text-sm">
                   {visibleItems.length > 0 ? 'No matches' : 'No messages yet'}
@@ -318,7 +323,7 @@ export function MessageSearchModal({ isOpen, onClose, displayItems, onNavigate }
                   )
                 })
               )}
-            </div>
+            </ScrollArea>
           </div>
         </div>,
         document.body,

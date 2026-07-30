@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { Button } from '../shared/Button'
@@ -640,7 +641,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
                 </button>
               )}
             </div>
-            <div className="flex-1 min-h-0 p-2 overflow-auto">
+            <ScrollArea className="flex-1 min-h-0 p-2">
               <FlowDiagram
                 steps={formSteps}
                 entryStep={formEntryStep}
@@ -683,14 +684,14 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
                   </button>
                 </div>
               )}
-            </div>
+            </ScrollArea>
           </div>
 
           <div className="w-[300px] shrink-0 border border-border rounded-lg bg-bg-secondary flex flex-col overflow-hidden">
             <div className="px-3 py-1.5 border-b border-border shrink-0">
               <span className="text-[10px] text-text-muted uppercase tracking-wider font-medium">Properties</span>
             </div>
-            <div className="p-3 overflow-y-auto flex-1 min-h-0">
+            <ScrollArea className="p-3 flex-1 min-h-0">
               {isReadOnly && (edgeInfo || selectedStep) ? (
                 <p className="text-text-muted text-xs text-center py-8">
                   View only — click "Duplicate & Customize" to edit.
@@ -914,7 +915,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
                   Drag from a port to connect.
                 </p>
               )}
-            </div>
+            </ScrollArea>
           </div>
         </div>
 

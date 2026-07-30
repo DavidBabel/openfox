@@ -40,7 +40,7 @@ interface ChatInputProps {
   setDragOver: (dragOver: boolean) => void
   errorMessage: string | null
   setErrorMessage: (msg: string | null) => void
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>
+  scrollToBottom?: () => void
   sessionId: string | undefined
   showHistory: boolean
   history: PromptHistoryItem[]
@@ -70,7 +70,7 @@ export function ChatInput({
   setDragOver,
   errorMessage,
   setErrorMessage,
-  scrollContainerRef,
+  scrollToBottom,
   sessionId,
   showHistory,
   history,
@@ -350,10 +350,7 @@ export function ChatInput({
     if (sendingRef.current) return
     if (!input.trim() && attachments.length === 0) return
     sendingRef.current = true
-    scrollContainerRef.current?.scrollTo({
-      top: scrollContainerRef.current.scrollHeight,
-      behavior: 'smooth',
-    })
+    scrollToBottom?.()
 
     // Detect slash commands: /workflow-id arg1 arg2 or /command-name arg1 arg2
     const trimmed = input.trim()

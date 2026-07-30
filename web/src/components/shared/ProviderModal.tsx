@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useState, useEffect, useRef } from 'react'
 import { authFetch } from '../../lib/api'
 import type { Backend } from '../../stores/config'
@@ -939,7 +940,7 @@ export function ProviderModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-bg-secondary border border-border rounded-xl w-[640px] max-h-[85vh] overflow-y-auto shadow-2xl">
+      <ScrollArea className="bg-bg-secondary border border-border rounded-xl w-[640px] max-h-[85vh] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-lg font-semibold text-text-primary">{editProvider ? 'Edit Provider' : 'Add Provider'}</h3>
@@ -1385,7 +1386,7 @@ export function ProviderModal({
                       </div>
                     </div>
 
-                    <div className="space-y-1 max-h-48 overflow-y-auto border border-border rounded-lg bg-bg-primary">
+                    <ScrollArea className="space-y-1 max-h-48 border border-border rounded-lg bg-bg-primary">
                       {filterModels(searchQuery).map((model) => {
                         const isChecked = selectedModelIds.has(model.id)
                         return (
@@ -1443,7 +1444,7 @@ export function ProviderModal({
                           No models match &ldquo;{searchQuery}&rdquo;
                         </div>
                       )}
-                    </div>
+                    </ScrollArea>
                   </div>
                 )}
               </>
@@ -1494,7 +1495,7 @@ export function ProviderModal({
             )}
           </div>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Provider defaults modal */}
       {showDefaults && (
@@ -1593,9 +1594,11 @@ export function ProviderModal({
                 &times;
               </button>
             </div>
-            <pre className="px-6 py-4 overflow-y-auto text-xs text-text-secondary font-mono whitespace-pre-wrap break-all">
-              {rawModalData}
-            </pre>
+            <ScrollArea horizontal>
+              <pre className="px-6 py-4 text-xs text-text-secondary font-mono whitespace-pre-wrap break-all">
+                {rawModalData}
+              </pre>
+            </ScrollArea>
           </div>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react'
 import { getSlashAtCursor } from '../../lib/getSlashAtCursor'
 import type { WorkflowInfo } from '../../lib/parse-slash-command'
@@ -117,7 +118,7 @@ const SlashAutocomplete = forwardRef<SlashAutocompleteHandle, SlashAutocompleteP
 
   return (
     <div ref={containerRef} className="absolute bottom-full left-0 right-0 mb-2 z-50" role="listbox">
-      <div className="bg-bg-secondary border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+      <ScrollArea className="bg-bg-secondary border border-border rounded-lg shadow-lg max-h-64">
         <div>
           {suggestions.map((item, index) => (
             <button
@@ -150,7 +151,7 @@ const SlashAutocomplete = forwardRef<SlashAutocompleteHandle, SlashAutocompleteP
             </button>
           ))}
         </div>
-      </div>
+      </ScrollArea>
     </div>
   )
 })

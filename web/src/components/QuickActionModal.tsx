@@ -1,3 +1,4 @@
+import { ScrollArea } from './shared/ScrollArea'
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'wouter'
@@ -192,7 +193,7 @@ export function QuickActionModal({
               />
               <CloseButton onClick={onClose} className="shrink-0" aria-label="Close" />
             </div>
-            <div className="overflow-y-auto max-h-[60vh] p-2">
+            <ScrollArea className="max-h-[60vh] p-2">
               {filteredItems.length === 0 ? (
                 <div className="px-3 py-4 text-center text-text-muted text-sm">
                   {commandDefaults.length +
@@ -223,7 +224,7 @@ export function QuickActionModal({
                   </button>
                 ))
               )}
-            </div>
+            </ScrollArea>
           </div>
         </div>,
         document.body,

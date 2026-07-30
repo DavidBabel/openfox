@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useSessionStore, useIsRunning } from '../../stores/session'
 import { useDisplaySettings } from '../../stores/settings'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 
 import { type TurnStats } from '../../lib/types'
 import type { Message } from '@shared/types.js'
@@ -54,7 +55,11 @@ export function PlanPanel({
   const [showQuickAction, setShowQuickAction] = useState(false)
   const [showMessageSearch, setShowMessageSearch] = useState(false)
   const [turnStatsModal, setTurnStatsModal] = useState<TurnStats | null>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
+
+  const getViewport = useCallback(() => {
+    return scrollContainerRef.current?.osInstance()?.elements().viewport ?? null
+  }, [])
 
   const session = useSessionStore((state) => state.currentSession)
   const storeMessages = useSessionStore((state) => state.messages)
@@ -113,7 +118,7 @@ export function PlanPanel({
 
   const hiddenCount = propHiddenCount ?? computedHiddenCount
 
-  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollContainerRef, session)
+  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollContainerRef, session, getViewport)
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
   const [pendingParamWorkflow, setPendingParamWorkflow] = useState<{
     id: string
@@ -274,7 +279,7 @@ export function PlanPanel({
           setDragOver={setDragOver}
           errorMessage={errorMessage}
           setErrorMessage={setErrorMessage}
-          scrollContainerRef={scrollContainerRef}
+          scrollToBottom={() => getViewport()?.scrollTo({ top: getViewport()?.scrollHeight ?? 0, behavior: 'smooth' })}
           sessionId={session?.id}
           showHistory={showHistory}
           history={history}

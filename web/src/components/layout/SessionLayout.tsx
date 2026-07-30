@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import type { ReactNode } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { SessionSidebar } from '../plan/SessionSidebar'
@@ -31,8 +32,10 @@ export function SessionLayout({
 
         {/* Session Sidebar - mobile: fixed overlay, desktop: flex item */}
         {criteriaSidebarOpen ? (
-          <aside className="hidden md:block w-[320px] shrink-0 border-l border-border p-4 overflow-y-auto bg-secondary scrollbar-stable">
-            <SessionSidebar messages={messages} workdir={session?.workspace ?? session?.workdir} />
+          <aside className="hidden md:block w-[320px] shrink-0 border-l border-border bg-secondary">
+            <ScrollArea className="h-full p-4">
+              <SessionSidebar messages={messages} workdir={session?.workspace ?? session?.workdir} />
+            </ScrollArea>
           </aside>
         ) : (
           <aside className="hidden md:block w-0 shrink-0 overflow-hidden border-l-0" />
@@ -42,13 +45,17 @@ export function SessionLayout({
         <aside
           className={`
             md:hidden
-            p-4 overflow-y-auto bg-secondary
+            bg-secondary
             transition-all duration-300 ease-in-out
             fixed right-0 top-[32px] h-[calc(100vh-32px)] z-50
             ${criteriaSidebarOpen ? 'w-[320px] translate-x-0 border-l border-border' : 'w-[320px] translate-x-full'}
           `}
         >
-          <SessionSidebar messages={messages} workdir={session?.workspace ?? session?.workdir} />
+          <div className="h-full p-4">
+            <ScrollArea className="h-full">
+              <SessionSidebar messages={messages} workdir={session?.workspace ?? session?.workdir} />
+            </ScrollArea>
+          </div>
         </aside>
       </div>
     </div>

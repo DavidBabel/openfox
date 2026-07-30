@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { LogViewer } from './LogViewer'
 import { createPortal } from 'react-dom'
@@ -123,7 +124,7 @@ const Popover = forwardRef<PopoverHandle, { trigger: React.ReactNode; children: 
             ref={popoverRef}
             role="dialog"
             aria-modal="true"
-            className="fixed bg-bg-secondary border border-border rounded-lg shadow-xl p-3 w-[320px] max-w-[calc(100vw-16px)] max-h-[60vh] overflow-y-auto"
+            className="fixed bg-bg-secondary border border-border rounded-lg shadow-xl p-3 w-[320px] max-w-[calc(100vw-16px)] max-h-[60vh]"
             style={(() => {
               if (!triggerRef.current) return { zIndex: POPOVER_Z_INDEX, top: 0, left: 0 }
               const rect = triggerRef.current.getBoundingClientRect()
@@ -141,7 +142,7 @@ const Popover = forwardRef<PopoverHandle, { trigger: React.ReactNode; children: 
               }
             })()}
           >
-            {children}
+            <ScrollArea className="max-h-full">{children}</ScrollArea>
           </div>,
           document.body,
         )}

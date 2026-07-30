@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react'
 import { getAtMentionAtCursor } from '../../lib/atMention'
 import { authFetch } from '../../lib/api'
@@ -152,7 +153,7 @@ const AtMentionAutocomplete = forwardRef<AtMentionAutocompleteHandle, AtMentionA
 
     return (
       <div ref={containerRef} className="absolute bottom-full left-0 right-0 mb-2 z-50">
-        <div className="bg-bg-secondary border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        <ScrollArea className="bg-bg-secondary border border-border rounded-lg shadow-lg max-h-64">
           <ul>
             {suggestions.map((item, index) => (
               <li
@@ -180,7 +181,7 @@ const AtMentionAutocomplete = forwardRef<AtMentionAutocompleteHandle, AtMentionA
               </li>
             ))}
           </ul>
-        </div>
+        </ScrollArea>
       </div>
     )
   },

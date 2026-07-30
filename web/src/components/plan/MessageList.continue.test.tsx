@@ -86,10 +86,16 @@ vi.mock('./ChatFeedItems', () => ({
 }))
 
 function renderMessageList() {
+  const mockOsRef = {
+    current: {
+      osInstance: () => null,
+      getElement: () => null,
+    },
+  }
   return render(
     <MessageList
       displayItems={[]}
-      scrollContainerRef={{ current: document.createElement('div') }}
+      scrollContainerRef={mockOsRef}
       highlightedMessageId={null}
       onLaunchWorkflow={vi.fn()}
     />,

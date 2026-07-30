@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { memo, useMemo, useEffect, useState, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -56,11 +57,11 @@ const CodeBlock = memo(function CodeBlock({
       {showSyntaxHighlighting && html ? (
         <div className="min-w-0" dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
-        <div className="overflow-x-auto">
-          <pre className="my-0 px-4 py-3 overflow-x-auto font-mono text-sm whitespace-pre-wrap break-word">
+        <ScrollArea horizontal>
+          <pre className="my-0 px-4 py-3 font-mono text-sm whitespace-pre-wrap break-word">
             <code className={`language-${language}`}>{codeString}</code>
           </pre>
-        </div>
+        </ScrollArea>
       )}
     </div>
   )
@@ -151,9 +152,9 @@ function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolea
 
     table({ children }: { children?: React.ReactNode }) {
       return (
-        <div className="overflow-x-auto my-1.5">
+        <ScrollArea horizontal className="my-1.5">
           <table className="min-w-full border border-border">{children}</table>
-        </div>
+        </ScrollArea>
       )
     },
 

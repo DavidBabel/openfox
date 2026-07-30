@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -80,7 +81,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
       className="fixed bg-bg-secondary border border-border rounded shadow-lg z-50 min-w-[160px] outline-none"
       style={{ left, top }}
     >
-      <div className="max-h-[60vh] overflow-y-auto" onMouseLeave={() => setSelectedIndex(-1)}>
+      <ScrollArea className="max-h-[60vh]" onMouseLeave={() => setSelectedIndex(-1)}>
         {items.map((item, i) => (
           <button
             key={i}
@@ -103,7 +104,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
             {item.label}
           </button>
         ))}
-      </div>
+      </ScrollArea>
     </div>,
     document.body,
   )

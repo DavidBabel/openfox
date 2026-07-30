@@ -1,9 +1,11 @@
-import { memo, useRef } from 'react'
+import { ScrollArea } from '../shared/ScrollArea'
+import { memo, useRef, useCallback } from 'react'
 import { Modal } from '../shared/Modal'
 import { LogRenderer } from '../shared/LogRenderer'
 import { AutoScrollToggle } from '../shared/AutoScrollToggle'
 import { TrashIcon, PlusIcon } from '../shared/icons'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 
 interface LogViewerProps {
   title: string
@@ -22,8 +24,13 @@ export const LogViewer = memo(function LogViewer({
   onInsertMarker,
   preClassName,
 }: LogViewerProps) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollRef, null)
+  const scrollRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
+
+  const getViewport = useCallback(() => {
+    return scrollRef.current?.osInstance()?.elements().viewport ?? null
+  }, [])
+
+  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollRef, null, getViewport)
 
   return (
     <Modal
@@ -64,9 +71,9 @@ export const LogViewer = memo(function LogViewer({
         </div>
       }
     >
-      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-stable -m-4 p-4">
+      <ScrollArea ref={scrollRef} className="flex-1 -m-4 p-4">
         <LogRenderer logs={logs} preClassName={preClassName} />
-      </div>
+      </ScrollArea>
     </Modal>
   )
 })

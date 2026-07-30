@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useSessionStore, type PendingPathConfirmation } from '../../stores/session'
 import { WarningSmallIcon } from './icons'
 
@@ -72,7 +73,7 @@ export function PathConfirmationButtons({ confirmation }: PathConfirmationButton
         <span className="font-medium">{confirmation.tool}</span> wants to access:
       </div>
 
-      <div className="bg-bg-primary rounded p-2 mb-3 max-h-24 overflow-y-auto">
+      <ScrollArea className="bg-bg-primary rounded p-2 mb-3 max-h-24">
         <ul className="space-y-0.5">
           {confirmation.paths.map((path, i) => (
             <li key={i} className={`text-xs font-mono ${isSensitive ? 'text-red-300' : 'text-amber-300'} break-all`}>
@@ -80,7 +81,7 @@ export function PathConfirmationButtons({ confirmation }: PathConfirmationButton
             </li>
           ))}
         </ul>
-      </div>
+      </ScrollArea>
 
       <div className="flex gap-2">
         <button

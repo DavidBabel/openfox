@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { wsClient } from '../../lib/ws'
 import { Modal } from '../shared/SelfContainedModal'
@@ -63,9 +64,9 @@ export function DynamicContextPreviewModal({ isOpen, onClose, isRunning, onApply
       {isLoadingPreview ? (
         <div className="py-8 text-center text-text-muted">Loading diff...</div>
       ) : diffPreview && diffPreview.length > 0 ? (
-        <div className="max-h-[60vh] overflow-auto border border-border rounded-lg">
+        <ScrollArea className="max-h-[60vh] border border-border rounded-lg">
           <UnifiedDiffViewer diff={diffPreview} />
-        </div>
+        </ScrollArea>
       ) : (
         <p className="text-sm text-text-tertiary mb-4">
           The system prompt hash has changed (e.g., due to tool or skill changes), but the actual prompt text appears

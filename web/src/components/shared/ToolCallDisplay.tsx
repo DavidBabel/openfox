@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { memo, useState } from 'react'
 import type { Diagnostic, EditContextRegion } from '@shared/types.js'
 import { ToolIcon } from './ToolIcon'
@@ -221,18 +222,18 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
               <div className="text-[10px] text-accent-primary font-medium mb-1 uppercase tracking-wide">
                 {String(args.subAgentType ?? 'Sub-Agent')} Prompt
               </div>
-              <div className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh] overflow-y-auto">
+              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={String(args.prompt ?? '')} />
-              </div>
+              </ScrollArea>
             </div>
           )}
 
           {/* Specialized rendering for web_search */}
           {tool === 'web_search' && status === 'success' && (
             <div>
-              <div className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh] overflow-y-auto">
+              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </div>
+              </ScrollArea>
               {truncated && <TruncatedIndicator className="mt-1" />}
             </div>
           )}
@@ -243,9 +244,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
               <div className="text-[10px] text-accent-primary font-medium mb-1 uppercase tracking-wide">
                 Skill: {String(args.skillId ?? '')}
               </div>
-              <div className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh] overflow-y-auto">
+              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </div>
+              </ScrollArea>
               {truncated && <TruncatedIndicator className="mt-1" />}
             </div>
           )}
@@ -272,9 +273,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                   )}
                 </div>
               )}
-              <div className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh] overflow-y-auto">
+              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </div>
+              </ScrollArea>
               {truncated && <TruncatedIndicator />}
             </div>
           )}
@@ -297,9 +298,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
           {/* Specialized rendering for mcp_config */}
           {tool === 'mcp_config' && status === 'success' && (
             <div>
-              <div className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh] overflow-y-auto">
+              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </div>
+              </ScrollArea>
               {truncated && <TruncatedIndicator className="mt-1" />}
             </div>
           )}
@@ -327,9 +328,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                 {Object.keys(args).length > 0 && (
                   <div>
                     <div className="text-[10px] text-text-muted mb-0.5">Arguments:</div>
-                    <pre className="text-xs bg-bg-primary p-1.5 rounded overflow-x-auto break-words">
-                      {formatToolArgsFull(args)}
-                    </pre>
+                    <ScrollArea horizontal>
+                      <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{formatToolArgsFull(args)}</pre>
+                    </ScrollArea>
                   </div>
                 )}
 
@@ -339,9 +340,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                     <div className="text-[10px] text-text-muted mb-0.5">
                       Result{durationMs !== undefined && ` (${durationMs}ms)`}:
                     </div>
-                    <pre className="text-xs bg-bg-primary p-1.5 rounded overflow-x-auto max-h-[60vh] break-words">
-                      {result || 'No output'}
-                    </pre>
+                    <ScrollArea horizontal className="max-h-[60vh]">
+                      <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result || 'No output'}</pre>
+                    </ScrollArea>
                     {truncated && <TruncatedIndicator className="mt-1" />}
                   </div>
                 )}

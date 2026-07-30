@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDownIcon, SearchIcon } from './icons'
@@ -133,7 +134,7 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
                 />
               </div>
 
-              <div className="overflow-y-auto flex-1">
+              <ScrollArea className="flex-1">
                 {/* Default option */}
                 <button
                   type="button"
@@ -183,7 +184,7 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
                 {visibleGroups.length === 0 && searchQuery.trim() && (
                   <div className="px-4 py-3 text-sm text-text-muted text-center">No models match your search</div>
                 )}
-              </div>
+              </ScrollArea>
             </div>
           </div>,
           document.body,

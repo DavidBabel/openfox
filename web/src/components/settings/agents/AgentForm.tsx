@@ -1,3 +1,4 @@
+import { ScrollArea } from '../../shared/ScrollArea'
 import { useState, useRef, useEffect } from 'react'
 import { FormField, ErrorBanner } from '../CRUDModal'
 import { DropdownMenu } from '../../shared/DropdownMenu'
@@ -176,7 +177,7 @@ export function AgentForm({
 
         <div>
           <label className="block text-xs text-text-secondary mb-1">Tools</label>
-          <div className="flex flex-wrap gap-1.5 p-2 bg-bg-tertiary border border-border rounded max-h-32 overflow-y-auto">
+          <ScrollArea className="flex flex-wrap gap-1.5 p-2 bg-bg-tertiary border border-border rounded max-h-32">
             {filteredTools.map((tool) => {
               const isSelected = granularTools.has(tool.name)
               const hasActions = tool.actions.length > 0
@@ -260,7 +261,7 @@ export function AgentForm({
                 />
               )
             })}
-          </div>
+          </ScrollArea>
         </div>
 
         {mcpGroups.size > 0 &&
@@ -366,36 +367,38 @@ export function AgentForm({
                               className="w-full px-2 py-1 text-xs bg-bg-primary border border-border rounded font-mono focus:outline-none focus:ring-1 focus:ring-accent-primary"
                             />
                           </div>
-                          <div ref={listRef} className="max-h-60 overflow-y-auto">
-                            {filtered.map((tool, idx) => {
-                              const isSelected = granularTools.has(tool.name)
-                              const isFocused = idx === focusIdx
-                              return (
-                                <div
-                                  key={tool.name}
-                                  data-idx={idx}
-                                  className={`flex items-center justify-between px-3 py-1.5 transition-colors ${
-                                    isFocused ? 'bg-bg-primary' : 'hover:bg-bg-primary/30'
-                                  }`}
-                                  onMouseEnter={() => setFocusIdx(idx)}
-                                >
-                                  <span
-                                    className={`text-xs font-mono ${isSelected ? 'text-text-primary' : 'text-text-muted'}`}
+                          <ScrollArea className="max-h-60">
+                            <div ref={listRef}>
+                              {filtered.map((tool, idx) => {
+                                const isSelected = granularTools.has(tool.name)
+                                const isFocused = idx === focusIdx
+                                return (
+                                  <div
+                                    key={tool.name}
+                                    data-idx={idx}
+                                    className={`flex items-center justify-between px-3 py-1.5 transition-colors ${
+                                      isFocused ? 'bg-bg-primary' : 'hover:bg-bg-primary/30'
+                                    }`}
+                                    onMouseEnter={() => setFocusIdx(idx)}
                                   >
-                                    {tool.name}
-                                  </span>
-                                  <Toggle
-                                    enabled={isSelected}
-                                    onClick={() => toggleTool(tool.name)}
-                                    label={tool.name}
-                                  />
-                                </div>
-                              )
-                            })}
-                            {filtered.length === 0 && (
-                              <div className="px-3 py-2 text-xs text-text-muted">No MCP tools match your search.</div>
-                            )}
-                          </div>
+                                    <span
+                                      className={`text-xs font-mono ${isSelected ? 'text-text-primary' : 'text-text-muted'}`}
+                                    >
+                                      {tool.name}
+                                    </span>
+                                    <Toggle
+                                      enabled={isSelected}
+                                      onClick={() => toggleTool(tool.name)}
+                                      label={tool.name}
+                                    />
+                                  </div>
+                                )
+                              })}
+                              {filtered.length === 0 && (
+                                <div className="px-3 py-2 text-xs text-text-muted">No MCP tools match your search.</div>
+                              )}
+                            </div>
+                          </ScrollArea>
                         </div>
                       )
                     })()}

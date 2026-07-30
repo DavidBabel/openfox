@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useEffect, useState, useRef } from 'react'
 import { MoreIcon, AttachIcon } from '../shared/icons'
 import { useCommandsStore } from '../../stores/commands'
@@ -225,7 +226,7 @@ export function MoreMenu({
             </div>
           )}
 
-          <div className="overflow-y-auto max-h-64 p-1">
+          <ScrollArea className="max-h-64 p-1">
             {tab === 'commands' ? (
               filteredCommands.length === 0 ? (
                 <div className="px-3 py-2 text-text-muted text-sm">
@@ -315,7 +316,7 @@ export function MoreMenu({
                 <span className="text-xs text-text-muted">or drag & drop into chat</span>
               </div>
             )}
-          </div>
+          </ScrollArea>
 
           {tab !== 'attach' && (
             <div className="border-t border-border p-1">

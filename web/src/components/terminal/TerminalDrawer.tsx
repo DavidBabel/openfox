@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useTerminalStore } from '../../stores/terminal'
 import { useProjectStore } from '../../stores/project'
@@ -126,7 +127,7 @@ export function TerminalDrawer({ isOpen, onClose }: TerminalDrawerProps) {
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 p-2 overflow-auto">
+        <ScrollArea className="flex-1 min-h-0 p-2">
           {isLoading ? (
             <div className="flex items-center justify-center h-full text-text-muted">Loading...</div>
           ) : sessions.length === 0 ? (
@@ -154,7 +155,7 @@ export function TerminalDrawer({ isOpen, onClose }: TerminalDrawerProps) {
               ))}
             </div>
           )}
-        </div>
+        </ScrollArea>
       </div>
     </>
   )

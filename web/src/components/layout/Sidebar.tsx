@@ -6,6 +6,7 @@ import { useProjectStore } from '../../stores/project'
 import type { SessionSummary } from '@shared/types.js'
 import { ProjectSettingsModal } from '../settings/ProjectSettingsModal'
 import { DropdownMenu } from '../shared/DropdownMenu'
+import { ScrollArea } from '../shared/ScrollArea'
 import { CloseButton } from '../shared/CloseButton'
 import { ConfirmModal } from '../shared/ConfirmModal'
 import { Modal } from '../shared/Modal'
@@ -333,7 +334,7 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
               />
             </Modal>
 
-            <div className="flex-1 overflow-y-auto scrollbar-stable">
+            <ScrollArea className="flex-1">
               {filteredSessions.length === 0 ? (
                 <div className="p-4 text-center text-text-muted text-xs">
                   {isSearching ? 'No matching sessions' : 'No sessions'}
@@ -360,7 +361,7 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
                   <div ref={loadMoreRef} className="h-px" />
                 </>
               )}
-            </div>
+            </ScrollArea>
           </>
         )
 

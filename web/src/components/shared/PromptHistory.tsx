@@ -1,3 +1,5 @@
+import { ScrollArea } from './ScrollArea'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { useEffect, useRef } from 'react'
 import type { PromptHistoryItem } from '../../hooks/usePromptHistory'
 
@@ -10,12 +12,12 @@ interface PromptHistoryListProps {
 }
 
 export function PromptHistoryList({ history, selectedIndex, onSelect, onEscape, onNavigate }: PromptHistoryListProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
   const selectedItemRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to keep selected item in view
   useEffect(() => {
-    if (selectedItemRef.current && containerRef.current) {
+    if (selectedItemRef.current && containerRef.current?.getElement()) {
       selectedItemRef.current.scrollIntoView({
         block: 'nearest',
         behavior: 'smooth',
@@ -51,10 +53,10 @@ export function PromptHistoryList({ history, selectedIndex, onSelect, onEscape, 
   }
 
   return (
-    <div
+    <ScrollArea
       ref={containerRef}
       role="list"
-      className="mb-2 p-2 bg-bg-secondary border border-border rounded-lg overflow-y-auto max-h-64"
+      className="mb-2 p-2 bg-bg-secondary border border-border rounded-lg max-h-64"
       onKeyDown={handleKeyDown}
     >
       {history.map((item, index) => (
@@ -80,6 +82,6 @@ export function PromptHistoryList({ history, selectedIndex, onSelect, onEscape, 
           <div className="text-sm text-text-primary mt-1">{item.trimmedContent}</div>
         </div>
       ))}
-    </div>
+    </ScrollArea>
   )
 }

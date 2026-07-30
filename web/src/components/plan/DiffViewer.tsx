@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useGitStatus } from '../../hooks/useGitStatus'
 import { useSessionStore } from '../../stores/session'
 import { useSettingsStore, SETTINGS_KEYS } from '../../stores/settings'
@@ -94,12 +95,12 @@ export function DiffViewer() {
   }
 
   return (
-    <div className="mt-3 max-h-[150px] overflow-y-auto">
+    <ScrollArea className="mt-3 max-h-[150px]">
       <div className="pr-1">
         {diff.files.map((file, i) => (
           <DiffRow key={i} file={file} showEditorLink={showEditorLink} workdir={workdir} />
         ))}
       </div>
-    </div>
+    </ScrollArea>
   )
 }

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { vi } from 'vitest'
 import http from 'node:http'
 import { PassThrough } from 'node:stream'
 import { Socket } from 'node:net'
@@ -28,3 +29,19 @@ http.request = function (this: any, ...args: any[]) {
   }
   return (origRequest as any)(...args)
 } as any
+
+// Mock overlayscrollbars-react for jsdom (hooks crash without browser APIs)
+vi.mock('overlayscrollbars-react', () => {
+  const React = require('react')
+  const MockOverlayScrollbarsComponent = React.forwardRef(
+    ({ children, options, events, defer, ...divProps }: any, ref: any) => {
+      return React.createElement('div', { ...divProps, ref }, children)
+    },
+  )
+  MockOverlayScrollbarsComponent.displayName = 'OverlayScrollbarsComponent'
+
+  return {
+    OverlayScrollbarsComponent: MockOverlayScrollbarsComponent,
+    useOverlayScrollbars: () => [() => {}, () => null],
+  }
+})

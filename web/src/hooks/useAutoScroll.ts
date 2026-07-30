@@ -1,20 +1,31 @@
-import { RefObject, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Session } from '@shared/types.ts'
 
-export const useAutoScroll = (container_ref: RefObject<HTMLElement | null>, session: Session | null) => {
+export const useAutoScroll = (
+  container_ref: { current: unknown },
+  session: Session | null,
+  getScroller?: () => HTMLElement | null,
+) => {
   const is_active = useRef(true)
   const startY = useRef<number | null>(null)
   const [isAutoScrollActive, setIsAutoScrollActive] = useState(true)
 
-  const scroll_to_bottom = () => {
-    const scroller = container_ref.current
+  const getEffectiveScroller = useCallback((): HTMLElement | null => {
+    if (getScroller) return getScroller()
+    const el = container_ref.current
+    if (el instanceof HTMLElement) return el
+    return null
+  }, [getScroller, container_ref])
+
+  const scroll_to_bottom = useCallback(() => {
+    const scroller = getEffectiveScroller()
     if (scroller) {
       scroller.scrollTop = scroller.scrollHeight
     }
-  }
+  }, [getEffectiveScroller])
 
   useEffect(() => {
-    const scroller = container_ref.current
+    const scroller = getEffectiveScroller()
     if (!scroller) return
 
     const onWheel = (e: WheelEvent) => {
@@ -84,7 +95,7 @@ export const useAutoScroll = (container_ref: RefObject<HTMLElement | null>, sess
       observer.disconnect()
       clearInterval(interval)
     }
-  }, [session?.id])
+  }, [session?.id, getEffectiveScroller, scroll_to_bottom])
 
   return {
     force_scroll_to_bottom: () => {

@@ -1,5 +1,7 @@
+import { ScrollArea } from './ScrollArea'
 import { memo } from 'react'
 import type { BackgroundProcess, LogLine } from '@shared/protocol.js'
+import { tryParseResult } from './tryParseResult'
 
 interface BackgroundProcessViewProps {
   result: string
@@ -10,13 +12,9 @@ export const BackgroundProcessView = memo(function BackgroundProcessView({
   result,
   action,
 }: BackgroundProcessViewProps) {
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(result) as Record<string, unknown>
-  } catch {
-    console.warn('BackgroundProcessView: failed to parse result JSON', result.slice(0, 200))
-    return <pre className="text-xs bg-bg-primary p-1.5 rounded overflow-x-auto max-h-[60vh] break-words">{result}</pre>
-  }
+  const result_ = tryParseResult(result, 'BackgroundProcessView')
+  if (!result_.success) return result_.error
+  const parsed = result_.parsed
 
   if (action === 'logs') {
     return renderLogs(parsed)
@@ -38,7 +36,9 @@ export const BackgroundProcessView = memo(function BackgroundProcessView({
   return (
     <div className="space-y-2 text-xs">
       <div className="text-accent-warning">Unknown action: {action}</div>
-      <pre className="text-xs bg-bg-primary p-1.5 rounded overflow-x-auto max-h-[60vh] break-words">{result}</pre>
+      <ScrollArea horizontal className="max-h-[60vh]">
+        <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result}</pre>
+      </ScrollArea>
     </div>
   )
 })
@@ -54,13 +54,13 @@ function renderLogs(parsed: Record<string, unknown>) {
 
   return (
     <div className="space-y-2">
-      <div className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] overflow-y-auto break-words">
+      <ScrollArea className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] break-words">
         {lines.map((line, i) => (
           <div key={i} className={line.stream === 'stderr' ? 'text-accent-warning' : ''}>
             {line.content}
           </div>
         ))}
-      </div>
+      </ScrollArea>
       {hasMore && totalLines != null && (
         <div className="text-[10px] text-text-muted">
           Showing {lines.length} of {totalLines} lines

@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useCallback, useEffect, useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { authFetch } from '../../lib/api'
@@ -112,7 +113,7 @@ export function BranchModal({ isOpen, onClose, sessionId }: BranchModalProps) {
         {branches.length > 0 && (
           <div className="mb-4">
             <p className="text-sm font-medium text-text-primary mb-2">Branches</p>
-            <div className="max-h-48 overflow-y-auto space-y-0.5 bg-bg-tertiary/30 rounded p-2">
+            <ScrollArea className="max-h-48 space-y-0.5 bg-bg-tertiary/30 rounded p-2">
               {branches.map((b) => (
                 <button
                   key={b.name}
@@ -132,7 +133,7 @@ export function BranchModal({ isOpen, onClose, sessionId }: BranchModalProps) {
                   {!b.current && <span className="ml-auto text-xs text-accent-primary">Switch</span>}
                 </button>
               ))}
-            </div>
+            </ScrollArea>
           </div>
         )}
 
@@ -150,7 +151,9 @@ export function BranchModal({ isOpen, onClose, sessionId }: BranchModalProps) {
 
         {newName.trim() && (
           <div className="mt-2">
-            <label className="text-xs text-text-muted mb-1 block">From branch (optional — defaults to {defaultBranch || 'project default'})</label>
+            <label className="text-xs text-text-muted mb-1 block">
+              From branch (optional — defaults to {defaultBranch || 'project default'})
+            </label>
             <div className="relative">
               <BranchIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
               <input

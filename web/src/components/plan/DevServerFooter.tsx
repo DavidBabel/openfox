@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, memo } from 'react'
+import { ScrollArea } from '../shared/ScrollArea'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
+import { useState, useEffect, useRef, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useDevServerStore } from '../../stores/dev-server'
 import { GearIcon, StopIcon, OpenExternalIcon } from '../shared/icons'
@@ -30,9 +32,13 @@ const LogHoverExpand = memo(function LogHoverExpand({
   onSetAutoScroll: (enabled: boolean) => void
 }) {
   const [pos, setPos] = useState<{ bottom: number; right: number; width: number; height: number } | null>(null)
-  const preRef = useRef<HTMLPreElement>(null)
+  const osRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
   const onSetAutoScrollRef = useRef(onSetAutoScroll)
   onSetAutoScrollRef.current = onSetAutoScroll
+
+  const getViewport = useCallback(() => {
+    return osRef.current?.osInstance()?.elements().viewport ?? null
+  }, [])
 
   useEffect(() => {
     const rect = anchorRef.current?.getBoundingClientRect()
@@ -47,7 +53,7 @@ const LogHoverExpand = memo(function LogHoverExpand({
   }, [anchorRef])
 
   useEffect(() => {
-    const el = preRef.current
+    const el = getViewport()
     if (!el) return
 
     const onWheel = (e: WheelEvent) => {
@@ -69,19 +75,20 @@ const LogHoverExpand = memo(function LogHoverExpand({
 
     el.addEventListener('wheel', onWheel, { passive: true })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [])
+  }, [getViewport])
 
   useEffect(() => {
-    if (preRef.current && isAutoScrollActive) {
-      preRef.current.scrollTop = preRef.current.scrollHeight
+    const viewport = getViewport()
+    if (viewport && isAutoScrollActive) {
+      viewport.scrollTop = viewport.scrollHeight
     }
-  }, [logs, isAutoScrollActive, pos])
+  }, [logs, isAutoScrollActive, pos, getViewport])
 
   return (
     <div className={`relative ${!pos ? 'hidden' : ''}`}>
-      <pre
-        ref={preRef}
-        className="fixed z-40 text-sm font-mono text-text-primary bg-bg-primary p-2 rounded border border-border overflow-auto transition-all duration-150 ease-out select-text"
+      <ScrollArea
+        ref={osRef}
+        className="fixed z-40 text-sm font-mono text-text-primary bg-bg-primary p-2 rounded border border-border transition-all duration-150 ease-out select-text"
         style={
           pos
             ? {
@@ -96,12 +103,14 @@ const LogHoverExpand = memo(function LogHoverExpand({
             : undefined
         }
       >
-        {logs.map((chunk, i) => (
-          <span key={i} className={chunk.stream === 'stderr' ? 'text-accent-warning' : ''}>
-            {ansiToReact(chunk.content)}
-          </span>
-        ))}
-      </pre>
+        <pre className="text-sm font-mono">
+          {logs.map((chunk, i) => (
+            <span key={i} className={chunk.stream === 'stderr' ? 'text-accent-warning' : ''}>
+              {ansiToReact(chunk.content)}
+            </span>
+          ))}
+        </pre>
+      </ScrollArea>
     </div>
   )
 })
@@ -268,7 +277,7 @@ export const DevServerFooter = memo(function DevServerFooter({
         <LogRenderer
           logs={logs}
           preRef={logRef}
-          preClassName="text-sm bg-bg-primary p-2 rounded overflow-auto max-h-[200px] border border-border"
+          preClassName="text-sm bg-bg-primary p-2 rounded max-h-[200px] border border-border"
         />
 
         {hasConfig && isAlive && (

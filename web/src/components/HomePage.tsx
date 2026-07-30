@@ -1,3 +1,4 @@
+import { ScrollArea } from './shared/ScrollArea'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'wouter'
 import { useSessionStore } from '../stores/session'
@@ -179,7 +180,7 @@ export function HomePage() {
   const hasNoResults = isSearching && matchCount === 0
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-primary">
+    <ScrollArea className="flex-1 flex flex-col bg-primary">
       <div className="max-w-5xl mx-auto w-full p-4 md:p-8">
         <div className="mb-6 md:mb-8 flex items-center justify-between">
           <div>
@@ -334,6 +335,6 @@ export function HomePage() {
           onConfirm={() => deleteProject(projectToDelete.id)}
         />
       )}
-    </div>
+    </ScrollArea>
   )
 }

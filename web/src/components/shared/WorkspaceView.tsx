@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { memo } from 'react'
 
 interface WorkspaceViewProps {
@@ -27,7 +28,11 @@ export const WorkspaceView = memo(function WorkspaceView({ result, action }: Wor
   try {
     parsed = JSON.parse(result) as Record<string, unknown>
   } catch {
-    return <pre className="text-xs bg-bg-primary p-1.5 rounded overflow-x-auto max-h-[60vh] break-words">{result}</pre>
+    return (
+      <ScrollArea horizontal className="max-h-[60vh]">
+        <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result}</pre>
+      </ScrollArea>
+    )
   }
 
   switch (action) {
@@ -38,7 +43,9 @@ export const WorkspaceView = memo(function WorkspaceView({ result, action }: Wor
       return renderActionResult(parsed as ActionResultData)
     default:
       return (
-        <pre className="text-xs bg-bg-primary p-1.5 rounded overflow-x-auto max-h-[60vh] break-words">{result}</pre>
+        <ScrollArea horizontal className="max-h-[60vh]">
+          <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result}</pre>
+        </ScrollArea>
       )
   }
 })

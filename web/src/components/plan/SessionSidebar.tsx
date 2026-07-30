@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState } from 'react'
 import { useSessionStats } from '../../hooks/useSessionStats'
 import { useGitStatus } from '../../hooks/useGitStatus'
@@ -74,7 +75,7 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
       )}
 
       {/* Metadata sections */}
-      <div className="flex flex-col flex-1 overflow-y-auto scrollbar-stable">
+      <ScrollArea className="flex flex-col flex-1 px-4 -mx-4 pb-4">
         <div>
           <button
             onClick={() => setActiveMetadataKey('criteria')}
@@ -119,7 +120,7 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
                 ))
             })()}
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Workspace & branch info — only shown for git repos. */}
       <WorkspaceBranchSection

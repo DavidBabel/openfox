@@ -172,7 +172,7 @@ function renderChatInput(overrides: Record<string, unknown> = {}) {
     setDragOver: vi.fn(),
     errorMessage: null,
     setErrorMessage: vi.fn(),
-    scrollContainerRef: { current: document.createElement('div') },
+    scrollToBottom: vi.fn(),
     sessionId: 's1',
     sessionMode: 'planner',
     showHistory: false,

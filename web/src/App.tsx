@@ -1,3 +1,4 @@
+import { ScrollArea } from './components/shared/ScrollArea'
 import { useEffect, useState } from 'react'
 import { SETTINGS_KEYS, DISPLAY_SETTINGS_KEYS, useSettingsStore } from './stores/settings'
 import { useVisualViewport } from './hooks/useVisualViewport'
@@ -137,9 +138,9 @@ function OnboardingPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <ScrollArea className="flex-1">
       <OnboardingWizard onComplete={handleComplete} />
-    </div>
+    </ScrollArea>
   )
 }
 

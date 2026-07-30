@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'wouter'
 import { useConfigStore, getBackendDisplayName, type Provider } from '../../stores/config'
@@ -498,7 +499,7 @@ export function ProviderSelector() {
               className="bg-transparent border-none outline-none text-sm text-text-primary w-full placeholder:text-text-muted"
             />
           </div>
-          <div className="overflow-y-auto flex-1 min-h-0">
+          <ScrollArea className="flex-1 min-h-0">
             <div>
               {visibleGroups.map((group) => {
                 const isExpanded = searchQuery.trim().length > 0 || expandedProviderIds.includes(group.provider.id)
@@ -593,7 +594,7 @@ export function ProviderSelector() {
                     </div>
 
                     {isExpanded && (
-                      <div className="bg-bg-primary border-t border-border max-h-40 overflow-y-auto">
+                      <ScrollArea className="bg-bg-primary border-t border-border max-h-40">
                         {loadingModels === group.provider.id ? (
                           <div className="px-4 py-2 text-xs text-text-muted">Loading models...</div>
                         ) : group.models.length > 0 ? (
@@ -626,7 +627,7 @@ export function ProviderSelector() {
                         ) : (
                           <div className="px-4 py-2 text-xs text-text-muted">No models available</div>
                         )}
-                      </div>
+                      </ScrollArea>
                     )}
                   </div>
                 )
@@ -635,7 +636,7 @@ export function ProviderSelector() {
                 <div className="px-4 py-3 text-sm text-text-muted text-center">No models match your search</div>
               )}
             </div>
-          </div>
+          </ScrollArea>
           <div
             className={`border-t border-border px-3 py-2 ${isManageHighlighted ? 'bg-bg-tertiary' : ''} flex-shrink-0`}
           >

@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'wouter'
 import { useSessionStore } from '../../stores/session'
@@ -160,7 +161,7 @@ export function WorkspaceModal({
     <ModalShell isOpen={isOpen} onClose={handleClose} title="Switch Workspace" busy={busy} loading={loading}>
       <div>
         <p className="text-sm font-medium text-text-primary mb-2">Workspaces</p>
-        <div className="max-h-48 overflow-y-auto space-y-0.5 bg-bg-tertiary/30 rounded p-2 mb-4">
+        <ScrollArea className="max-h-48 space-y-0.5 bg-bg-tertiary/30 rounded p-2 mb-4">
           <button
             onClick={() => handleSwitch('original')}
             disabled={busy}
@@ -241,7 +242,7 @@ export function WorkspaceModal({
                 )}
               </div>
             ))}
-        </div>
+        </ScrollArea>
 
         <CreateInputSection
           icon={<FolderIcon />}

@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useState, useCallback, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseButton } from './IconButton'
@@ -106,12 +107,18 @@ export function Modal({
                       </div>
                     </div>
                   )}
-                  <div
-                    className={`p-4 flex-1 min-h-0${scrollable ? ' overflow-y-auto' : ' overflow-hidden flex flex-col'}`}
-                    style={minHeight ? { minHeight } : undefined}
-                  >
-                    {children}
-                  </div>
+                  {scrollable ? (
+                    <ScrollArea className="p-4 flex-1 min-h-0" style={minHeight ? { minHeight } : undefined}>
+                      {children}
+                    </ScrollArea>
+                  ) : (
+                    <div
+                      className="p-4 flex-1 min-h-0 overflow-hidden flex flex-col"
+                      style={minHeight ? { minHeight } : undefined}
+                    >
+                      {children}
+                    </div>
+                  )}
                   {footer && <div className="px-4 py-3 border-t border-border">{footer}</div>}
                 </div>
               </div>,

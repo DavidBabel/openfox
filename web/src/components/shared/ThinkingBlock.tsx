@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { memo } from 'react'
 import { Markdown } from './Markdown'
 
@@ -11,16 +12,16 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, variant = 'd
     return (
       <div className="text-text-muted text-sm italic feed-item">
         <span className="text-text-thinking">thinking:</span>
-        <div className="ml-1.5 mt-0.5 overflow-x-auto">
+        <ScrollArea horizontal className="ml-1.5 mt-0.5">
           <Markdown content={content} />
-        </div>
+        </ScrollArea>
       </div>
     )
   }
 
   return (
-    <div className="text-text-muted text-sm italic bg-secondary rounded p-1.5 feed-item overflow-x-auto">
+    <ScrollArea horizontal className="text-text-muted text-sm italic bg-secondary rounded p-1.5 feed-item">
       <Markdown content={content} muted />
-    </div>
+    </ScrollArea>
   )
 })

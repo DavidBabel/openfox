@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState } from 'react'
 import type { Message } from '@shared/types.js'
 import { Modal } from '../shared/SelfContainedModal'
@@ -58,12 +59,13 @@ export function AutoPromptCard({ message }: AutoPromptCardProps) {
 
       {showContentDirectly && (
         <div className="flex justify-center feed-item mb-4">
-          <div
-            className="max-w-[75%] rounded p-3 bg-bg-tertiary/50 text-text-secondary text-sm overflow-x-auto"
+          <ScrollArea
+            horizontal
+            className="max-w-[75%] rounded p-3 bg-bg-tertiary/50 text-text-secondary text-sm"
             style={{ borderLeft: `3px solid ${metaColor}` }}
           >
             <pre className="whitespace-pre-wrap break-words font-mono text-xs">{message.content}</pre>
-          </div>
+          </ScrollArea>
         </div>
       )}
 
@@ -76,9 +78,11 @@ export function AutoPromptCard({ message }: AutoPromptCardProps) {
           </div>
 
           <div className="h-full min-h-96">
-            <pre className="text-sm text-text-secondary whitespace-pre-wrap break-words bg-bg-tertiary rounded p-4 h-full min-h-96 overflow-auto font-mono">
-              {message.content}
-            </pre>
+            <ScrollArea horizontal className="h-full min-h-96">
+              <pre className="text-sm text-text-secondary whitespace-pre-wrap break-words bg-bg-tertiary rounded p-4 h-full min-h-96 font-mono">
+                {message.content}
+              </pre>
+            </ScrollArea>
           </div>
         </div>
       </Modal>

@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { memo } from 'react'
 import type { Diagnostic } from '@shared/types.js'
 
@@ -58,7 +59,7 @@ export const DiagnosticsView = memo(function DiagnosticsView({ diagnostics }: Di
       </div>
 
       {/* Diagnostic list */}
-      <div className="max-h-48 overflow-y-auto">
+      <ScrollArea className="max-h-48">
         {diagnostics.map((d, i) => {
           const config = severityConfig[d.severity]
           return (
@@ -79,7 +80,7 @@ export const DiagnosticsView = memo(function DiagnosticsView({ diagnostics }: Di
             </div>
           )
         })}
-      </div>
+      </ScrollArea>
     </div>
   )
 })

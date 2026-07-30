@@ -1,3 +1,4 @@
+import { ScrollArea } from './shared/ScrollArea'
 import { useState, useEffect, useCallback } from 'react'
 import { useLocation } from 'wouter'
 import { useProjectStore } from '../stores/project'
@@ -117,7 +118,7 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
           <div className="p-3 border-b border-border bg-bg-tertiary/30 shrink-0">
             <h3 className="font-medium text-sm text-text-secondary">Recent Projects</h3>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <ScrollArea className="flex-1">
             {projects.length === 0 ? (
               <div className="p-6 text-center text-text-muted text-sm">
                 <p className="mb-2">No recent projects</p>
@@ -151,7 +152,7 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
                 ))}
               </div>
             )}
-          </div>
+          </ScrollArea>
         </div>
 
         <div className="w-full sm:w-1/2 flex flex-col items-center justify-center p-6 sm:p-8 text-center">

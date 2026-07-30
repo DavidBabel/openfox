@@ -1,3 +1,4 @@
+import { ScrollArea } from './ScrollArea'
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'wouter'
@@ -269,9 +270,9 @@ export function DropdownMenu({
       }}
       tabIndex={-1}
     >
-      <div className="max-h-[60vh] overflow-y-auto">
+      <ScrollArea className="max-h-[60vh]">
         {items.map((item, index) => renderItem(item, index, items.length, index))}
-      </div>
+      </ScrollArea>
       {footerItems.length > 0 && (
         <div className="border-t border-border">
           {footerItems.map((item, index) => renderItem(item, index, footerItems.length, items.length + index))}

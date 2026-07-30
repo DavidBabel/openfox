@@ -1,3 +1,4 @@
+import { ScrollArea } from '../shared/ScrollArea'
 import { useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { NotificationSettings } from './NotificationSettings'
@@ -35,7 +36,11 @@ export function GlobalSettingsModal({ isOpen, onClose }: GlobalSettingsModalProp
     <Modal isOpen={isOpen} onClose={handleClose} title="Settings" size="xl" minHeight="500px" scrollable={false}>
       <div data-global-settings className="flex flex-col h-full min-h-0 -m-4">
         {/* Tab bar - always visible, horizontally scrollable on mobile */}
-        <div className="flex border-b border-border mb-4 overflow-x-auto scrollbar-hide flex-shrink-0 px-4 pt-4">
+        <ScrollArea
+          horizontal
+          options={{ scrollbars: { visibility: 'hidden' } }}
+          className="flex border-b border-border mb-4 flex-shrink-0 px-4 pt-4"
+        >
           <TabButton
             label="Instructions"
             active={activeTab === 'instructions'}
@@ -61,10 +66,10 @@ export function GlobalSettingsModal({ isOpen, onClose }: GlobalSettingsModalProp
             onClick={() => setActiveTab('advanced')}
             showDot={updateAvailable}
           />
-        </div>
+        </ScrollArea>
 
         {/* Tab content - scrolls independently, scrollbar at modal edge */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
+        <ScrollArea className="flex-1 min-h-0 px-4 pb-4">
           {activeTab === 'instructions' && <InstructionsTab isOpen={isOpen} />}
           {activeTab === 'skills' && <SkillsContent isOpen={isOpen} />}
           {activeTab === 'plugins' && <PluginsTab />}
@@ -73,7 +78,7 @@ export function GlobalSettingsModal({ isOpen, onClose }: GlobalSettingsModalProp
           {activeTab === 'keybindings' && <KeybindingsTab />}
           {activeTab === 'tools' && <ToolsTab />}
           {activeTab === 'advanced' && <AdvancedTab onClose={onClose} />}
-        </div>
+        </ScrollArea>
       </div>
     </Modal>
   )

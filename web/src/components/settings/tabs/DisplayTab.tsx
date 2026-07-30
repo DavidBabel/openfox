@@ -1,3 +1,4 @@
+import { ScrollArea } from '../../shared/ScrollArea'
 import { useState, useEffect, useMemo } from 'react'
 import { SETTINGS_KEYS } from '../../../stores/settings'
 import { useSettingsStoreState } from '../useSettingsStore'
@@ -224,12 +225,13 @@ function TerminalFontEditor() {
         ))}
       </select>
 
-      <div
-        className="px-3 py-2 text-sm text-text-primary bg-bg-tertiary border border-border rounded overflow-x-auto whitespace-nowrap"
+      <ScrollArea
+        horizontal
+        className="px-3 py-2 text-sm text-text-primary bg-bg-tertiary border border-border rounded whitespace-nowrap"
         style={{ fontFamily: savedValue }}
       >
         {FONT_PREVIEW_TEXT}
-      </div>
+      </ScrollArea>
 
       <div>
         <div className="text-xs text-text-muted mb-1">
@@ -264,29 +266,6 @@ const SCROLLBAR_PRESETS = [
       '@-moz-document url-prefix() {',
       '  * { scrollbar-width: thin; }',
       '}',
-    ].join('\n'),
-  },
-  {
-    label: 'Stable gutter (prevent layout shift)',
-    css: [
-      '/* Reserve scrollbar space so content does not jump when scrollbar appears */',
-      '.scrollbar-stable { scrollbar-gutter: stable; }',
-    ].join('\n'),
-  },
-  {
-    label: 'Balanced gutter (stable + symmetrical)',
-    css: [
-      '/* Reserve space on both sides — keeps content centered */',
-      '/* Note: Chrome has a bug where both-edges reserves space but the scrollbar',
-      '   may not occupy it properly. Test in your browser. */',
-      '.scrollbar-stable { scrollbar-gutter: stable both-edges; }',
-    ].join('\n'),
-  },
-  {
-    label: 'Always visible scrollbar',
-    css: [
-      '/* Force scrollbar to always show — no layout shift, no surprises */',
-      '.scrollbar-stable { overflow-y: scroll; }',
     ].join('\n'),
   },
   {
