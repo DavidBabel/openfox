@@ -20,6 +20,7 @@ interface MessageListProps {
   onLaunchWorkflow: (workflowId: string, subGroup?: string, params?: Record<string, string>) => void
   onScrollToTop?: () => void
   hiddenCount?: number
+  onScrollbarDrag?: () => void
 }
 
 export const MessageList = memo(function MessageList({
@@ -29,6 +30,7 @@ export const MessageList = memo(function MessageList({
   onLaunchWorkflow,
   onScrollToTop,
   hiddenCount = 0,
+  onScrollbarDrag,
 }: MessageListProps) {
   const criteria = useSessionStore((state) => state.currentSession?.metadataEntries?.['criteria'] ?? EMPTY_CRITERIA)
   const sessionId = useSessionStore((state) => state.currentSession?.id)
@@ -101,7 +103,7 @@ export const MessageList = memo(function MessageList({
 
   return (
     <div className="relative flex-1 min-w-0 group">
-      <ScrollArea ref={scrollContainerRef} data-testid="chat-scroll-container" className="absolute inset-0 bg-primary">
+      <ScrollArea ref={scrollContainerRef} data-testid="chat-scroll-container" className="absolute inset-0 bg-primary" onScrollbarDrag={onScrollbarDrag}>
         <div className="pt-4">
           {hiddenCount > 0 && (
             <div className="px-2 md:px-4 pb-2 space-y-1">

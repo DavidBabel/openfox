@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
 import { ScrollArea } from './ScrollArea'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { ansiToReact } from '../../lib/ansiParser'
 
 interface LogEntry {
@@ -12,11 +13,13 @@ interface LogRendererProps {
   logs: LogEntry[]
   preRef?: React.RefObject<HTMLPreElement | null>
   preClassName?: string
+  scrollAreaRef?: React.Ref<OverlayScrollbarsComponentRef<'div'>>
+  onScrollbarDrag?: () => void
 }
 
-export function LogRenderer({ logs, preRef, preClassName = 'text-sm font-mono' }: LogRendererProps) {
+export function LogRenderer({ logs, preRef, preClassName = 'text-sm font-mono', scrollAreaRef, onScrollbarDrag }: LogRendererProps) {
   return (
-    <ScrollArea options={{ overflow: { x: 'scroll', y: 'scroll' } }} className={preClassName}>
+    <ScrollArea ref={scrollAreaRef} options={{ overflow: { x: 'scroll', y: 'scroll' } }} className={preClassName} onScrollbarDrag={onScrollbarDrag}>
       <pre ref={preRef} className="contents">
         {logs.length === 0 ? (
           <span className="text-text-muted">No output yet</span>

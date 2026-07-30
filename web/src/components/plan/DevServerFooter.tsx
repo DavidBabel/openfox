@@ -89,6 +89,7 @@ const LogHoverExpand = memo(function LogHoverExpand({
       <ScrollArea
         ref={osRef}
         className="fixed z-40 text-sm font-mono text-text-primary bg-bg-primary p-2 rounded border border-border transition-all duration-150 ease-out select-text"
+        onScrollbarDrag={() => onSetAutoScroll(false)}
         style={
           pos
             ? {
@@ -142,7 +143,11 @@ export const DevServerFooter = memo(function DevServerFooter({
   const [isHoveringLogs, setIsHoveringLogs] = useState(false)
   const [isHidingLogs, setIsHidingLogs] = useState(false)
   const logRef = useRef<HTMLPreElement>(null)
-  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(logRef, null)
+  const logOsRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
+  const getLogViewport = useCallback(() => {
+    return logOsRef.current?.osInstance()?.elements().viewport ?? null
+  }, [])
+  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(logOsRef, null, getLogViewport)
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logContainerRef = useRef<HTMLDivElement>(null)
@@ -278,6 +283,8 @@ export const DevServerFooter = memo(function DevServerFooter({
           logs={logs}
           preRef={logRef}
           preClassName="text-sm bg-bg-primary p-2 rounded max-h-[200px] border border-border"
+          scrollAreaRef={logOsRef}
+          onScrollbarDrag={() => setAutoScroll(false)}
         />
 
         {hasConfig && isAlive && (

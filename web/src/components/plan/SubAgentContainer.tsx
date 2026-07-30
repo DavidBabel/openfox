@@ -127,6 +127,7 @@ export const SubAgentContainer = memo(function SubAgentContainer({
       <ScrollArea
         ref={scrollRef}
         className={`${expanded ? 'max-h-[calc(100vh-10rem)]' : 'max-h-80'} p-2 transition-[max-height] duration-200`}
+        onScrollbarDrag={() => setAutoScroll(false)}
       >
         {displayMessages.map((message) => {
           if (message.role === 'assistant') {

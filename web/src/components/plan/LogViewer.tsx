@@ -71,7 +71,7 @@ export const LogViewer = memo(function LogViewer({
         </div>
       }
     >
-      <ScrollArea ref={scrollRef} className="flex-1 -m-4 p-4">
+      <ScrollArea ref={scrollRef} className="flex-1 -m-4 p-4" onScrollbarDrag={() => setAutoScroll(false)}>
         <LogRenderer logs={logs} preClassName={preClassName} />
       </ScrollArea>
     </Modal>

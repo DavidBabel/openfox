@@ -268,6 +268,7 @@ export function PlanPanel({
           onLaunchWorkflow={handleLaunchWorkflow}
           onScrollToTop={() => setAutoScroll(false)}
           hiddenCount={hiddenCount}
+          onScrollbarDrag={() => setAutoScroll(false)}
         />
 
         <ChatInput
