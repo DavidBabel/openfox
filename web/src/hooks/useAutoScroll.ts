@@ -69,6 +69,15 @@ export const useAutoScroll = (
       )
     }
 
+    const onScroll = () => {
+      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
+      const atEnd = distance < 2
+      if (atEnd !== is_active.current) {
+        is_active.current = atEnd
+        setIsAutoScrollActive(atEnd)
+      }
+    }
+
     const observer = new MutationObserver(() => {
       if (!is_active.current) return
       requestAnimationFrame(scroll_to_bottom)
@@ -82,6 +91,7 @@ export const useAutoScroll = (
     scroller.addEventListener('wheel', onWheel, { passive: true })
     scroller.addEventListener('touchstart', onTouchStart, { passive: true })
     scroller.addEventListener('touchmove', onTouchMove, { passive: true })
+    scroller.addEventListener('scroll', onScroll, { passive: true })
     observer.observe(scroller, {
       childList: true,
       subtree: true,
@@ -92,6 +102,7 @@ export const useAutoScroll = (
       scroller.removeEventListener('wheel', onWheel)
       scroller.removeEventListener('touchstart', onTouchStart)
       scroller.removeEventListener('touchmove', onTouchMove)
+      scroller.removeEventListener('scroll', onScroll)
       observer.disconnect()
       clearInterval(interval)
     }

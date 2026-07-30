@@ -48,14 +48,6 @@
   right: 3px !important;
 }
 
-/* Ensure full scrollbar width is hoverable, not just the handle */
-.os-scrollbar-vertical {
-  pointer-events: auto !important;
-}
-.os-scrollbar-track {
-  pointer-events: auto !important;
-}
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
