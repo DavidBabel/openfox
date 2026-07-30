@@ -33,7 +33,7 @@ export function GlobalSettingsModal({ isOpen, onClose }: GlobalSettingsModalProp
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Settings" size="xl" minHeight="500px" scrollable={false}>
+    <Modal isOpen={isOpen} onClose={handleClose} title="Settings" size="xl" scrollable={false}>
       <div data-global-settings className="flex flex-col h-full min-h-0 -m-4">
         {/* Tab bar - always visible, horizontally scrollable on mobile */}
         <ScrollArea
