@@ -124,17 +124,65 @@
           "when": {
             "type": "always"
           },
-          "goto": "merge"
+          "goto": "capture_fixes"
         }
       ]
     },
     {
-      "id": "merge",
-      "name": "Merge PR",
+      "id": "capture_fixes",
+      "name": "Capture Fixes",
       "type": "agent",
       "phase": "build",
       "agentId": "builder",
-      "prompt": "Merge PR #{{pr_number}} and clean up. If you applied fixes (there's a `review-fixes-{{pr_number}}` tag), push it and cherry-pick onto develop. If no fixes were needed, skip the tag push, cherry-pick, and tag cleanup.\n\n1. *(skip if no fixes)* Push fix tag: `git push origin review-fixes-{{pr_number}}`\n2. Squash-merge via API: `gh api repos/co-l/openfox/pulls/{{pr_number}}/merge -X PUT -f merge_method=squash -f commit_title=\"PR #{{pr_number}}: $(gh pr view {{pr_number}} --json title --jq '.title')\"`\n3. Switch back to original: `workspace switch original`\n4. Pull latest develop: `git checkout develop && git pull origin develop --ff-only`\n5. *(skip if no fixes)* Fetch tag and cherry-pick: `git fetch origin refs/tags/review-fixes-{{pr_number}} && git cherry-pick FETCH_HEAD && git push origin develop`\n6. Verify: `git log --oneline origin/develop -3`\n7. *(skip if no fixes)* Clean up tag: `git push origin --delete refs/tags/review-fixes-{{pr_number}} && git tag -d review-fixes-{{pr_number}}`\n8. Delete workspace: `workspace delete review-pr-{{pr_number}}`\n\nCall step_done() when done.",
+      "prompt": "Capture any fixes that accumulated during review or testing (still in review workspace):\n\n1. `STATE=$(git status --porcelain)`\n2. If `$STATE` is non-empty:\n   a. `git add -A && git commit -m \"review: fixes for PR #{{pr_number}}\"`\n   b. `git tag -f review-fixes-{{pr_number}}`\n3. If tag `review-fixes-{{pr_number}}` exists locally:\n   a. `git push origin review-fixes-{{pr_number}}`\n4. Report whether fixes were captured (yes/no) and call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "squash_merge"
+        }
+      ]
+    },
+    {
+      "id": "squash_merge",
+      "name": "Squash-Merge PR",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "prompt": "Squash-merge PR #{{pr_number}} via API:\n\n1. `gh api repos/co-l/openfox/pulls/{{pr_number}}/merge -X PUT -f merge_method=squash -f commit_title=\"PR #{{pr_number}}: $(gh pr view {{pr_number}} --json title --jq '.title')\"`\n2. Call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "cherry_pick"
+        }
+      ]
+    },
+    {
+      "id": "cherry_pick",
+      "name": "Cherry-Pick Fixes",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "prompt": "Switch to original and cherry-pick any fix commits onto develop:\n\n1. `workspace switch original`\n2. `git checkout develop && git pull origin develop --ff-only`\n3. Check if tag exists remotely: `TAG_EXISTS=$(git ls-remote --exit-code origin refs/tags/review-fixes-{{pr_number}} 2>/dev/null && echo yes || echo no)`\n4. If `$TAG_EXISTS` == \"yes\":\n   a. `git fetch origin refs/tags/review-fixes-{{pr_number}}`\n   b. `git cherry-pick FETCH_HEAD && git push origin develop`\n5. If `$TAG_EXISTS` == \"no\", report no fixes to cherry-pick.\n6. Call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "cleanup"
+        }
+      ]
+    },
+    {
+      "id": "cleanup",
+      "name": "Clean Up",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "prompt": "Remove temporary artifacts and delete the workspace:\n\n1. Remove remote tag if it exists: `git push origin --delete refs/tags/review-fixes-{{pr_number}} 2>/dev/null; true`\n2. Remove local tag if it exists: `git tag -d review-fixes-{{pr_number}} 2>/dev/null; true`\n3. `workspace delete review-pr-{{pr_number}}`\n4. Call step_done().",
       "transitions": [
         {
           "when": {
