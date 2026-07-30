@@ -30,14 +30,28 @@ http.request = function (this: any, ...args: any[]) {
   return (origRequest as any)(...args)
 } as any
 
+// Mock wouter router hooks for jsdom (components use useLocation/useRoute)
+vi.mock('wouter', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react')
+  const mockNavigate = vi.fn()
+  return {
+    useLocation: () => ['/', mockNavigate],
+    useRoute: () => [false, vi.fn()],
+    Link: ({ children, ...props }: any) => React.createElement('a', props, children),
+    Router: ({ children }: any) => children,
+    Switch: ({ children }: any) => children,
+    Route: ({ children }: any) => children,
+  }
+})
+
 // Mock overlayscrollbars-react for jsdom (hooks crash without browser APIs)
 vi.mock('overlayscrollbars-react', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react')
-  const MockOverlayScrollbarsComponent = React.forwardRef(
-    ({ children, options, events, defer, ...divProps }: any, ref: any) => {
-      return React.createElement('div', { ...divProps, ref }, children)
-    },
-  )
+  const MockOverlayScrollbarsComponent = ({ children, ref: _ref, ...divProps }: any) => {
+    return React.createElement('div', divProps, children)
+  }
   MockOverlayScrollbarsComponent.displayName = 'OverlayScrollbarsComponent'
 
   return {

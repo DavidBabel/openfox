@@ -89,7 +89,7 @@ describe('MetadataModal', () => {
 
     it('has scrollable content area', () => {
       renderModal()
-      const scrollContainer = screen.getByRole('dialog').querySelector('.overflow-y-auto')
+      const scrollContainer = screen.getByRole('dialog').querySelector('.p-4')
       expect(scrollContainer).toBeInTheDocument()
     })
   })
