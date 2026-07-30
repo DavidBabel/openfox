@@ -206,8 +206,8 @@ function TerminalFontEditor() {
   return (
     <div className="space-y-2">
       <p className="text-xs text-text-muted">
-        Only monospace fonts detected on this machine are listed. Oh My Zsh themes need a Nerd Font for icons and
-        powerline separators to render correctly.
+        Only monospace fonts detected on this machine are listed. If your shell theme uses icons or powerline glyphs,
+        pick a Nerd Font.
       </p>
 
       <select
