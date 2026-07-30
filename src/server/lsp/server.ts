@@ -113,11 +113,43 @@ function hoverInfo(contents: string, range?: HoverInfo['range']): HoverInfo {
   return range ? { contents, range } : { contents }
 }
 
+/**
+ * Race a promise against a timeout.
+ * Properly cleans up the timer and prevents unhandled rejection warnings
+ * when the timeout wins (the outer rejection is caught by the caller's
+ * await, but Node.js may detect it as temporarily unhandled with fake timers).
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  const outer = new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`))
+    }, ms)
+    promise.then(
+      (val) => {
+        clearTimeout(timer)
+        resolve(val)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+    // Silence any eventual rejection from the abandoned promise
+    // after the timeout has already fired.
+    promise.catch(() => {})
+  })
+  // Suppress unhandled rejection detection during the microtask gap
+  // between timer fire and the caller's await handler.
+  outer.catch(() => {})
+  return outer
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
 
 const DIAGNOSTIC_WAIT_MS = 2000
+const DEFAULT_INIT_TIMEOUT_MS = 5000
 
 // LSP SymbolKind number to human-readable string
 // See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#symbolKind
@@ -201,11 +233,13 @@ export class LspServer {
   private pendingDiagnosticDebounce = new Map<string, NodeJS.Timeout>()
 
   private commandPath: string
+  private initTimeoutMs: number
 
-  constructor(config: LanguageConfig, workdir: string, commandPath?: string) {
+  constructor(config: LanguageConfig, workdir: string, commandPath?: string, initTimeoutMs?: number) {
     this.config = config
     this.workdir = workdir
     this.commandPath = commandPath ?? config.serverCommand
+    this.initTimeoutMs = initTimeoutMs ?? DEFAULT_INIT_TIMEOUT_MS
   }
 
   // ============================================================================
@@ -239,6 +273,21 @@ export class LspServer {
         shell: needsShell,
       })
 
+      // Register exit handler BEFORE awaiting spawn so we catch rapid failures
+      // (e.g., rustup proxy detecting a missing component and exiting right
+      // after the process spawns). Previously registered after the await, which
+      // meant the 'exit' event could fire and be lost before the handler existed.
+      this.process.on('exit', (code) => {
+        if (this.state === 'running' || this.state === 'starting') {
+          logger.warn('LSP server exited unexpectedly', {
+            language: this.config.id,
+            code,
+            state: this.state,
+          })
+          this.handleProcessExit()
+        }
+      })
+
       // Wait for the process to actually spawn before wiring JSON-RPC onto its
       // stdio. If spawn fails (e.g. ENOENT), sending initialize would leave an
       // in-flight write on a destroyed stdin, and vscode-jsonrpc's sendRequest
@@ -248,6 +297,12 @@ export class LspServer {
         this.process!.once('spawn', resolve)
         this.process!.once('error', reject)
       })
+
+      // Process may have exited during startup (exit handler ran while we were
+      // awaiting spawn). Bail early instead of trying to talk to a dead process.
+      if (this.state !== 'starting') {
+        throw new Error(`LSP server process exited during startup (state: ${this.state})`)
+      }
 
       if (!this.process.stdin || !this.process.stdout) {
         throw new Error('Failed to get stdio streams from language server process')
@@ -272,17 +327,10 @@ export class LspServer {
         this.handleDiagnostics(params)
       })
 
-      // Handle process errors
+      // Handle process errors (post-spawn errors like crashes)
       this.process.on('error', (err) => {
         logger.error('LSP server process error', { language: this.config.id, error: err.message })
         this.handleProcessExit()
-      })
-
-      this.process.on('exit', (code) => {
-        if (this.state === 'running') {
-          logger.warn('LSP server exited unexpectedly', { language: this.config.id, code })
-          this.handleProcessExit()
-        }
       })
 
       this.process.stderr?.on('data', (data: Buffer) => {
@@ -295,7 +343,9 @@ export class LspServer {
       // Start the connection
       this.connection.listen()
 
-      // Send initialize request
+      // Send initialize request with timeout.
+      // Without a timeout, a broken server (e.g., rust-analyzer on macOS with
+      // a missing toolchain component) can hang the tool call indefinitely.
       const initParams: Record<string, unknown> = {
         processId: process.pid,
         rootUri: `file://${this.workdir}`,
@@ -317,7 +367,11 @@ export class LspServer {
         initializationOptions: this.config.initOptions,
       }
 
-      const result = await this.connection.sendRequest(LSP.initialize, initParams)
+      const result = await withTimeout(
+        this.connection.sendRequest(LSP.initialize, initParams),
+        this.initTimeoutMs,
+        'LSP initialize',
+      )
 
       logger.debug('LSP server initialized', {
         language: this.config.id,

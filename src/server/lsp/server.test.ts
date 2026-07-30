@@ -442,4 +442,45 @@ describe('LspServer', () => {
     await expect(failingServer.start()).rejects.toThrow('initialize failed')
     expect(failingServer.getState()).toBe('error')
   })
+
+  it('throws when process exits during startup (starting state)', async () => {
+    const proc = createProcessMock()
+    // Emit exit in the same microtask as spawn to simulate rapid failure
+    proc.removeAllListeners('newListener')
+    proc.on('newListener', (event: string) => {
+      if (event === 'spawn') {
+        queueMicrotask(() => {
+          proc.emit('spawn')
+          proc.emit('exit', 127)
+        })
+      }
+    })
+    const { connection } = createConnectionMock()
+    spawnMock.mockReturnValue(proc)
+    createMessageConnectionMock.mockReturnValue(connection)
+    connection.sendRequest.mockResolvedValue({})
+    connection.sendNotification.mockResolvedValue(undefined)
+
+    const server = new LspServer(tsConfig, '/tmp/project', '/usr/bin/typescript-language-server')
+    await expect(server.start()).rejects.toThrow(/exited during startup/i)
+    expect(server.getState()).toBe('error')
+  })
+
+  it('times out if initialize never responds', async () => {
+    vi.useRealTimers()
+    const proc = createProcessMock()
+    const { connection } = createConnectionMock()
+    spawnMock.mockReturnValue(proc)
+    createMessageConnectionMock.mockReturnValue(connection)
+    // sendRequest for initialize never resolves
+    connection.sendRequest.mockImplementation(() => new Promise(() => {}))
+    connection.sendNotification.mockResolvedValue(undefined)
+
+    // Use a short timeout so the test doesn't take 5 real seconds
+    const server = new LspServer(tsConfig, '/tmp/project', '/usr/bin/typescript-language-server', 100)
+    const startPromise = server.start()
+
+    await expect(startPromise).rejects.toThrow(/timed out/i)
+    expect(server.getState()).toBe('error')
+  }, 2000)
 })
