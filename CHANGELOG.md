@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.103 - 2026-07-30
+
+### Bug Fixes
+
+- **LSP server crashes no longer freeze write_file/edit_file** — rapid process deaths during startup (e.g., rust-analyzer missing on macOS) are now caught early, letting the tool complete normally.
+- **Hung LSP servers time out after 5 seconds** — the initialize handshake now has a timeout, preventing a non-responsive server from blocking the agent loop.
+
 ## 2.0.102 - 2026-07-29
 
 ### Features
