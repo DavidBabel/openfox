@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeUnifiedDiff } from './dynamic-context.js'
+import { computeUnifiedDiff, computeDynamicContextHash } from './dynamic-context.js'
 
 describe('computeUnifiedDiff', () => {
   it('returns unchanged lines when texts are identical', () => {
@@ -176,5 +176,45 @@ Respond concisely and clearly.
       { type: 'removed', content: 'old' },
       { type: 'added', content: 'new' },
     ])
+  })
+})
+
+describe('computeDynamicContextHash', () => {
+  const skills = [{ id: 'playwright', name: 'Playwright', description: 'Browser automation', version: '1.0' }]
+
+  it('produces consistent hash for same inputs', () => {
+    const a = computeDynamicContextHash('do foo', skills, 'tool-fp')
+    const b = computeDynamicContextHash('do foo', skills, 'tool-fp')
+    expect(a).toBe(b)
+  })
+
+  it('produces different hash for different instructions', () => {
+    const a = computeDynamicContextHash('do foo', skills, 'tool-fp')
+    const b = computeDynamicContextHash('do bar', skills, 'tool-fp')
+    expect(a).not.toBe(b)
+  })
+
+  it('includes modelName in hash when provided', () => {
+    const withoutModel = computeDynamicContextHash('do foo', skills, 'tool-fp')
+    const withModel = computeDynamicContextHash('do foo', skills, 'tool-fp', 'MiniMax-M2.7')
+    expect(withModel).not.toBe(withoutModel)
+  })
+
+  it('produces consistent hash for same modelName', () => {
+    const a = computeDynamicContextHash('do foo', skills, 'tool-fp', 'MiniMax-M2.7')
+    const b = computeDynamicContextHash('do foo', skills, 'tool-fp', 'MiniMax-M2.7')
+    expect(a).toBe(b)
+  })
+
+  it('differentiates between different modelNames', () => {
+    const a = computeDynamicContextHash('do foo', skills, 'tool-fp', 'MiniMax-M2.7')
+    const b = computeDynamicContextHash('do foo', skills, 'tool-fp', 'gpt-4o')
+    expect(a).not.toBe(b)
+  })
+
+  it('omitting modelName produces same hash as before feature existed', () => {
+    const a = computeDynamicContextHash('do foo', skills, 'tool-fp')
+    const b = computeDynamicContextHash('do foo', skills, 'tool-fp', undefined)
+    expect(a).toBe(b)
   })
 })

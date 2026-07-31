@@ -370,7 +370,12 @@ export async function runAgentTurn(
         const cached = options.sessionManager.getCachedPrompt(options.sessionId)
         if (cached) {
           const toolFingerprint = getToolFingerprint(cached.tools)
-          const currentHash = computeDynamicContextHash(instructionContent ?? '', skills, toolFingerprint)
+          const currentHash = computeDynamicContextHash(
+            instructionContent ?? '',
+            skills,
+            toolFingerprint,
+            agentLlmClient.getModel(),
+          )
           if (cached.hash !== currentHash) {
             logger.debug('assembleRequest: hash mismatch', {
               sessionId: options.sessionId,
@@ -388,7 +393,12 @@ export async function runAgentTurn(
             toolChoice: input.toolChoice,
           })
         }
-        const result = await buildCachedPrompt(options.sessionManager, options.sessionId, agentDef)
+        const result = await buildCachedPrompt(
+          options.sessionManager,
+          options.sessionId,
+          agentDef,
+          agentLlmClient.getModel(),
+        )
         options.sessionManager.setCachedPrompt(options.sessionId, result.systemPrompt, result.tools, result.hash)
         return createAssemblyResult({
           systemPrompt: result.systemPrompt,

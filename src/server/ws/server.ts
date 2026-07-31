@@ -985,7 +985,8 @@ async function handleClientMessage(
           }
 
           if (cachedHash) {
-            const currentHash = await computeSessionHash(sessionManager, session.id)
+            const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+            const currentHash = await computeSessionHash(sessionManager, session.id, modelName)
             if (currentHash !== cachedHash) {
               sessionManager.setDynamicContextChanged(session.id, true)
               sendContextState()
@@ -1100,7 +1101,9 @@ async function handleClientMessage(
       ;(async () => {
         try {
           await mcpReadyPromise
-          const currentHash = await computeSessionHash(sessionManager, sessionId)
+          const session = sessionManager.requireSession(sessionId)
+          const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+          const currentHash = await computeSessionHash(sessionManager, sessionId, modelName)
           const cachedHash = sessionManager.getCachedPrompt(sessionId)?.hash
 
           if (cachedHash) {
@@ -1147,7 +1150,13 @@ async function handleClientMessage(
         const agentDef =
           allAgents.findAgentById(session.mode, await allAgents.loadAllAgentsDefault()) ??
           allAgents.findAgentById('planner', await allAgents.loadAllAgentsDefault())!
-        const { systemPrompt: newPrompt, hash: newHash } = await buildCachedPrompt(sessionManager, sessionId, agentDef)
+        const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+        const { systemPrompt: newPrompt, hash: newHash } = await buildCachedPrompt(
+          sessionManager,
+          sessionId,
+          agentDef,
+          modelName,
+        )
 
         const oldCached = sessionManager.getCachedPrompt(sessionId)
         const oldPrompt = oldCached?.systemPrompt
@@ -1199,7 +1208,8 @@ async function handleClientMessage(
 
       ;(async () => {
         try {
-          await applyDynamicContext(sessionManager, sessionId)
+          const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+          await applyDynamicContext(sessionManager, sessionId, modelName)
 
           const newContextState = sessionManager.getContextState(sessionId)
           sendForSession(sessionId, createContextStateMessage(newContextState))
@@ -1235,8 +1245,7 @@ async function handleClientMessage(
       // If running, queue for later processing instead of rejecting
       if (session.isRunning) {
         const launchPayload = message.payload as
-          | { workflowId?: string; content?: string; attachments?: unknown[] }
-          | undefined
+          { workflowId?: string; content?: string; attachments?: unknown[] } | undefined
         const content = launchPayload?.content ?? ''
         const attachments = launchPayload?.attachments as Attachment[] | undefined
         const workflowId = launchPayload?.workflowId
