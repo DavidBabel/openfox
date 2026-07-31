@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.104 - 2026-07-31
+
+### Features
+
+- **Terminal font is now configurable** — pick any installed monospace font from a live-updating dropdown in Display settings. The preview updates instantly as you browse.
+
+### Enhancements
+
+- **Scrollbars!** — we've tamed this mystical beast by implementing a consistent scrollbar across all platforms. Upside: they're now themed accordingly, look good, and scrolling up (by dragging the scrollbar itself or with the mouse wheel) now escapes auto-scroll naturally — no more pull-backs! Downside: you might occasionally see an out-of-sync scrollbar for a brief moment, but hey, it's hard to get that perfect.
+
+### Bug Fixes
+
+- **Model name now appears in agent system prompts** — the `Model:` line in the Environment section was silently dropped when the caching layer was introduced. Agents once again know what model they're running on.
+- **Settings modal no longer overflows on short viewports** — removed a hard-coded minHeight that pushed content past the bottom edge on constrained screens.
+- **Auto-scroll no longer fights itself** — programmatic scrolls from the auto-scroll feature are RAF-guarded so they don't trigger the scroll event listener and deactivate themselves.
+
 ## 2.0.103 - 2026-07-30
 
 ### Bug Fixes
