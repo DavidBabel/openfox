@@ -104,7 +104,7 @@
       "type": "agent",
       "phase": "build",
       "agentId": "builder",
-      "prompt": "Start the dev server using the `dev_server` tool so the user can manually test the changes. Once it's running, present a handoff summary:\n\n> **PR #{{pr_number}} is ready at http://localhost:<port>.**\n>\n> **Metrics:** Tests X → Y (+Z), Typecheck ✅, Lint ✅\n>\n> **What I fixed:**\n> - _bullet list of specific changes_\n> - _why each matters_\n>\n> **What to test:**\n> - _specific things to try from the user's perspective_\n> - _edge cases_\n\nDo NOT ask the user if they want the dev server started — just start it and present the summary. Call step_done() when done.",
+      "prompt": "Start the dev server using the `dev_server` tool so the user can manually test the changes. Once it's running, present a handoff summary:\n\n> **PR #{{pr_number}} is ready at http://localhost:<port>.**\n>\n> **Metrics:** Tests X → Y (+Z), Typecheck ✅, Lint ✅\n>\n> **What I fixed:**\n> - _bullet list of specific changes_\n> - _why each matters_\n> - _if no fixes were needed, say so explicitly instead of an empty list_\n>\n> **What to test:**\n> - _specific things to try from the user's perspective_\n> - _edge cases_\n\nDo NOT ask the user if they want the dev server started — just start it and present the summary. Call step_done() when done.",
       "transitions": [
         {
           "when": {
@@ -167,6 +167,22 @@
       "phase": "build",
       "agentId": "builder",
       "prompt": "Switch to original and cherry-pick any fix commits onto develop:\n\n1. `workspace switch original`\n2. `git checkout develop && git pull origin develop --ff-only`\n3. Check if tag exists remotely: `TAG_EXISTS=$(git ls-remote --exit-code origin refs/tags/review-fixes-{{pr_number}} 2>/dev/null && echo yes || echo no)`\n4. If `$TAG_EXISTS` == \"yes\":\n   a. `git fetch origin refs/tags/review-fixes-{{pr_number}}`\n   b. `git cherry-pick FETCH_HEAD && git push origin develop`\n5. If `$TAG_EXISTS` == \"no\", report no fixes to cherry-pick.\n6. Call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "verify_push"
+        }
+      ]
+    },
+    {
+      "id": "verify_push",
+      "name": "Verify Fixes on Origin",
+      "type": "agent",
+      "phase": "verification",
+      "agentId": "builder",
+      "prompt": "Verify the PR's changes are present in git history on both local and origin develop, before deleting the workspace:\n\n1. `git fetch origin` then confirm local and remote are in sync: `git rev-parse develop origin/develop` (SHAs must match)\n2. Confirm the PR's squash-merge commit (`PR #{{pr_number}}: ...`) is in history on both: `git log --oneline -5 develop` and `git log --oneline -5 origin/develop`\n3. If review fixes were applied, also confirm the `review: fixes for PR #{{pr_number}}` commit is in history on both. If no fixes were needed, there will be no such commit — state that and skip this check.\n4. Spot-check the merged changes exist on origin: pick a file the PR touched and confirm via `git show origin/develop:<file>`\n\nReport whether the changes are confirmed on both local and origin, then call step_done().",
       "transitions": [
         {
           "when": {
