@@ -351,7 +351,7 @@ export async function runAgentTurn(
   const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId)
   const runtimeConfig = getRuntimeConfig()
   const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
-  const skills = await getEnabledSkillMetadata(configDir, session.workdir)
+  const skills = await getEnabledSkillMetadata(configDir, options.sessionManager.getEffectiveWorkdir(options.sessionId))
 
   return runTopLevelAgentLoop(
     {

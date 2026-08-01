@@ -167,6 +167,7 @@ vi.mock('../agents/registry.js', () => {
 })
 
 import { PathAccessDeniedError } from '../tools/path-security.js'
+import { getEnabledSkillMetadata } from '../skills/registry.js'
 import { TurnMetrics, runAgentTurn, runChatTurn } from './orchestrator.js'
 
 function createEventStore() {
@@ -1703,5 +1704,51 @@ describe('chat orchestrator', () => {
       expect(assistantStart).toBeDefined()
       expect((assistantStart![1].data as any).contextWindowId).toBe('window-123')
     })
+  })
+
+  it('loads skills from the effective workdir when the session runs in a workspace', async () => {
+    const eventStore = createEventStore()
+    getEventStoreMock.mockReturnValue(eventStore)
+    getAllInstructionsMock.mockResolvedValue({ content: 'Plan carefully', files: [] })
+    getToolRegistryForModeMock.mockReturnValue({
+      definitions: [{ type: 'function', function: { name: 'glob', description: 'Search', parameters: {} } }],
+      execute: vi.fn(),
+    })
+    streamLLMPureMock.mockReturnValue({ kind: 'stream' })
+    consumeStreamGeneratorMock.mockResolvedValue({
+      content: 'Planned response',
+      toolCalls: [],
+      segments: [{ type: 'text', content: 'Planned response' }],
+      usage: { promptTokens: 30, completionTokens: 10 },
+      timing: { ttft: 1, completionTime: 2, tps: 5, prefillTps: 30 },
+      aborted: false,
+    })
+    vi.mocked(getEnabledSkillMetadata).mockClear()
+
+    // Session switched into a workspace clone: workdir stays at the project root,
+    // getEffectiveWorkdir resolves the workspace path.
+    const sessionManager = createSessionManager({
+      current: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/original/project',
+        workspace: '/workspaces/openfox/review-branch',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: true,
+        criteria: [],
+        executionState: {},
+        messages: [{ id: 'user-1', role: 'user', content: 'Do the plan' }],
+      },
+    })
+
+    await runChatTurn({
+      sessionManager: sessionManager as never,
+      sessionId: 'session-1',
+      llmClient: { getModel: () => 'qwen3-32b' } as never,
+    })
+
+    expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/tmp/openfox-test', '/workspaces/openfox/review-branch')
+    expect(getEnabledSkillMetadata).not.toHaveBeenCalledWith('/tmp/openfox-test', '/original/project')
   })
 })

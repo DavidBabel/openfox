@@ -228,6 +228,26 @@ describe('skill library routes', () => {
     expect(await readFile(skillPath, 'utf-8')).toBe(original)
   })
 
+  it('toggles a skill scoped to a workdir query in a different project dir', async () => {
+    const otherProject = join(rootDir, 'other-project')
+    const skillPath = join(otherProject, '.openfox', 'skills', 'toggle-remote', 'SKILL.md')
+    await mkdir(join(otherProject, '.openfox', 'skills', 'toggle-remote'), { recursive: true })
+    await writeFile(skillPath, '---\nname: toggle-remote\ndescription: Toggle via workdir\n---\n\nInstructions.')
+
+    const response = await fetch(
+      `${baseUrl}/api/skills/toggle-remote/toggle?workdir=${encodeURIComponent(otherProject)}`,
+      { method: 'POST' },
+    )
+    const body = (await response.json()) as { enabled: boolean }
+
+    expect(response.status).toBe(200)
+    expect(body.enabled).toBe(false)
+    expect(settings.get('skill.enabled.toggle-remote')).toBe('false')
+
+    const missing = await fetch(`${baseUrl}/api/skills/toggle-remote/toggle`, { method: 'POST' })
+    expect(missing.status).toBe(404)
+  })
+
   it('keeps an unavailable selected directory visible for removal', async () => {
     const library = join(rootDir, 'temporary-library')
     await mkdir(library)

@@ -53,7 +53,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
 
   useEffect(() => {
     if (isOpen) {
-      const sessionWorkdir = currentSession?.workdir ?? currentSession?.workspace ?? null
+      const sessionWorkdir = currentSession?.workspace ?? currentSession?.workdir ?? null
       setWorkdir(sessionWorkdir)
       fetchSkills(sessionWorkdir)
       setView('list')

@@ -356,6 +356,7 @@ describe('runTopLevelAgentLoop assembleRequest', () => {
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -462,6 +463,7 @@ describe('maxTokens clamping', () => {
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 195000,
         maxTokens: 200000,
@@ -500,6 +502,7 @@ describe('maxTokens clamping', () => {
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 190000,
         maxTokens: 200000,
@@ -539,6 +542,7 @@ describe('maxTokens clamping', () => {
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 200000,
         maxTokens: 200000,
@@ -577,6 +581,7 @@ describe('maxTokens clamping', () => {
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -615,6 +620,7 @@ describe('maxTokens clamping', () => {
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -653,6 +659,7 @@ describe('maxTokens clamping', () => {
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -705,17 +712,19 @@ describe('maxTokens clamping', () => {
     expect(streamLLMPure).not.toHaveBeenCalled()
   })
 
-  it('passes session.workdir to getEnabledSkillMetadata instead of global workdir', async () => {
-    const sessionWorkdir = '/actual/project/dir'
+  it('passes effective workdir (workspace-aware) to getEnabledSkillMetadata instead of global workdir', async () => {
+    const projectRoot = '/actual/project/dir'
+    const workspacePath = '/workspaces/openfox/review-branch'
 
     mockSessionManager = {
       requireSession: vi.fn().mockReturnValue({
-        workdir: sessionWorkdir,
+        workdir: projectRoot,
         projectId: 'test-project',
         executionState: null,
         criteria: [],
         isRunning: false,
       }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue(workspacePath),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -749,6 +758,7 @@ describe('maxTokens clamping', () => {
 
     await runTopLevelAgentLoop(makeConfig({ warmup: true }), mockTurnMetrics)
 
-    expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/test/config', sessionWorkdir)
+    expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/test/config', workspacePath)
+    expect(getEnabledSkillMetadata).not.toHaveBeenCalledWith('/test/config', projectRoot)
   })
 })

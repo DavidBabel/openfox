@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSkillsStore, type SkillInfo } from '../../stores/skills'
+import { useSessionStore } from '../../stores/session/store'
 import { SkillsContent } from './SkillsModal'
 
 const skill: SkillInfo = {
@@ -69,5 +70,27 @@ describe('SkillsContent', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete skill' }))
     await vi.waitFor(() => expect(deleteSkill).toHaveBeenCalledWith('my-skill'))
     expect(fetchSkills).toHaveBeenCalled()
+  })
+
+  it('loads skills from the session workspace when it differs from workdir', () => {
+    const setWorkdir = vi.fn()
+    const fetchSkills = vi.fn(async () => undefined)
+    useSkillsStore.setState({ setWorkdir, fetchSkills })
+    useSessionStore.setState({
+      currentSession: {
+        id: 's1',
+        projectId: 'p1',
+        workdir: '/original/project',
+        workspace: '/workspaces/openfox/review-branch',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: false,
+      } as any,
+    })
+
+    render(<SkillsContent isOpen={true} />)
+
+    expect(setWorkdir).toHaveBeenCalledWith('/workspaces/openfox/review-branch')
+    expect(fetchSkills).toHaveBeenCalledWith('/workspaces/openfox/review-branch')
   })
 })

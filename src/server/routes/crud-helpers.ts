@@ -8,7 +8,9 @@ export function computeOverrideIds<T extends { metadata: { id: string } }>(defau
 
 export function resolveProjectDir(req: { query: Record<string, unknown> }, fallback?: string): string | undefined {
   const workdir = req.query['workdir']
-  return typeof workdir === 'string' && workdir.trim() ? workdir : fallback
+  if (typeof workdir !== 'string') return fallback
+  const trimmed = workdir.trim()
+  return trimmed ? trimmed : fallback
 }
 
 export interface LoadFunctions<T> {

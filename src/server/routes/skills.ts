@@ -90,6 +90,16 @@ function validateSkillCreate(body: Record<string, unknown>): string | null {
   return null
 }
 
+async function findSkillByIdForRequest(
+  req: { params: Record<string, string>; query: Record<string, unknown> },
+  configDir: string,
+  projectDir?: string,
+): Promise<SkillDefinition | undefined> {
+  const effectiveProjectDir = resolveProjectDir(req, projectDir)
+  const skills = await loadAllSkills(configDir, effectiveProjectDir)
+  return findSkillById(req.params['id']!, skills)
+}
+
 function createConfig(configDir: string, projectDir?: string): CrudRouteConfig<SkillDefinition> {
   return {
     dirName: 'skills',
@@ -187,9 +197,7 @@ export function createSkillRoutes(configDir: string, projectDir?: string): Route
   })
 
   router.post('/:id/toggle', async (req, res) => {
-    const effectiveProjectDir = resolveProjectDir(req, projectDir)
-    const skills = await loadAllSkills(configDir, effectiveProjectDir)
-    const existing = findSkillById(req.params['id']!, skills)
+    const existing = await findSkillByIdForRequest(req, configDir, projectDir)
     if (!existing) return res.status(404).json({ error: 'Not found' })
     const enabled = !isSkillEnabled(existing.metadata.id)
     setSkillEnabled(existing.metadata.id, enabled)
@@ -197,9 +205,7 @@ export function createSkillRoutes(configDir: string, projectDir?: string): Route
   })
 
   router.put('/:id', async (req, res) => {
-    const effectiveProjectDir = resolveProjectDir(req, projectDir)
-    const skills = await loadAllSkills(configDir, effectiveProjectDir)
-    const existing = findSkillById(req.params['id']!, skills)
+    const existing = await findSkillByIdForRequest(req, configDir, projectDir)
     if (!existing) return res.status(404).json({ error: 'Not found' })
     const updated = await updateOwnedSkill(existing, req.body as Partial<SkillDefinition>)
     if (!updated) return res.status(403).json({ error: 'This skill is read-only' })
@@ -207,9 +213,7 @@ export function createSkillRoutes(configDir: string, projectDir?: string): Route
   })
 
   router.delete('/:id', async (req, res) => {
-    const effectiveProjectDir = resolveProjectDir(req, projectDir)
-    const skills = await loadAllSkills(configDir, effectiveProjectDir)
-    const existing = findSkillById(req.params['id']!, skills)
+    const existing = await findSkillByIdForRequest(req, configDir, projectDir)
     if (!existing) return res.status(404).json({ error: 'Not found' })
     const result = await deleteOwnedSkill(existing)
     if (!result.success) return res.status(403).json({ error: result.reason ?? 'Cannot delete this skill' })
