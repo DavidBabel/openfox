@@ -7,14 +7,14 @@
 import { WebSocket } from 'ws'
 import type {
   ClientMessage,
-  ClientMessageType,
   ServerMessage,
   ServerMessageType,
   ChatDonePayload,
   SessionStatePayload,
+  PendingPathConfirmationPayload,
   ProjectStatePayload,
 } from '@openfox/shared/protocol'
-import type { Session, Project, Message, ToolCall, ToolResult, MessageStats, ContextState } from '@openfox/shared'
+import type { Session, Project, Message, ToolResult, ContextState } from '@openfox/shared'
 
 // ============================================================================
 // Types
@@ -37,13 +37,13 @@ export interface ChatResponse {
     args: Record<string, unknown>
     result?: ToolResult | undefined
   }>
-  stats: MessageStats | undefined
-  reason: 'complete' | 'stopped' | 'error' | 'waiting_for_user'
+  stats: ChatDonePayload['stats']
+  reason: ChatDonePayload['reason']
 }
 
 export interface TestClient {
   /** Send a message and wait for acknowledgment or response */
-  send<T>(type: ClientMessageType, payload: T): Promise<ServerMessage>
+  send<T>(type: string, payload: T): Promise<ServerMessage>
 
   /** Wait for a specific message type */
   waitFor<T = unknown>(
@@ -407,7 +407,7 @@ export async function createTestClient(options: TestClientOptions = {}): Promise
   }
 
   return {
-    send<T>(type: ClientMessageType, payload: T): Promise<ServerMessage> {
+    send<T>(type: string, payload: T): Promise<ServerMessage> {
       // Handle chat.send by routing to REST API
       if (type === 'chat.send' && currentSession) {
         const httpUrl = url.replace('/ws', '').replace('ws://', 'http://')
@@ -428,7 +428,7 @@ export async function createTestClient(options: TestClientOptions = {}): Promise
           // First, send the session.load message to the server (this triggers context.state)
           const wsResponse = await new Promise<ServerMessage>((resolve, reject) => {
             const id = crypto.randomUUID()
-            const message: ClientMessage = { id, type, payload }
+            const message = { id, type, payload }
 
             const timeout = setTimeout(() => {
               pendingRequests.delete(id)
@@ -453,7 +453,12 @@ export async function createTestClient(options: TestClientOptions = {}): Promise
           const res = await fetch(`${httpUrl}/api/sessions/${sessionId}`, {
             method: 'GET',
           })
-          const data = await res.json()
+          const data = (await res.json()) as {
+            error?: string
+            session?: Session
+            messages?: Message[]
+            pendingConfirmations?: PendingPathConfirmationPayload[]
+          }
 
           // Handle error response from REST API
           if (!res.ok || data.error) {
@@ -489,7 +494,7 @@ export async function createTestClient(options: TestClientOptions = {}): Promise
 
       return new Promise((resolve, reject) => {
         const id = crypto.randomUUID()
-        const message: ClientMessage<T> = { id, type, payload }
+        const message = { id, type, payload }
 
         const timeout = setTimeout(() => {
           pendingRequests.delete(id)

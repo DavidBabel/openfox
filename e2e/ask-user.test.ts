@@ -412,7 +412,7 @@ describe('Ask User Tool', () => {
 
       // Fetch session state via REST (simulates page reload)
       const res = await fetch(`${server.url}/api/sessions/${sessionId}`)
-      const data = await res.json()
+      const data = (await res.json()) as { pendingQuestions: Array<{ callId: string; question: string }> }
 
       // The pending question should be in the response
       expect(data.pendingQuestions).toBeDefined()
@@ -421,7 +421,7 @@ describe('Ask User Tool', () => {
 
       const restored = data.pendingQuestions.find((q: { callId: string }) => q.callId === callId)
       expect(restored).toBeDefined()
-      expect(restored.question).toBe(question)
+      expect(restored?.question).toBe(question)
 
       // Answer the question to clean up
       await client.send('ask.answer', { callId, answer: 'Continue' })

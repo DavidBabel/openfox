@@ -26,17 +26,10 @@ import type { TestProject, TestProjectOptions } from './project-factory.js'
 import { createTestClient } from './ws-client.js'
 import { createTestProject } from './project-factory.js'
 import { createProject, createSession, setSessionMode, type Project } from './rest-client.js'
+import type { Session } from '@openfox/shared'
 
 // Re-derive the template type from TestProjectOptions
 type ProjectTemplate = NonNullable<TestProjectOptions['template']>
-
-// Session type matches what TestClient.getSession() returns
-interface Session {
-  id: string
-  projectId: string
-  mode: 'planner' | 'builder'
-  [key: string]: unknown
-}
 
 export interface SessionPoolOptions {
   /** Project template to use (default: 'empty') */

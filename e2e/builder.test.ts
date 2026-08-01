@@ -101,7 +101,7 @@ describe('Builder Mode', () => {
       const toolResults = events.get('chat.tool_result')
       const editResultEvent = toolResults.find((e) => {
         const payload = e.payload as any
-        return payload.callId === editCall?.payload?.callId
+        return payload.callId === (editCall?.payload as { callId?: string } | undefined)?.callId
       })
 
       const editResult = editResultEvent?.payload as any
@@ -247,7 +247,7 @@ describe('Builder Mode', () => {
       expect(completeCall).toBeDefined()
 
       // Verify get was called before complete
-      expect(toolCalls.indexOf(getCall)).toBeLessThan(toolCalls.indexOf(completeCall))
+      expect(toolCalls.indexOf(getCall!)).toBeLessThan(toolCalls.indexOf(completeCall!))
     })
   })
 

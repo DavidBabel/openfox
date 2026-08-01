@@ -105,7 +105,7 @@ describe('WebSocket Protocol', () => {
       await client.send('session.load', { sessionId: restSession.id })
 
       const response = await client.send('chat.stop', {})
-      expect(response.payload.code).toBe('UNKNOWN_MESSAGE')
+      expect((response.payload as { code?: string }).code).toBe('UNKNOWN_MESSAGE')
     })
   })
 

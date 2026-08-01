@@ -69,7 +69,6 @@ describe('Model Context Update', () => {
         backend: 'ollama',
         timeout: 120000,
         idleTimeout: 300000,
-        disableThinking: false,
       },
       context: { maxTokens: customContextWindow, compactionThreshold: 0.8, compactionTarget: 0.5 },
       agent: { maxIterations: 50, maxConsecutiveFailures: 3, toolTimeout: 120000 },

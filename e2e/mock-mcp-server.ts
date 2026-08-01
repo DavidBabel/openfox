@@ -80,7 +80,7 @@ function handleMessage(raw: string) {
   if (msg.method === 'tools/call') {
     const params = msg.params as { name?: string; arguments?: Record<string, unknown> }
     if (params.name === 'greet') {
-      const name = (params.arguments?.name as string) ?? 'World'
+      const name = (params.arguments?.['name'] as string) ?? 'World'
       sendMessage({
         jsonrpc: '2.0',
         id: msg.id,
@@ -90,8 +90,8 @@ function handleMessage(raw: string) {
         },
       })
     } else if (params.name === 'add') {
-      const a = Number(params.arguments?.a ?? 0)
-      const b = Number(params.arguments?.b ?? 0)
+      const a = Number(params.arguments?.['a'] ?? 0)
+      const b = Number(params.arguments?.['b'] ?? 0)
       sendMessage({
         jsonrpc: '2.0',
         id: msg.id,
@@ -101,7 +101,7 @@ function handleMessage(raw: string) {
         },
       })
     } else if (params.name === 'slow') {
-      const delay = Number(params.arguments?.delay ?? 1000)
+      const delay = Number(params.arguments?.['delay'] ?? 1000)
       setTimeout(async () => {
         sendMessage({
           jsonrpc: '2.0',

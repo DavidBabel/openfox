@@ -16,6 +16,7 @@ import {
   type TestProject,
   type TestServerHandle,
 } from './utils/index.js'
+import type { ServerMessage } from '@openfox/shared/protocol'
 
 describe('Auto Session Name', () => {
   let server: TestServerHandle
@@ -66,7 +67,7 @@ describe('Auto Session Name', () => {
 
       // Verify event was received
       expect(nameGeneratedEvents.length).toBeGreaterThan(0)
-      const nameEvent = nameGeneratedEvents[0]
+      const nameEvent = nameGeneratedEvents[0] as ServerMessage<{ name: string }>
       expect(nameEvent.type).toBe('session.name_generated')
       expect(nameEvent.payload.name).toBeDefined()
       expect(typeof nameEvent.payload.name).toBe('string')
@@ -204,9 +205,10 @@ describe('Auto Session Name', () => {
 
       if (nameEvents.length > 0) {
         // Verify title was generated
-        expect(nameEvents[0].payload.name).toBeDefined()
-        expect(nameEvents[0].payload.name!.length).toBeGreaterThan(3)
-        expect(nameEvents[0].payload.name!.length).toBeLessThanOrEqual(50)
+        const name = (nameEvents[0] as ServerMessage<{ name: string }>).payload.name
+        expect(name).toBeDefined()
+        expect(name.length).toBeGreaterThan(3)
+        expect(name.length).toBeLessThanOrEqual(50)
       }
 
       // Reload session

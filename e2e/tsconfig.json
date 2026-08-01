@@ -15,7 +15,11 @@
     "noPropertyAccessFromIndexSignature": true,
     "allowSyntheticDefaultImports": true,
     "types": ["node"],
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@openfox/shared/protocol": ["../src/shared/protocol.ts"],
+      "@openfox/shared": ["../src/shared/index.ts"]
+    }
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
