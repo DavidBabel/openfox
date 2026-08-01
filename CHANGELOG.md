@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.105 - 2026-08-01
+
+### Features
+
+- **Keyboard scroll control** — arrow and page keys now steer auto-scroll: scrolling up detaches instantly, scrolling down snaps back on near the bottom.
+
+### Enhancements
+
+- **Magnetic scrollbar handle** — dragging the scrollbar disables auto-scroll instantly and snaps it back on when you release near the end of the track.
+- **Sharper vision-fallback descriptions** — image descriptions now arrive in a clear delimited block, prompted to capture verbatim text and tables.
+
+### Bug Fixes
+
+- **Auto-scroll no longer detaches mid-stream** — following now holds steady through slow or bursty output, with no more random let-go.
+- **Provider/model switch now rebinds the LLM client** — switching no longer reuses the previous provider's connection.
+
 ## 2.0.104 - 2026-07-31
 
 ### Features
