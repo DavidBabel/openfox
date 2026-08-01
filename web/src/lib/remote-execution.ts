@@ -26,7 +26,7 @@ const sudoOptionsWithValue = new Set([
   '--user',
 ])
 const envOptionsWithValue = new Set(['-C', '--chdir', '-S', '--split-string', '-u', '--unset'])
-const sshpassOptionsWithValue = new Set(['-p', '-f', '-d'])
+const sshpassOptionsWithValue = new Set(['-p', '-f', '-d', '-P'])
 
 function executableName(token: string): string {
   return token.split(/[\\/]/).pop() ?? token
@@ -362,7 +362,7 @@ function detectSegment(tokens: string[], depth = 0): RemoteProtocol | null {
     if (subcommand === 'shell' || subcommand === 'develop') {
       for (let cmdIndex = index + 2; cmdIndex < tokens.length; cmdIndex += 1) {
         if (tokens[cmdIndex] === '-c' || tokens[cmdIndex] === '--command') {
-          return detectSegment(tokens.slice(cmdIndex + 1), depth + 1)
+          return detectRemoteCommand(tokens.slice(cmdIndex + 1).join(' '), depth + 1)
         }
       }
       return null
