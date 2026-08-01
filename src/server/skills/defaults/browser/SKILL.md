@@ -7,41 +7,55 @@ metadata:
     displayName: Browser
 ---
 
-# playwright-cli
+# @playwright/cli
 
-You have access to `npx playwright-cli` for interactive browser automation via the terminal.
+Interactive browser automation via the official Microsoft [`@playwright/cli`](https://github.com/microsoft/playwright-cli) package.
 Use `run_command` to execute these commands.
 
-> **Package:** [`@playwright/cli`](https://www.npmjs.com/package/@playwright/cli) (official Microsoft package).
-> The unscoped `playwright-cli` package is deprecated — install the scoped one instead.
->
-> ```bash
-> npm install -g @playwright/cli@latest    # Install or update
-> ```
+Invoke it through npx — works on any machine with Node, no global or project-local install required:
+
+```bash
+npx -y @playwright/cli <command>
+```
+
+> `-y` auto-confirms npx's one-time package download (cached afterwards). If you already installed it globally (`npm install -g @playwright/cli@latest`), the plain `playwright-cli` command works the same.
 
 ## Core Workflow
 
-The typical workflow is: open a page -> snapshot to get element refs -> interact using refs -> snapshot again.
+open a page -> snapshot to get element refs -> interact using refs -> snapshot again. Every command echoes the latest snapshot.
 
 ```bash
-# Open a URL
-npx playwright-cli open https://example.com
-# Take a snapshot to see the page and get element refs
-npx playwright-cli snapshot
-# Click an element by ref string from snapshot
-npx playwright-cli click e42
-# Fill a form field by ref
-npx playwright-cli fill e15 "hello world"
-# Take a screenshot
-npx playwright-cli screenshot
+# Open a URL (headless by default; add --headed to show a window)
+npx -y @playwright/cli open https://example.com
+# Interact using refs from the snapshot
+npx -y @playwright/cli click e42
+npx -y @playwright/cli fill e15 "hello world"
+# Re-snapshot to see the result
+npx -y @playwright/cli snapshot
+# Screenshot (only when a visual is needed — snapshots are the norm)
+npx -y @playwright/cli screenshot
+# Close the browser when done — leaving it open leaks CPU
+npx -y @playwright/cli close
+```
+
+## Cleaning up
+
+Closing the browser is part of the workflow, not an afterthought: Chromium can leave orphaned processes behind (a known upstream quirk) that keep burning CPU. If you suspect a leftover browser, reclaim it:
+
+```bash
+# See what's still running
+npx -y @playwright/cli list
+# Close every browser session
+npx -y @playwright/cli close-all
+# Force-kill stale/zombie browser processes
+npx -y @playwright/cli kill-all
 ```
 
 ## Screenshot workflow
 
-After doing `npx playwright-cli screenshot`, always use the `read_file` tool on the path of the image returned by playwright-cli.
-This allows you to see the image, and for the user to see it as well.
+After `npx -y @playwright/cli screenshot`, always use the `read_file` tool on the path of the image returned by playwright-cli — so you can see it, and the user can see it too.
 
 ## All Commands
 
 - `open [url]` -- open the browser (optionally to a URL)
-- use `npx playwright-cli --help` to get all available commands
+- use `npx -y @playwright/cli --help` to get all available commands

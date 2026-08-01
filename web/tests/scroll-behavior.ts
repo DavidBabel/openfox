@@ -1,8 +1,8 @@
 /**
  * Scroll Behavior Test Script
  *
- * Run with: npx playwright-cli open http://localhost:5173/scroll-test.html
- * Then: npx playwright-cli run-code "async (page) => { ... }"
+ * Run with: npx -y @playwright/cli open http://localhost:5173/scroll-test.html
+ * Then: npx -y @playwright/cli run-code "async (page) => { ... }"
  *
  * Or run all tests: npx tsx web/tests/scroll-behavior.ts
  *
