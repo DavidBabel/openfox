@@ -175,10 +175,6 @@ export function createCrudRoutes<T extends { metadata: { id: string; name: strin
       }
       return res.json({ success: true })
     }
-    const isDefault = await config.isDefault(id)
-    if (isDefault) {
-      return res.status(403).json({ error: 'Cannot delete built-in defaults' })
-    }
     const result = await config.delete(configDir, id)
     if (!result.success) {
       return res.status(403).json({ error: result.reason ?? 'Cannot delete this item' })
