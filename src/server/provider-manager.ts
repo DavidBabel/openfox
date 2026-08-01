@@ -688,14 +688,10 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
 
       logger.info('Setting default model selection', { providerId, model, providerName: provider.name })
 
+      llmClient = createClientForProvider(provider, model)
+
       defaultModelSelection = `${providerId}/${model}`
       providers = providers.map((p) => ({ ...p, isActive: p.id === providerId }))
-
-      const currentProviderId = parseDefaultModelSelection(defaultModelSelection).providerId
-      if (currentProviderId === providerId) {
-        llmClient.setModel(model)
-        logger.info('Model updated', { providerId, model })
-      }
 
       return { success: true }
     },

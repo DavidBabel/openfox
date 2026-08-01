@@ -229,12 +229,18 @@ describe('Provider Plugin System', () => {
     })
     expect(activateRes.status).toBe(200)
 
-    // Get provider models
-    const modelsRes = await fetch(`${server.url}/api/providers`)
-    const providersData = (await modelsRes.json()) as {
-      providers: Array<{ id: string; models: Array<{ id: string; contextWindow: number }> }>
+    // Activation triggers an async model fetch via the transport adapter, so poll
+    // until the models land instead of racing the first response.
+    let testProvider: { id: string; models: Array<{ id: string; contextWindow: number }> } | undefined
+    for (let i = 0; i < 50; i++) {
+      const modelsRes = await fetch(`${server.url}/api/providers`)
+      const providersData = (await modelsRes.json()) as {
+        providers: Array<{ id: string; models: Array<{ id: string; contextWindow: number }> }>
+      }
+      testProvider = providersData.providers.find((p) => p.id === providerId)
+      if (testProvider && testProvider.models.length >= 2) break
+      await new Promise((r) => setTimeout(r, 25))
     }
-    const testProvider = providersData.providers.find((p) => p.id === providerId)
     expect(testProvider).toBeDefined()
     expect(testProvider!.models.length).toBeGreaterThanOrEqual(2)
 

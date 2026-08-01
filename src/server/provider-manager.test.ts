@@ -217,12 +217,18 @@ describe('ProviderManager - Model Selection', () => {
       expect(providerManager.getCurrentModel()).toBe('new-model')
     })
 
-    it('updates LLM client when setting model for active provider', async () => {
-      const mockClient = providerManager.getLLMClient()
+    it('rebinds the LLM client when updating the model for the active provider', async () => {
+      const createCallsBefore = createLLMClientMock.mock.calls.length
 
       await providerManager.setDefaultModelSelection('provider-1', 'new-model')
 
-      expect(mockClient.setModel).toHaveBeenCalledWith('new-model')
+      const createCallsAfter = createLLMClientMock.mock.calls.slice(createCallsBefore)
+      expect(createCallsAfter.length).toBeGreaterThan(0)
+      const lastCallConfig = createCallsAfter[createCallsAfter.length - 1]![0] as {
+        llm: { baseUrl?: string; model?: string }
+      }
+      expect(lastCallConfig.llm.baseUrl).toBe('http://localhost:8000/v1')
+      expect(lastCallConfig.llm.model).toBe('new-model')
     })
 
     it('updates active provider when changing to different provider', async () => {
@@ -234,6 +240,23 @@ describe('ProviderManager - Model Selection', () => {
       const providers = providerManager.getProviders()
       expect(providers.find((p) => p.id === 'provider-2')?.isActive).toBe(true)
       expect(providers.find((p) => p.id === 'provider-1')?.isActive).toBe(false)
+    })
+
+    it('rebinds the live LLM client when switching to a different provider', async () => {
+      const createCallsBefore = createLLMClientMock.mock.calls.length
+
+      await providerManager.setDefaultModelSelection('provider-2', 'new-model')
+
+      // Switching the default to another provider must recreate the live client bound to
+      // that provider's endpoint — otherwise bookkeeping claims the new provider while
+      // traffic still hits the previously activated one.
+      const createCallsAfter = createLLMClientMock.mock.calls.slice(createCallsBefore)
+      expect(createCallsAfter.length).toBeGreaterThan(0)
+      const lastCallConfig = createCallsAfter[createCallsAfter.length - 1]![0] as {
+        llm: { baseUrl?: string; model?: string }
+      }
+      expect(lastCallConfig.llm.baseUrl).toBe('http://localhost:9000/v1')
+      expect(lastCallConfig.llm.model).toBe('new-model')
     })
 
     it('handles model names with slashes correctly', async () => {

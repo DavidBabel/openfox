@@ -284,6 +284,9 @@ describe('Shell Guards with User Confirmation', () => {
     // Deny the command
     const session = client.getSession()!
     await answerPathConfirmation(server.url, session.id, payload.callId, false)
+    // Drain the remainder of this chat so its closing chat.done does not bleed
+    // into the next test's event collection (shared server broadcasts to all).
+    await collectChatEvents(client, 6000).catch(() => {})
   })
 
   it('blocks git push and requests user confirmation', async () => {
@@ -306,6 +309,9 @@ describe('Shell Guards with User Confirmation', () => {
     const payload = confirmEvent!.payload as { callId: string; paths: string[] }
     const session = client.getSession()!
     await answerPathConfirmation(server.url, session.id, payload.callId, true)
+    // Drain the resumed chat so its closing chat.done does not bleed into the
+    // next test's event collection (shared server broadcasts to all).
+    await collectChatEvents(client, 7000).catch(() => {})
   })
 
   it('allows safe git commands without confirmation', async () => {
