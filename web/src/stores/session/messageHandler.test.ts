@@ -259,6 +259,10 @@ describe('workflow.execution_changed handler', () => {
         status: 'waiting' as const,
         currentStepId: 'step-2',
         currentStepName: 'Review',
+        pendingChoices: [
+          { id: 'apply', label: 'apply', goto: 'apply_fixes' },
+          { id: 'continue', label: 'Continue', goto: 'apply_fixes' },
+        ],
       },
     })
 
@@ -266,7 +270,98 @@ describe('workflow.execution_changed handler', () => {
     expect(exec?.status).toBe('waiting')
     expect(exec?.currentStepId).toBe('step-2')
     expect(exec?.currentStepName).toBe('Review')
+    expect(exec?.pendingChoices).toEqual([
+      { id: 'apply', label: 'apply', goto: 'apply_fixes' },
+      { id: 'continue', label: 'Continue', goto: 'apply_fixes' },
+    ])
     expect(exec?.createdAt).toBe(1000)
+  })
+
+  it('should clear stale pendingChoices when the server emits an empty choices array', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    const existing = {
+      id: 'exec-1',
+      sessionId: 'session-a',
+      workflowId: 'default',
+      workflowName: 'Build & Verify',
+      workflowColor: '#3b82f6',
+      status: 'waiting' as const,
+      stepOutput: {},
+      params: {},
+      pendingChoices: [
+        { id: 'apply', label: 'apply', goto: 'apply_fixes' },
+        { id: 'continue', label: 'Continue', goto: 'apply_fixes' },
+      ],
+      createdAt: 1000,
+      updatedAt: 1000,
+    }
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-a', messages: [] } as any,
+      activeWorkflowExecution: existing,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'workflow.execution_changed',
+      sessionId: 'session-a',
+      payload: {
+        executionId: 'exec-1',
+        workflowId: 'default',
+        workflowName: 'Build & Verify',
+        status: 'waiting' as const,
+        currentStepId: 'step-2',
+        currentStepName: 'Review',
+        pendingChoices: [],
+      },
+    })
+
+    const exec = useSessionStore.getState().activeWorkflowExecution
+    expect(exec?.status).toBe('waiting')
+    expect(exec?.pendingChoices).toEqual([])
+  })
+
+  it('should clear stale pendingChoices when resuming clears the execution', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    const existing = {
+      id: 'exec-1',
+      sessionId: 'session-a',
+      workflowId: 'default',
+      workflowName: 'Build & Verify',
+      workflowColor: '#3b82f6',
+      status: 'waiting' as const,
+      stepOutput: {},
+      params: {},
+      pendingChoices: [{ id: 'apply', label: 'apply', goto: 'apply_fixes' }],
+      createdAt: 1000,
+      updatedAt: 1000,
+    }
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-a', messages: [] } as any,
+      activeWorkflowExecution: existing,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'workflow.execution_changed',
+      sessionId: 'session-a',
+      payload: {
+        executionId: 'exec-1',
+        workflowId: 'default',
+        workflowName: 'Build & Verify',
+        status: 'running' as const,
+        currentStepId: 'step-2',
+        currentStepName: 'Review',
+        pendingChoices: [],
+      },
+    })
+
+    const exec = useSessionStore.getState().activeWorkflowExecution
+    expect(exec?.status).toBe('running')
+    expect(exec?.pendingChoices).toEqual([])
   })
 
   it('should leave the current session execution untouched when a background event arrives', async () => {

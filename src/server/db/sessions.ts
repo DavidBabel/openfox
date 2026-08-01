@@ -495,6 +495,7 @@ export interface WorkflowExecutionRow {
   current_step_name: string | null
   step_output: string | null
   params: string | null
+  pending_choices: string | null
   created_at: number
   updated_at: number
 }
@@ -521,13 +522,15 @@ export function updateWorkflowExecutionStatus(
   stepId?: string,
   stepName?: string,
   stepOutput?: Record<string, string>,
+  pendingChoices?: import('../../shared/types.js').UserStepChoice[],
 ): void {
   const db = getDatabase()
   const now = Date.now()
   const stepOutputJson = stepOutput ? JSON.stringify(stepOutput) : undefined
+  const pendingChoicesJson = pendingChoices ? JSON.stringify(pendingChoices) : undefined
   db.prepare(
-    `UPDATE workflow_executions SET status = ?, current_step_id = COALESCE(?, current_step_id), current_step_name = COALESCE(?, current_step_name), step_output = COALESCE(?, step_output), updated_at = ? WHERE id = ?`,
-  ).run(status, stepId ?? null, stepName ?? null, stepOutputJson ?? null, now, executionId)
+    `UPDATE workflow_executions SET status = ?, current_step_id = COALESCE(?, current_step_id), current_step_name = COALESCE(?, current_step_name), step_output = COALESCE(?, step_output), pending_choices = COALESCE(?, pending_choices), updated_at = ? WHERE id = ?`,
+  ).run(status, stepId ?? null, stepName ?? null, stepOutputJson ?? null, pendingChoicesJson ?? null, now, executionId)
 }
 
 export function getActiveWorkflowExecution(sessionId: string): WorkflowExecutionRow | undefined {

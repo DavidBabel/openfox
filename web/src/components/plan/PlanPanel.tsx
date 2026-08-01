@@ -87,6 +87,16 @@ export function PlanPanel({
     return () => window.removeEventListener('open-turn-stats', handler)
   }, [])
 
+  // Scope project workflows to the active session's project so project-scoped
+  // items are listed, edited, and launched from the correct project.
+  const sessionWorkdir = session?.workdir
+  useEffect(() => {
+    useWorkflowsStore.getState().setWorkdir(sessionWorkdir)
+    if (sessionWorkdir) {
+      useWorkflowsStore.getState().fetchWorkflows()
+    }
+  }, [sessionWorkdir])
+
   useEffect(() => {
     useWorkflowsStore.getState().fetchWorkflows()
   }, [])
@@ -305,7 +315,11 @@ export function PlanPanel({
           clearInput={clearInput}
         />
         <CommandsModal isOpen={showCommandsModal} onClose={() => setShowCommandsModal(false)} />
-        <WorkflowsModal isOpen={showWorkflowsModal} onClose={() => setShowWorkflowsModal(false)} />
+        <WorkflowsModal
+          isOpen={showWorkflowsModal}
+          onClose={() => setShowWorkflowsModal(false)}
+          projectDir={session?.workdir}
+        />
         <QuickActionModal
           isOpen={showQuickAction}
           onClose={() => setShowQuickAction(false)}

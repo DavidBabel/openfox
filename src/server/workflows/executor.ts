@@ -6,7 +6,7 @@
  * state ($done or $blocked) is reached.
  */
 
-import type { ToolCall, ToolResult } from '../../shared/types.js'
+import type { ToolCall, ToolResult, UserStepChoice } from '../../shared/types.js'
 import type { OrchestratorOptions, OrchestratorResult, NextAction } from '../runner/types.js'
 import type {
   WorkflowDefinition,
@@ -16,6 +16,7 @@ import type {
   AgentStep,
   SubAgentStep,
   ShellStep,
+  UserStep,
 } from './types.js'
 import { TERMINAL_DONE, TERMINAL_BLOCKED } from './types.js'
 import { getEventStore, getCurrentContextWindowId } from '../events/index.js'
@@ -161,6 +162,40 @@ export function evaluateTransitions(
   }
   // No transition matched — treat as blocked
   return TERMINAL_BLOCKED
+}
+
+// ============================================================================
+// User-Step Choices
+// ============================================================================
+
+/** Result value used when a user step resumes without an explicit choice (matches 'always'). */
+export const DEFAULT_USER_RESULT = 'continue'
+/** Id of the synthetic "Continue" choice derived from an 'always' transition. */
+export const CONTINUE_CHOICE_ID = 'continue'
+
+/**
+ * Derive interactive choices from a user step's transitions.
+ *
+ * Each `step_result` transition becomes a choice button (its result string is
+ * both the id and label). An `always` transition becomes a "Continue" choice.
+ * Deduplicated by id, preserving transition order.
+ */
+export function userStepChoices(step: UserStep): UserStepChoice[] {
+  const seen = new Set<string>()
+  const choices: UserStepChoice[] = []
+  for (const t of step.transitions) {
+    if (t.when.type === 'step_result') {
+      const id = t.when.result
+      if (seen.has(id)) continue
+      seen.add(id)
+      choices.push({ id, label: id, goto: t.goto })
+    } else if (t.when.type === 'always') {
+      if (seen.has(CONTINUE_CHOICE_ID)) continue
+      seen.add(CONTINUE_CHOICE_ID)
+      choices.push({ id: CONTINUE_CHOICE_ID, label: 'Continue', goto: t.goto })
+    }
+  }
+  return choices
 }
 
 // ============================================================================
@@ -708,13 +743,15 @@ export async function executeWorkflow(
       }
 
       case 'user': {
-        // On resume for THIS specific step, skip the pause behavior
+        // On resume for THIS specific step, route by the user's choice
         if (resumeFromStep === step.id) {
-          stepOutcome = { result: 'continue', output: lastStepOutput }
+          const choice = options.userChoice
+          const result = choice === undefined || choice === CONTINUE_CHOICE_ID ? DEFAULT_USER_RESULT : choice
+          stepOutcome = { result, output: lastStepOutput }
           break
         }
 
-        // Pause workflow execution — frontend shows Continue + Exit buttons
+        // Pause workflow execution — frontend shows choice/Continue buttons
         if (executionId) {
           sessionManager.waitAtStep(
             sessionId,
@@ -725,6 +762,7 @@ export async function executeWorkflow(
             workflow.metadata.id,
             workflow.metadata.name,
             workflow.metadata.color,
+            userStepChoices(step),
           )
         }
 

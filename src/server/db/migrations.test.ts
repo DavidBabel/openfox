@@ -80,6 +80,30 @@ function createOldSchemaDatabase(dbPath: string): void {
     CREATE INDEX IF NOT EXISTS idx_events_session_type ON events(session_id, event_type)
   `)
 
+  // Old workflow_executions schema: no pending_choices column
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_executions (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      workflow_name TEXT NOT NULL,
+      workflow_color TEXT,
+      status TEXT NOT NULL DEFAULT 'running',
+      current_step_id TEXT,
+      current_step_name TEXT,
+      step_output TEXT,
+      params TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_workflow_executions_session
+    ON workflow_executions(session_id)
+  `)
+
   // Insert a dummy project and session so the DB is not empty
   db.prepare(`INSERT INTO projects (id, name, workdir, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(
     'test-proj',
@@ -185,6 +209,36 @@ describe('db migrations', () => {
     // Fresh DB should have workspace added by the else-if branch
     expect(columnNames).toContain('workspace')
     expect(columnNames).not.toContain('worktree')
+
+    db.close()
+  })
+
+  it('adds pending_choices column to workflow_executions on upgrade from old schema', () => {
+    createOldSchemaDatabase(dbPath)
+
+    const config = loadConfig()
+    config.database.path = dbPath
+    initDatabase(config)
+
+    const db = new Database(dbPath)
+    const columns = db.prepare(`PRAGMA table_info(workflow_executions)`).all() as { name: string }[]
+    const columnNames = columns.map((c) => c.name)
+
+    expect(columnNames).toContain('pending_choices')
+
+    db.close()
+  })
+
+  it('creates workflow_executions with pending_choices on a fresh database', () => {
+    const config = loadConfig()
+    config.database.path = dbPath
+    initDatabase(config)
+
+    const db = new Database(dbPath)
+    const columns = db.prepare(`PRAGMA table_info(workflow_executions)`).all() as { name: string }[]
+    const columnNames = columns.map((c) => c.name)
+
+    expect(columnNames).toContain('pending_choices')
 
     db.close()
   })

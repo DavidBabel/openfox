@@ -46,7 +46,8 @@ export const MessageList = memo(function MessageList({
 
   const workflowDefaults = useWorkflowsStore((state) => state.defaults)
   const workflowUserItems = useWorkflowsStore((state) => state.userItems)
-  const workflows = [...workflowDefaults, ...workflowUserItems]
+  const workflowProjectItems = useWorkflowsStore((state) => state.projectItems)
+  const workflows = [...workflowDefaults, ...workflowUserItems, ...workflowProjectItems]
 
   const hasNewCriteria = criteria.some((c) => c.status === 'pending')
   const isDone = sessionPhase === 'done'
@@ -89,13 +90,16 @@ export const MessageList = memo(function MessageList({
 
   const [continuing, setContinuing] = useState(false)
 
-  const handleContinue = useCallback(() => {
-    if (continuing) return
-    setContinuing(true)
-    continueWorkflow()
-    // Re-enable after a timeout in case the workflow doesn't start
-    setTimeout(() => setContinuing(false), 5000)
-  }, [continuing, continueWorkflow])
+  const handleContinue = useCallback(
+    (choiceId?: string) => {
+      if (continuing) return
+      setContinuing(true)
+      continueWorkflow(choiceId)
+      // Re-enable after a timeout in case the workflow doesn't start
+      setTimeout(() => setContinuing(false), 5000)
+    },
+    [continuing, continueWorkflow],
+  )
 
   const scrollToTop = useCallback(() => {
     onScrollToTop?.()
@@ -164,16 +168,32 @@ export const MessageList = memo(function MessageList({
           )}
 
           {showContinueWorkflow && activeWorkflowExecution && (
-            <div className="flex justify-center gap-2 feed-item">
-              <button
-                onClick={handleContinue}
-                disabled={continuing}
-                className="px-4 py-1.5 text-sm font-medium rounded bg-accent-primary/15 text-accent-primary border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {continuing
-                  ? '⏳ Continuing...'
-                  : `▶ Continue ${activeWorkflowExecution.workflowName} (${activeWorkflowExecution.currentStepName ?? '...'})`}
-              </button>
+            <div className="flex justify-center gap-2 feed-item flex-wrap">
+              {(activeWorkflowExecution.pendingChoices && activeWorkflowExecution.pendingChoices.length > 0
+                ? activeWorkflowExecution.pendingChoices
+                : [
+                    {
+                      id: undefined as string | undefined,
+                      label: `▶ Continue ${activeWorkflowExecution.workflowName} (${
+                        activeWorkflowExecution.currentStepName ?? '...'
+                      })`,
+                      goto: '',
+                    },
+                  ]
+              ).map((choice) => (
+                <button
+                  key={choice.id ?? 'continue'}
+                  onClick={() => handleContinue(choice.id)}
+                  disabled={continuing}
+                  className="px-4 py-1.5 text-sm font-medium rounded bg-accent-primary/15 text-accent-primary border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {continuing
+                    ? '⏳ Continuing...'
+                    : choice.id === 'continue'
+                      ? `▶ Continue ${activeWorkflowExecution.workflowName} (${activeWorkflowExecution.currentStepName ?? '...'})`
+                      : choice.label}
+                </button>
+              ))}
             </div>
           )}
 

@@ -76,6 +76,20 @@
       "transitions": [
         {
           "when": {
+            "type": "step_result",
+            "result": "apply"
+          },
+          "goto": "apply_fixes"
+        },
+        {
+          "when": {
+            "type": "step_result",
+            "result": "skip"
+          },
+          "goto": "start_dev_server"
+        },
+        {
+          "when": {
             "type": "always"
           },
           "goto": "apply_fixes"
@@ -88,7 +102,7 @@
       "type": "agent",
       "phase": "build",
       "agentId": "builder",
-      "prompt": "Read the user's response to your review. If they explicitly said no fixes are needed, call step_done() to skip. Otherwise, apply the fixes you identified during review:\n\nTo apply fixes:\n1. Run checks: `npm run typecheck && npm run lint && npm run test`\n2. Commit: `git add -A && git commit -m \"review: fixes for PR #{{pr_number}}\"`\n3. Tag: `git tag review-fixes-{{pr_number}}`\n\nCall step_done() when done.",
+      "prompt": "Apply the fixes you identified during review:\n\n1. Run checks: `npm run typecheck && npm run lint && npm run test`\n2. Commit: `git add -A && git commit -m \"review: fixes for PR #{{pr_number}}\"`\n3. Tag: `git tag review-fixes-{{pr_number}}`\n\nIf there is nothing to fix or apply, say so explicitly and call step_done().",
       "transitions": [
         {
           "when": {

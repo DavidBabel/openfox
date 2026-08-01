@@ -32,6 +32,8 @@ interface WorkflowsModalProps {
   isOpen: boolean
   onClose: () => void
   initialEditId?: string | null
+  /** Project root workdir this modal was opened from — scopes project workflows shown and saved. */
+  projectDir?: string
 }
 
 function toSlug(name: string): string {
@@ -55,7 +57,7 @@ const labelClass = 'block text-[11px] text-text-secondary mb-0.5'
 
 const DEFAULT_STEPS: WorkflowStep[] = []
 
-export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModalProps) {
+export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: WorkflowsModalProps) {
   const defaults = useWorkflowsStore((state) => state.defaults)
   const userItems = useWorkflowsStore((state) => state.userItems)
   const projectItems = useWorkflowsStore((state) => state.projectItems)
@@ -104,7 +106,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
 
   useEffect(() => {
     if (isOpen) {
-      fetchWorkflows()
+      fetchWorkflows(projectDir)
       fetchTemplateVariables()
       fetchAgents()
       setSelectedNodeKey(null)
@@ -112,7 +114,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
       if (initialEditId) {
         const isDefault = defaults.some((d) => d.id === initialEditId)
         if (isDefault) {
-          fetchDefaultContent(initialEditId).then((workflow) => {
+          fetchDefaultContent(initialEditId, projectDir).then((workflow) => {
             if (!workflow) return
             populateForm(
               {
@@ -127,7 +129,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
             )
           })
         } else {
-          fetchWorkflow(initialEditId).then((workflow) => {
+          fetchWorkflow(initialEditId, projectDir).then((workflow) => {
             if (!workflow) return
             populateForm(workflow, { editingId: initialEditId, isReadOnly: false })
           })
@@ -138,7 +140,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
         setIsReadOnly(false)
       }
     }
-  }, [isOpen, fetchWorkflows, fetchWorkflow, fetchDefaultContent, fetchTemplateVariables, initialEditId])
+  }, [isOpen, fetchWorkflows, fetchWorkflow, fetchDefaultContent, fetchTemplateVariables, initialEditId, projectDir])
 
   const populateForm = (
     workflow: {
@@ -176,7 +178,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
   }
 
   const handleEdit = async (workflowId: string) => {
-    const workflow = await fetchWorkflow(workflowId)
+    const workflow = await fetchWorkflow(workflowId, projectDir)
     if (!workflow) return
     populateForm(workflow, { editingId: workflowId, isReadOnly: false, selectedNodeKey: null, selectedEdgeKey: null })
   }
@@ -222,8 +224,8 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
       startCondition: formStartCondition,
     }
     const result = editingId
-      ? await updateWorkflow(editingId, workflow)
-      : await createWorkflow(workflow, formDestination)
+      ? await updateWorkflow(editingId, workflow, projectDir)
+      : await createWorkflow(workflow, formDestination, projectDir)
     setSaving(false)
     if (!result.success) {
       setFormError(result.error ?? 'Failed to save.')
@@ -258,7 +260,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
 
   const fetchWorkflowContent = async (workflowId: string) => {
     const isDefault = defaults.some((d) => d.id === workflowId)
-    return isDefault ? await fetchDefaultContent(workflowId) : await fetchWorkflow(workflowId)
+    return isDefault ? await fetchDefaultContent(workflowId, projectDir) : await fetchWorkflow(workflowId, projectDir)
   }
 
   const handleDuplicate = async (workflowId: string) => {
@@ -298,7 +300,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId }: WorkflowsModa
   }
 
   const handleDelete = async (workflowId: string) => {
-    await deleteWorkflowAction(workflowId)
+    await deleteWorkflowAction(workflowId, projectDir)
     clearConfirm()
   }
 

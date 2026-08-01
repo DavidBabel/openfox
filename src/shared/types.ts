@@ -41,6 +41,16 @@ export interface WorkflowParameter {
 
 export type WorkflowExecutionStatus = 'running' | 'waiting' | 'completed' | 'cancelled' | 'blocked'
 
+/** A selectable branch presented to the user at a paused user step. */
+export interface UserStepChoice {
+  /** Choice identifier — matches a step_result transition's result. */
+  id: string
+  /** Button label shown in the UI. */
+  label: string
+  /** Target step the choice routes to. */
+  goto: string
+}
+
 export interface WorkflowExecution {
   id: string
   sessionId: string
@@ -52,6 +62,8 @@ export interface WorkflowExecution {
   currentStepName?: string
   stepOutput: Record<string, string>
   params: Record<string, string>
+  /** Available branches at a paused user step, if any. */
+  pendingChoices?: UserStepChoice[]
   createdAt: number
   updatedAt: number
 }
@@ -138,9 +150,7 @@ export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
 // Segment types for preserving streaming order
 export type MessageSegment =
-  | { type: 'text'; content: string }
-  | { type: 'thinking'; content: string }
-  | { type: 'tool_call'; toolCallId: string }
+  { type: 'text'; content: string } | { type: 'thinking'; content: string } | { type: 'tool_call'; toolCallId: string }
 
 export interface MessageStats {
   providerId: string

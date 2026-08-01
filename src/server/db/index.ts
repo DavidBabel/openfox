@@ -284,6 +284,7 @@ function runMigrations(db: Database.Database): void {
       current_step_name TEXT,
       step_output TEXT,
       params TEXT,
+      pending_choices TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -294,6 +295,14 @@ function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_workflow_executions_session
     ON workflow_executions(session_id)
   `)
+
+  // Migration: Add pending_choices column (available branches at a paused user step)
+  const workflowExecColumns = db.prepare(`PRAGMA table_info(workflow_executions)`).all() as { name: string }[]
+  const workflowExecColumnNames = workflowExecColumns.map((c) => c.name)
+  if (!workflowExecColumnNames.includes('pending_choices')) {
+    logger.info('Migrating workflow_executions table: adding pending_choices column')
+    db.exec(`ALTER TABLE workflow_executions ADD COLUMN pending_choices TEXT`)
+  }
 
   logger.info('Database migrations completed')
 }

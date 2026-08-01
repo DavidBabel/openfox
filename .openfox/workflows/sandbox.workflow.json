@@ -1,0 +1,110 @@
+{
+  "metadata": {
+    "id": "sandbox",
+    "name": "Sandbox",
+    "description": "Tiny playground to test workflow steps and user-choice branching. It just greets you, lets you pick a mood, and says bye.",
+    "version": "1.0.0",
+    "color": "#a371f7"
+  },
+  "entryStep": "greet",
+  "settings": {
+    "maxIterations": 20
+  },
+  "steps": [
+    {
+      "id": "greet",
+      "name": "Say Hi",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "prompt": "Say hi to the user with a friendly, slightly silly one-liner. Keep it to two sentences max. Then call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "pick_mood"
+        }
+      ]
+    },
+    {
+      "id": "pick_mood",
+      "name": "Pick a Mood",
+      "type": "user",
+      "phase": "verification",
+      "transitions": [
+        {
+          "when": {
+            "type": "step_result",
+            "result": "happy"
+          },
+          "goto": "happy_talk"
+        },
+        {
+          "when": {
+            "type": "step_result",
+            "result": "grumpy"
+          },
+          "goto": "grumpy_talk"
+        },
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "happy_talk"
+        }
+      ]
+    },
+    {
+      "id": "happy_talk",
+      "name": "Happy Chat",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "prompt": "The user picked \"happy\". Tell them one upbeat compliment or terrible-but-endearing dad joke. Then call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "say_bye"
+        }
+      ]
+    },
+    {
+      "id": "grumpy_talk",
+      "name": "Grumpy Chat",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "prompt": "The user picked \"grumpy\". Reply in a mock-grumpy but harmless tone (it's a bit, don't be mean). One or two sentences. Then call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "say_bye"
+        }
+      ]
+    },
+    {
+      "id": "say_bye",
+      "name": "Say Bye",
+      "type": "agent",
+      "phase": "verification",
+      "agentId": "builder",
+      "prompt": "Say goodbye to the user and mention they can re-run this Sandbox workflow anytime. Then call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

@@ -10,6 +10,7 @@ const mockContinueWorkflow = vi.fn()
 const mockState = {
   phase: 'waiting',
   hasWaitingWorkflow: true,
+  pendingChoices: undefined as Array<{ id: string; label: string; goto: string }> | undefined,
 }
 
 function buildSessionState() {
@@ -43,6 +44,7 @@ function buildSessionState() {
           currentStepName: 'Manual Testing',
           stepOutput: {} as Record<string, string>,
           params: { feature: 'login' },
+          ...(mockState.pendingChoices ? { pendingChoices: mockState.pendingChoices } : {}),
           createdAt: Date.now(),
           updatedAt: Date.now(),
         }
@@ -65,8 +67,8 @@ vi.mock('../../stores/workflows', () => ({
   useWorkflowsStore: Object.assign(
     (selector?: (state: unknown) => unknown) =>
       selector
-        ? selector({ defaults: [], userItems: [], fetchWorkflows: vi.fn() })
-        : { defaults: [], userItems: [], fetchWorkflows: vi.fn() },
+        ? selector({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() })
+        : { defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() },
     { getState: vi.fn() },
   ),
 }))
@@ -111,6 +113,7 @@ describe('MessageList continue workflow button', () => {
     mockContinueWorkflow.mockClear()
     mockState.phase = 'waiting'
     mockState.hasWaitingWorkflow = true
+    mockState.pendingChoices = undefined
   })
 
   it('renders continue button when phase is waiting and waitingWorkflow is set', () => {
@@ -135,5 +138,35 @@ describe('MessageList continue workflow button', () => {
     renderMessageList()
     screen.getByRole('button', { name: /continue/i }).click()
     expect(mockContinueWorkflow).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders one button per pendingChoices when choices are present', () => {
+    mockState.pendingChoices = [
+      { id: 'apply', label: 'apply', goto: 'apply_fixes' },
+      { id: 'skip', label: 'skip', goto: 'start_dev_server' },
+      { id: 'continue', label: 'Continue', goto: 'start_dev_server' },
+    ]
+    renderMessageList()
+    expect(screen.getByRole('button', { name: 'apply' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'skip' })).toBeDefined()
+    // The synthetic continue choice keeps the rich "Continue <workflow> (<step>)" label
+    expect(screen.getByRole('button', { name: /continue pr review \(manual testing\)/i })).toBeDefined()
+  })
+
+  it('calls continueWorkflow with the choice id when a choice button is clicked', () => {
+    mockState.pendingChoices = [
+      { id: 'apply', label: 'apply', goto: 'apply_fixes' },
+      { id: 'skip', label: 'skip', goto: 'start_dev_server' },
+    ]
+    renderMessageList()
+    screen.getByRole('button', { name: 'apply' }).click()
+    expect(mockContinueWorkflow).toHaveBeenCalledTimes(1)
+    expect(mockContinueWorkflow).toHaveBeenCalledWith('apply')
+  })
+
+  it('falls back to a single continue button when pendingChoices is absent', () => {
+    mockState.pendingChoices = undefined
+    renderMessageList()
+    expect(screen.getAllByRole('button', { name: /continue/i })).toHaveLength(1)
   })
 })

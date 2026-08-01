@@ -698,6 +698,12 @@ export function handleServerMessage(
         status: import('@shared/types.js').WorkflowExecutionStatus
         currentStepId?: string
         currentStepName?: string
+        pendingChoices?: import('@shared/types.js').UserStepChoice[]
+      }
+      const stepPatch = {
+        ...(payload.currentStepId ? { currentStepId: payload.currentStepId } : {}),
+        ...(payload.currentStepName ? { currentStepName: payload.currentStepName } : {}),
+        ...(payload.pendingChoices ? { pendingChoices: payload.pendingChoices } : {}),
       }
       set((state) => {
         const current = state.activeWorkflowExecution
@@ -711,8 +717,7 @@ export function handleServerMessage(
               workflowName: payload.workflowName,
               ...(payload.workflowColor ? { workflowColor: payload.workflowColor } : {}),
               status: payload.status,
-              ...(payload.currentStepId ? { currentStepId: payload.currentStepId } : {}),
-              ...(payload.currentStepName ? { currentStepName: payload.currentStepName } : {}),
+              ...stepPatch,
               stepOutput: {},
               params: {},
               createdAt: Date.now(),
@@ -724,8 +729,7 @@ export function handleServerMessage(
           activeWorkflowExecution: {
             ...current,
             status: payload.status,
-            ...(payload.currentStepId ? { currentStepId: payload.currentStepId } : {}),
-            ...(payload.currentStepName ? { currentStepName: payload.currentStepName } : {}),
+            ...stepPatch,
           },
         }
       })

@@ -68,18 +68,32 @@ interface WorkflowsState {
   activeWorkflowId: string
   loading: boolean
   templateVariables: TemplateVariable[]
-  fetchWorkflows: () => Promise<void>
+  /** Project root workdir to scope project workflows (ambient default, syncs from the active session). */
+  workdir?: string
+  setWorkdir: (workdir?: string) => void
+  fetchWorkflows: (workdir?: string) => Promise<void>
   fetchTemplateVariables: () => Promise<void>
-  fetchWorkflow: (id: string) => Promise<WorkflowFull | null>
-  fetchDefaultContent: (id: string) => Promise<WorkflowFull | null>
+  fetchWorkflow: (id: string, workdir?: string) => Promise<WorkflowFull | null>
+  fetchDefaultContent: (id: string, workdir?: string) => Promise<WorkflowFull | null>
   createWorkflow: (
     workflow: WorkflowFull,
     destination?: 'project' | 'user',
+    workdir?: string,
   ) => Promise<{ success: boolean; error?: string }>
-  updateWorkflow: (id: string, workflow: Partial<WorkflowFull>) => Promise<{ success: boolean; error?: string }>
-  deleteWorkflow: (id: string) => Promise<{ success: boolean; error?: string; reason?: string }>
-  duplicateWorkflow: (id: string, destination?: 'project' | 'user') => Promise<{ success: boolean; error?: string }>
+  updateWorkflow: (
+    id: string,
+    workflow: Partial<WorkflowFull>,
+    workdir?: string,
+  ) => Promise<{ success: boolean; error?: string }>
+  deleteWorkflow: (id: string, workdir?: string) => Promise<{ success: boolean; error?: string; reason?: string }>
+  duplicateWorkflow: (
+    id: string,
+    destination?: 'project' | 'user',
+    workdir?: string,
+  ) => Promise<{ success: boolean; error?: string }>
 }
+
+const workdirQuery = (workdir: string | undefined): string => (workdir ? `?workdir=${encodeURIComponent(workdir)}` : '')
 
 export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   defaults: [],
@@ -88,6 +102,8 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   activeWorkflowId: 'default',
   loading: false,
   templateVariables: [],
+
+  setWorkdir: (workdir) => set({ workdir }),
 
   fetchTemplateVariables: async () => {
     try {
@@ -99,10 +115,10 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     }
   },
 
-  fetchWorkflows: async () => {
+  fetchWorkflows: async (workdir) => {
     set({ loading: true })
     try {
-      const res = await authFetch('/api/workflows')
+      const res = await authFetch(`/api/workflows${workdirQuery(workdir ?? get().workdir)}`)
       const data = await res.json()
       set({
         defaults: data.defaults ?? [],
@@ -116,9 +132,9 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     }
   },
 
-  fetchWorkflow: async (id: string) => {
+  fetchWorkflow: async (id: string, workdir) => {
     try {
-      const res = await authFetch(`/api/workflows/${id}`)
+      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}`)
       if (!res.ok) return null
       return (await res.json()) as WorkflowFull
     } catch {
@@ -126,9 +142,9 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     }
   },
 
-  fetchDefaultContent: async (id: string) => {
+  fetchDefaultContent: async (id: string, workdir) => {
     try {
-      const res = await authFetch(`/api/workflows/defaults/${id}`)
+      const res = await authFetch(`/api/workflows/defaults/${id}${workdirQuery(workdir ?? get().workdir)}`)
       if (!res.ok) return null
       return (await res.json()) as WorkflowFull
     } catch {
@@ -136,24 +152,30 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     }
   },
 
-  createWorkflow: async (workflow: WorkflowFull, destination?: 'project' | 'user') => {
-    const result = await saveEntity('POST', '/api/workflows', {
+  createWorkflow: async (workflow: WorkflowFull, destination, workdir) => {
+    const wd = workdir ?? get().workdir
+    const result = await saveEntity('POST', `/api/workflows${workdirQuery(wd)}`, {
       ...workflow,
       destination,
     } as unknown as Record<string, unknown>)
-    if (result.success) await get().fetchWorkflows()
+    if (result.success) await get().fetchWorkflows(wd)
     return result
   },
 
-  updateWorkflow: async (id: string, workflow: Partial<WorkflowFull>) => {
-    const result = await saveEntity('PUT', `/api/workflows/${id}`, workflow as unknown as Record<string, unknown>)
-    if (result.success) await get().fetchWorkflows()
+  updateWorkflow: async (id: string, workflow: Partial<WorkflowFull>, workdir) => {
+    const wd = workdir ?? get().workdir
+    const result = await saveEntity(
+      'PUT',
+      `/api/workflows/${id}${workdirQuery(wd)}`,
+      workflow as unknown as Record<string, unknown>,
+    )
+    if (result.success) await get().fetchWorkflows(wd)
     return result
   },
 
-  deleteWorkflow: async (id: string) => {
+  deleteWorkflow: async (id: string, workdir) => {
     try {
-      const res = await authFetch(`/api/workflows/${id}`, { method: 'DELETE' })
+      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}`, { method: 'DELETE' })
       const data = await res.json()
       if (res.ok) {
         set((state) => ({
@@ -168,7 +190,12 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     }
   },
 
-  duplicateWorkflow: async (id: string, destination?: 'project' | 'user') => {
-    return duplicateEntity(`/api/workflows/${id}/duplicate`, () => get().fetchWorkflows(), destination)
+  duplicateWorkflow: async (id: string, destination, workdir) => {
+    const wd = workdir ?? get().workdir
+    return duplicateEntity(
+      `/api/workflows/${id}/duplicate${workdirQuery(wd)}`,
+      () => get().fetchWorkflows(wd),
+      destination,
+    )
   },
 }))

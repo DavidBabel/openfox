@@ -1301,6 +1301,7 @@ async function handleClientMessage(
             resumeFrom?: string
             stepOutput?: Record<string, string>
             params?: Record<string, string>
+            userChoice?: string
           }
         | undefined
       const launchAttachments = launchPayload?.attachments as Attachment[] | undefined
@@ -1368,6 +1369,7 @@ async function handleClientMessage(
         ...(launchPayload?.subGroup ? { subGroup: launchPayload.subGroup } : {}),
         ...(isResume && launchPayload?.resumeFrom ? { resumeFromStep: launchPayload.resumeFrom } : {}),
         ...(isResume && launchPayload?.stepOutput ? { initialStepOutput: launchPayload.stepOutput } : {}),
+        ...(isResume && launchPayload?.userChoice ? { userChoice: launchPayload.userChoice } : {}),
         ...(launchPayload?.params ? { params: launchPayload.params } : {}),
         // On resume, prefer params/stepOutput from the persisted workflow execution
         ...(isResume

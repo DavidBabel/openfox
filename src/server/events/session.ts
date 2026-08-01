@@ -471,6 +471,7 @@ export function emitWorkflowExecutionChanged(
   status: import('../../shared/types.js').WorkflowExecutionStatus,
   currentStepId?: string,
   currentStepName?: string,
+  pendingChoices?: import('../../shared/types.js').UserStepChoice[],
 ): void {
   const eventStore = getEventStore()
   eventStore.append(sessionId, {
@@ -483,6 +484,7 @@ export function emitWorkflowExecutionChanged(
       status,
       ...(currentStepId ? { currentStepId } : {}),
       ...(currentStepName ? { currentStepName } : {}),
+      ...(pendingChoices !== undefined ? { pendingChoices } : {}),
     },
   })
 }

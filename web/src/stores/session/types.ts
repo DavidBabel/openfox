@@ -94,7 +94,7 @@ export interface SessionState {
     subGroup?: string,
     params?: Record<string, string>,
   ) => void
-  continueWorkflow: () => void
+  continueWorkflow: (choiceId?: string) => void
   exitWorkflow: () => void
   switchMode: (mode: SessionMode) => void
   switchDangerLevel: (dangerLevel: 'normal' | 'dangerous') => void

@@ -707,8 +707,9 @@ export class SessionManager {
     workflowId: string,
     workflowName: string,
     workflowColor: string | undefined,
+    pendingChoices?: import('../../shared/types.js').UserStepChoice[],
   ): void {
-    updateWorkflowExecutionStatus(executionId, 'waiting', stepId, stepName, stepOutput)
+    updateWorkflowExecutionStatus(executionId, 'waiting', stepId, stepName, stepOutput, pendingChoices)
     emitWorkflowExecutionChanged(
       sessionId,
       executionId,
@@ -718,6 +719,7 @@ export class SessionManager {
       'waiting',
       stepId,
       stepName,
+      pendingChoices,
     )
     this.setPhase(sessionId, 'waiting')
     const updatedSession = this.requireSession(sessionId)
@@ -736,7 +738,8 @@ export class SessionManager {
   ): { params: Record<string, string>; stepOutput: Record<string, string> } | null {
     const row = dbGetActiveWorkflowExecution(sessionId)
     if (!row || row.id !== executionId) return null
-    updateWorkflowExecutionStatus(executionId, 'running')
+    // Clear pending choices — they only apply to the paused step being resumed
+    updateWorkflowExecutionStatus(executionId, 'running', undefined, undefined, undefined, [])
     emitWorkflowExecutionChanged(
       sessionId,
       executionId,
@@ -746,6 +749,7 @@ export class SessionManager {
       'running',
       row.current_step_id ?? undefined,
       row.current_step_name ?? undefined,
+      [],
     )
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
@@ -765,9 +769,19 @@ export class SessionManager {
     workflowName: string,
     workflowColor: string | undefined,
   ): void {
-    updateWorkflowExecutionStatus(executionId, 'completed')
+    updateWorkflowExecutionStatus(executionId, 'completed', undefined, undefined, undefined, [])
     clearWorkflowExecution(executionId)
-    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'completed')
+    emitWorkflowExecutionChanged(
+      sessionId,
+      executionId,
+      workflowId,
+      workflowName,
+      workflowColor,
+      'completed',
+      undefined,
+      undefined,
+      [],
+    )
     this.setPhase(sessionId, 'done')
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
@@ -783,9 +797,19 @@ export class SessionManager {
     workflowName: string,
     workflowColor: string | undefined,
   ): void {
-    updateWorkflowExecutionStatus(executionId, 'cancelled')
+    updateWorkflowExecutionStatus(executionId, 'cancelled', undefined, undefined, undefined, [])
     clearWorkflowExecution(executionId)
-    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'cancelled')
+    emitWorkflowExecutionChanged(
+      sessionId,
+      executionId,
+      workflowId,
+      workflowName,
+      workflowColor,
+      'cancelled',
+      undefined,
+      undefined,
+      [],
+    )
     this.setPhase(sessionId, 'build')
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
@@ -801,9 +825,19 @@ export class SessionManager {
     workflowName: string,
     workflowColor: string | undefined,
   ): void {
-    updateWorkflowExecutionStatus(executionId, 'blocked')
+    updateWorkflowExecutionStatus(executionId, 'blocked', undefined, undefined, undefined, [])
     clearWorkflowExecution(executionId)
-    emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'blocked')
+    emitWorkflowExecutionChanged(
+      sessionId,
+      executionId,
+      workflowId,
+      workflowName,
+      workflowColor,
+      'blocked',
+      undefined,
+      undefined,
+      [],
+    )
     this.setPhase(sessionId, 'blocked')
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
@@ -826,6 +860,9 @@ export class SessionManager {
       ...(row.current_step_name ? { currentStepName: row.current_step_name } : {}),
       stepOutput: JSON.parse(row.step_output ?? '{}') as Record<string, string>,
       params: JSON.parse(row.params ?? '{}') as Record<string, string>,
+      ...(row.pending_choices
+        ? { pendingChoices: JSON.parse(row.pending_choices) as import('../../shared/types.js').UserStepChoice[] }
+        : {}),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }

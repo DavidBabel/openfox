@@ -81,7 +81,82 @@ vi.mock('../git/diff.js', () => ({
   formatGitDiffFiles: vi.fn(async () => '(none)'),
 }))
 
-import { executeWorkflow } from './executor.js'
+import { executeWorkflow, userStepChoices } from './executor.js'
+
+describe('userStepChoices', () => {
+  it('maps step_result transitions to choices and appends a Continue choice for always', () => {
+    const choices = userStepChoices({
+      id: 'choose',
+      name: 'Choose',
+      type: 'user',
+      phase: 'verification',
+      transitions: [
+        { when: { type: 'step_result', result: 'apply' }, goto: 'applied' },
+        { when: { type: 'step_result', result: 'skip' }, goto: 'skipped' },
+        { when: { type: 'always' }, goto: 'applied' },
+      ],
+    })
+
+    expect(choices).toEqual([
+      { id: 'apply', label: 'apply', goto: 'applied' },
+      { id: 'skip', label: 'skip', goto: 'skipped' },
+      { id: 'continue', label: 'Continue', goto: 'applied' },
+    ])
+  })
+
+  it('omits the Continue choice when there is no always transition', () => {
+    const choices = userStepChoices({
+      id: 'choose',
+      name: 'Choose',
+      type: 'user',
+      phase: 'verification',
+      transitions: [{ when: { type: 'step_result', result: 'apply' }, goto: '$done' }],
+    })
+
+    expect(choices).toEqual([{ id: 'apply', label: 'apply', goto: '$done' }])
+  })
+
+  it('produces only a Continue choice for a step with a single always transition', () => {
+    const choices = userStepChoices({
+      id: 'pause',
+      name: 'Pause',
+      type: 'user',
+      phase: 'verification',
+      transitions: [{ when: { type: 'always' }, goto: '$done' }],
+    })
+
+    expect(choices).toEqual([{ id: 'continue', label: 'Continue', goto: '$done' }])
+  })
+
+  it('deduplicates repeated step_result results by id', () => {
+    const choices = userStepChoices({
+      id: 'choose',
+      name: 'Choose',
+      type: 'user',
+      phase: 'verification',
+      transitions: [
+        { when: { type: 'step_result', result: 'apply' }, goto: 'first' },
+        { when: { type: 'step_result', result: 'apply' }, goto: 'second' },
+      ],
+    })
+
+    expect(choices).toEqual([{ id: 'apply', label: 'apply', goto: 'first' }])
+  })
+
+  it('returns no choices when there are no step_result or always transitions', () => {
+    const choices = userStepChoices({
+      id: 'odd',
+      name: 'Odd',
+      type: 'user',
+      phase: 'verification',
+      transitions: [
+        { when: { type: 'metadata_all_match', key: 'criteria', field: 'status', value: 'passed' }, goto: '$done' },
+      ],
+    })
+
+    expect(choices).toEqual([])
+  })
+})
 
 describe('executeWorkflow mode changes', () => {
   let setMode: ReturnType<typeof vi.fn>
@@ -414,6 +489,170 @@ describe('executeWorkflow mode changes', () => {
 
     // cancelWorkflow should NOT have been called — abort preserves the execution
     expect(mockSessionManager.cancelWorkflow).not.toHaveBeenCalled()
+  })
+
+  it('passes pendingChoices to waitAtStep for a user step with step_result transitions', async () => {
+    const userStepWorkflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'pause',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'pause',
+          name: 'Pause',
+          type: 'user',
+          phase: 'verification',
+          transitions: [
+            { when: { type: 'step_result', result: 'apply' }, goto: 'apply_fixes' },
+            { when: { type: 'step_result', result: 'skip' }, goto: 'start_dev_server' },
+            { when: { type: 'always' }, goto: 'start_dev_server' },
+          ],
+        },
+        {
+          id: 'apply_fixes',
+          name: 'Apply',
+          type: 'agent',
+          phase: 'build',
+          agentId: 'builder',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+        {
+          id: 'start_dev_server',
+          name: 'Start',
+          type: 'agent',
+          phase: 'build',
+          agentId: 'builder',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    const result = await executeWorkflow(userStepWorkflow, options)
+
+    expect(result.finalAction).toHaveProperty('type', 'WAITING')
+    expect(mockSessionManager.waitAtStep).toHaveBeenCalled()
+    const choices = mockSessionManager.waitAtStep.mock.calls[0][8]
+    expect(choices).toEqual([
+      { id: 'apply', label: 'apply', goto: 'apply_fixes' },
+      { id: 'skip', label: 'skip', goto: 'start_dev_server' },
+      { id: 'continue', label: 'Continue', goto: 'start_dev_server' },
+    ])
+  })
+
+  it('routes to the chosen branch when resuming a user step with userChoice', async () => {
+    const workflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'choose',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'choose',
+          name: 'Choose',
+          type: 'user',
+          phase: 'verification',
+          transitions: [
+            { when: { type: 'step_result', result: 'apply' }, goto: 'apply_fixes' },
+            { when: { type: 'always' }, goto: 'default_path' },
+          ],
+        },
+        {
+          id: 'apply_fixes',
+          name: 'Apply',
+          type: 'agent',
+          phase: 'build',
+          agentId: 'builder',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+        {
+          id: 'default_path',
+          name: 'Default',
+          type: 'agent',
+          phase: 'build',
+          agentId: 'planner',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    const result = await executeWorkflow(workflow, {
+      ...options,
+      resumeFromStep: 'choose',
+      userChoice: 'apply',
+    })
+
+    expect(result.finalAction).toHaveProperty('type', 'DONE')
+    expect(setMode).toHaveBeenCalledWith('test-session', 'builder')
+    expect(setMode).not.toHaveBeenCalledWith('test-session', 'planner')
+  })
+
+  it('falls back to the always transition when resuming without a userChoice', async () => {
+    const workflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'choose',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'choose',
+          name: 'Choose',
+          type: 'user',
+          phase: 'verification',
+          transitions: [
+            { when: { type: 'step_result', result: 'apply' }, goto: 'apply_fixes' },
+            { when: { type: 'always' }, goto: 'default_path' },
+          ],
+        },
+        {
+          id: 'apply_fixes',
+          name: 'Apply',
+          type: 'agent',
+          phase: 'build',
+          agentId: 'builder',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+        {
+          id: 'default_path',
+          name: 'Default',
+          type: 'agent',
+          phase: 'build',
+          agentId: 'planner',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    const result = await executeWorkflow(workflow, {
+      ...options,
+      resumeFromStep: 'choose',
+    })
+
+    expect(result.finalAction).toHaveProperty('type', 'DONE')
+    expect(setMode).toHaveBeenCalledWith('test-session', 'planner')
+    expect(setMode).not.toHaveBeenCalledWith('test-session', 'builder')
+  })
+
+  it('blocks when resuming with an unmatched userChoice and no always fallback', async () => {
+    const workflow: WorkflowDefinition = {
+      metadata: { id: 'test', name: 'Test', description: '', version: '1' },
+      entryStep: 'choose',
+      settings: { maxIterations: 10 },
+      steps: [
+        {
+          id: 'choose',
+          name: 'Choose',
+          type: 'user',
+          phase: 'verification',
+          transitions: [{ when: { type: 'step_result', result: 'apply' }, goto: '$done' }],
+        },
+      ],
+    }
+
+    const result = await executeWorkflow(workflow, {
+      ...options,
+      resumeFromStep: 'choose',
+      userChoice: 'bogus',
+    })
+
+    expect(result.finalAction).toHaveProperty('type', 'BLOCKED')
   })
 
   it('can resume workflow after abort during agent step', async () => {

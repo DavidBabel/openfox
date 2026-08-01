@@ -198,6 +198,39 @@ export function TransitionPanel({
         />
       </div>
 
+      {fromStep?.type === 'user' && (
+        <div className="pt-1 border-t border-border/50 space-y-1">
+          <p className="text-text-muted text-[10px]">
+            On a user step, each "Step result is..." transition becomes a choice button; "Always" becomes a Continue
+            button.
+          </p>
+          {condition.type === 'step_result' &&
+            fromStep.transitions.filter((t) => t.when.type === 'step_result' && t.when.result === condition.result)
+              .length > 1 && (
+              <p className="text-accent-warning text-[10px]">
+                Duplicate result "{condition.result}" — only the first matching transition is reachable.
+              </p>
+            )}
+          {condition.type === 'step_result' && condition.result === 'continue' && (
+            <p className="text-accent-warning text-[10px]">
+              "continue" is reserved for the "Always" Continue button — rename this result.
+            </p>
+          )}
+          {condition.type === 'always' &&
+            fromStep.transitions.some((t, i) => i > transitionIndex && t.when.type === 'step_result') && (
+              <p className="text-accent-warning text-[10px]">
+                This "Always" transition comes before one or more choice transitions — those choice buttons are
+                unreachable. Move it to the end.
+              </p>
+            )}
+          {condition.type === 'always' && fromStep.transitions.filter((t) => t.when.type === 'always').length > 1 && (
+            <p className="text-accent-warning text-[10px]">
+              Multiple "Always" transitions — only the first is reachable.
+            </p>
+          )}
+        </div>
+      )}
+
       <p className="text-text-muted text-[10px]">
         Drag handles to reconnect. Order determines evaluation priority. Press Delete to remove.
       </p>

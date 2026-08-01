@@ -29,7 +29,14 @@ vi.mock('../../stores/commands', () => ({
 }))
 
 const mockFetchWorkflows = vi.fn()
-const mockWorkflowsState = { defaults: [], userItems: [], fetchWorkflows: mockFetchWorkflows, getState: vi.fn() }
+const mockWorkflowsState = {
+  defaults: [],
+  userItems: [],
+  projectItems: [],
+  fetchWorkflows: mockFetchWorkflows,
+  setWorkdir: vi.fn(),
+  getState: vi.fn(),
+}
 vi.mock('../../stores/workflows', () => ({
   useWorkflowsStore: Object.assign(
     (selector?: (state: unknown) => unknown) => (selector ? selector(mockWorkflowsState) : mockWorkflowsState),

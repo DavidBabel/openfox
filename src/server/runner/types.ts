@@ -42,6 +42,8 @@ export interface OrchestratorOptions {
   params?: Record<string, string>
   /** Run only steps with this sub-group label */
   subGroup?: string
+  /** Branch selected by the user at a paused user step (matches a step_result result) */
+  userChoice?: string
   /** User-provided message to inject after workflow-started marker */
   userMessage?: { content: string; attachments?: Attachment[] }
   /** For path confirmation dialogs (sent directly, not through EventStore) */

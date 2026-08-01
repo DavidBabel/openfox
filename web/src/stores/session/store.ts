@@ -121,12 +121,14 @@ export const useSessionStore = create<SessionState>((set, get) => {
     content?: string,
     attachments?: import('@shared/types.js').Attachment[],
     messageKind?: string,
+    userChoice?: string,
   ): Record<string, unknown> {
     return {
       workflowId: exec.workflowId,
       resumeFrom: exec.currentStepId,
       stepOutput: exec.stepOutput,
       ...(exec.params && Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
+      ...(userChoice ? { userChoice } : {}),
       ...(content?.trim() ? { content } : {}),
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
       ...(messageKind ? { messageKind } : {}),
@@ -417,8 +419,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
           // Restore cross-session confirmation state from server
           const pendingBySession = data.pendingConfirmationsBySession as
-            | Record<string, PendingPathConfirmation[]>
-            | undefined
+            Record<string, PendingPathConfirmation[]> | undefined
           if (pendingBySession) {
             const currentSessionId = get().currentSession?.id
             const crossSessionConfirmations: Record<string, PendingPathConfirmation[]> = {}
@@ -624,11 +625,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
       wsClient.send('runner.launch', payload)
     },
 
-    continueWorkflow: () => {
+    continueWorkflow: (choiceId?: string) => {
       const state = get()
       const exec = state.activeWorkflowExecution
       if (!exec || exec.status !== 'waiting') return
-      wsClient.send('runner.launch', buildResumePayload(exec))
+      wsClient.send('runner.launch', buildResumePayload(exec, undefined, undefined, undefined, choiceId))
     },
 
     exitWorkflow: () => {
