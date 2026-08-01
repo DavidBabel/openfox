@@ -21,9 +21,7 @@ import { tmpdir } from 'node:os'
 
 const { mockGetGitBranch, mockGetWorkspacesDir, mockRunGit, mockGetCommitsBehind } = vi.hoisted(() => {
   const mockGetGitBranch = vi.fn(async (_cwd: string) => 'feat-x' as string | null)
-  const mockGetWorkspacesDir = vi.fn(
-    async (_projectName: string, _projectDir: string) => '/tmp/openfox-workspaces',
-  )
+  const mockGetWorkspacesDir = vi.fn(async (_projectName: string, _projectDir: string) => '/tmp/openfox-workspaces')
   const mockRunGit = vi.fn(async (_cwd: string, _args: string[]) => undefined as void)
   const mockGetCommitsBehind = vi.fn(async (_cwd: string, _branch: string) => 0 as number | null)
   return { mockGetGitBranch, mockGetWorkspacesDir, mockRunGit, mockGetCommitsBehind }
@@ -149,7 +147,12 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
     // Session already on /ws/openfox/feat-x — switching to feat-x without branch change
     // is a no-op and must NOT manufacture a fake refreshed context.
     const session = manager.createSession(projectId, 'Ctx-3', undefined, undefined, '/ws/openfox/feat-x')
-    manager.setCachedPrompt(session.id, 'Stable system prompt with Working directory: /ws/openfox/feat-x', [], 'stable-hash')
+    manager.setCachedPrompt(
+      session.id,
+      'Stable system prompt with Working directory: /ws/openfox/feat-x',
+      [],
+      'stable-hash',
+    )
 
     await manager.switchWorkspace(session.id, 'feat-x')
 

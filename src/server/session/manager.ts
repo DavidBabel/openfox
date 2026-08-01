@@ -215,9 +215,9 @@ export class SessionManager {
 
   /**
    * Verify the session's effective workdir is on the branch the session was
-   * bound to. Used as an early gate by write workflows (Dev & Verify) so we
-   * never write files against the wrong tree when the session branch and the
-   * actual git branch have diverged (#183).
+   * bound to. Used as an early gate before any agent step of a workflow
+   * execution, so we never run against the wrong tree when the session branch
+   * and the actual git branch have diverged (#183).
    *
    * Decision matrix (fail-closed):
    *   - expectedBranch null                 → ok, regardless of actualBranch.

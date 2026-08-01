@@ -238,7 +238,7 @@ describe('executeWorkflow – execution context integrity', () => {
       ok: false,
       reason:
         "Cannot verify Git context for workdir '/ws/feat': expected branch 'feat-x' but the actual branch is unavailable. " +
-        "Refusing to write — no agent was run, no checkout was performed.",
+        'Refusing to write — no agent was run, no checkout was performed.',
       workdir: '/ws/feat',
       expectedBranch: 'feat-x',
       actualBranch: null,

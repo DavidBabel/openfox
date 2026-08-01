@@ -300,7 +300,7 @@ export async function executeWorkflow(
   }
 
   // Issue #183: early gate on git context drift. Before any agent step, any
-  // shell step, or any file write, refuse to start a write workflow when the
+  // shell step, or any file write, refuse to start a workflow when the
   // session branch and the actual git branch on the effective workdir differ.
   // We do NOT auto-checkout — we surface the discrepancy and block.
   const ctxCheck = await sessionManager.assertExecutionGitContext(sessionId)
