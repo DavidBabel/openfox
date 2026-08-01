@@ -128,6 +128,21 @@ describe('GET /api/files', () => {
     expect(results.some((r) => r.name === 'Input.tsx')).toBe(true)
   })
 
+  it('lists directory contents for backslash-terminated queries (Windows-style paths)', async () => {
+    const nestedDir = join(testDir, 'components', 'ui')
+    await mkdir(nestedDir, { recursive: true })
+    await writeFile(join(nestedDir, 'Button.tsx'), '')
+    await writeFile(join(nestedDir, 'Input.tsx'), '')
+
+    const query = encodeURIComponent('components\\ui\\')
+    const res = await fetch(`${baseUrl}/api/files?q=${query}&workdir=${encodeURIComponent(testDir)}`)
+    expect(res.status).toBe(200)
+    const results = (await res.json()) as Array<{ path: string; name: string }>
+    expect(results.length).toBe(2)
+    expect(results.some((r) => r.name === 'Button.tsx')).toBe(true)
+    expect(results.some((r) => r.name === 'Input.tsx')).toBe(true)
+  })
+
   it('matches partial filename after directory path', async () => {
     const nestedDir = join(testDir, 'components', 'ui')
     await mkdir(nestedDir, { recursive: true })

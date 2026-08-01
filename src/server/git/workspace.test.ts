@@ -391,6 +391,11 @@ describe('deleteWorkspace', () => {
     await deleteWorkspace(PROJECT_NAME, maliciousName, CWD)
 
     expect(rm).toHaveBeenCalledTimes(1)
+    expect(rm).toHaveBeenCalledWith(expect.stringContaining(maliciousName), {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+    })
     expect(execSync).not.toHaveBeenCalled()
     expect(execFileSync).not.toHaveBeenCalled()
   })
