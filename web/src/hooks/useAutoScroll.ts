@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Session } from '@shared/types.ts'
 
+export type ScrollbarGestureKind = 'down' | 'move' | 'up'
+
+const MAGNET_SCROLL_PX = 2
+const WHEEL_REENABLE_PX = 100
+export const DRAG_MAGNET_GAP_PX = 6
+const FOLLOW_GUARD_MS = 1500
+
+export const scrollbarGestureToEnable = (kind: ScrollbarGestureKind, gapToEndPx: number | null): boolean => {
+  if (kind === 'down') return false
+  return gapToEndPx !== null && gapToEndPx <= DRAG_MAGNET_GAP_PX
+}
+
 export const useAutoScroll = (
   container_ref: { current: unknown },
   session: Session | null,
@@ -8,7 +20,8 @@ export const useAutoScroll = (
 ) => {
   const is_active = useRef(true)
   const startY = useRef<number | null>(null)
-  const programmaticRef = useRef(false)
+  const draggingRef = useRef(false)
+  const lastFollowRef = useRef(0)
   const [isAutoScrollActive, setIsAutoScrollActive] = useState(true)
 
   const getEffectiveScroller = useCallback((): HTMLElement | null => {
@@ -18,38 +31,48 @@ export const useAutoScroll = (
     return null
   }, [getScroller, container_ref])
 
+  const setActive = useCallback((value: boolean) => {
+    is_active.current = value
+    setIsAutoScrollActive(value)
+  }, [])
+
   const scroll_to_bottom = useCallback(() => {
     const scroller = getEffectiveScroller()
     if (scroller) {
-      programmaticRef.current = true
       scroller.scrollTop = scroller.scrollHeight
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          programmaticRef.current = false
-        })
-      })
+      lastFollowRef.current = Date.now()
     }
   }, [getEffectiveScroller])
+
+  const handleScrollbarGesture = useCallback(
+    (kind: ScrollbarGestureKind, gapToEndPx: number | null) => {
+      if (kind === 'down') draggingRef.current = true
+      const enabled = scrollbarGestureToEnable(kind, gapToEndPx)
+      setActive(enabled)
+      if (enabled) lastFollowRef.current = Date.now()
+      if (kind === 'up') draggingRef.current = false
+    },
+    [setActive],
+  )
 
   useEffect(() => {
     const scroller = getEffectiveScroller()
     if (!scroller) return
 
+    const reEnableIfNearBottom = () => {
+      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
+      if (distance < WHEEL_REENABLE_PX) {
+        lastFollowRef.current = Date.now()
+        setActive(true)
+      }
+    }
+
     const onWheel = (e: WheelEvent) => {
       if (e.deltaY > 0) {
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
-            if (distance < 100) {
-              is_active.current = true
-              setIsAutoScrollActive(true)
-            }
-          }),
-        )
+        requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
         return
       }
-      is_active.current = false
-      setIsAutoScrollActive(false)
+      setActive(false)
     }
 
     const onTouchStart = (e: TouchEvent) => {
@@ -61,28 +84,32 @@ export const useAutoScroll = (
       if (!touch) return
       const deltaY = touch.clientY - startY.current
       if (deltaY > 0) {
-        is_active.current = false
-        setIsAutoScrollActive(false)
+        setActive(false)
         return
       }
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
-          if (distance < 100) {
-            is_active.current = true
-            setIsAutoScrollActive(true)
-          }
-        }),
-      )
+      requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
     }
 
     const onScroll = () => {
-      if (programmaticRef.current) return
+      if (draggingRef.current) return
       const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
-      const atEnd = distance < 2
-      if (atEnd !== is_active.current) {
-        is_active.current = atEnd
-        setIsAutoScrollActive(atEnd)
+      if (distance < MAGNET_SCROLL_PX) {
+        lastFollowRef.current = Date.now()
+        setActive(true)
+        return
+      }
+      if (Date.now() - lastFollowRef.current <= FOLLOW_GUARD_MS) return
+      setActive(false)
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'Home') {
+        setActive(false)
+        return
+      }
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'End') {
+        requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
       }
     }
 
@@ -100,6 +127,8 @@ export const useAutoScroll = (
     scroller.addEventListener('touchstart', onTouchStart, { passive: true })
     scroller.addEventListener('touchmove', onTouchMove, { passive: true })
     scroller.addEventListener('scroll', onScroll, { passive: true })
+    scroller.addEventListener('keydown', onKeyDown)
+    scroller.tabIndex = -1
     observer.observe(scroller, {
       childList: true,
       subtree: true,
@@ -111,22 +140,22 @@ export const useAutoScroll = (
       scroller.removeEventListener('touchstart', onTouchStart)
       scroller.removeEventListener('touchmove', onTouchMove)
       scroller.removeEventListener('scroll', onScroll)
+      scroller.removeEventListener('keydown', onKeyDown)
       observer.disconnect()
       clearInterval(interval)
     }
-  }, [session?.id, getEffectiveScroller, scroll_to_bottom])
+  }, [session?.id, getEffectiveScroller, scroll_to_bottom, setActive])
 
   return {
     force_scroll_to_bottom: () => {
-      is_active.current = true
-      setIsAutoScrollActive(true)
+      setActive(true)
       scroll_to_bottom()
     },
     isAutoScrollActive,
     setAutoScroll: (enabled: boolean) => {
-      is_active.current = enabled
-      setIsAutoScrollActive(enabled)
+      setActive(enabled)
       if (enabled) scroll_to_bottom()
     },
+    handleScrollbarGesture,
   }
 }

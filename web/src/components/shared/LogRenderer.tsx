@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
 import { ScrollArea } from './ScrollArea'
+import type { ScrollbarGestureKind } from './ScrollArea'
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { ansiToReact } from '../../lib/ansiParser'
 
@@ -14,12 +15,23 @@ interface LogRendererProps {
   preRef?: React.RefObject<HTMLPreElement | null>
   preClassName?: string
   scrollAreaRef?: React.Ref<OverlayScrollbarsComponentRef<'div'>>
-  onScrollbarDrag?: () => void
+  onScrollbarGesture?: (kind: ScrollbarGestureKind, gapToEndPx: number | null) => void
 }
 
-export function LogRenderer({ logs, preRef, preClassName = 'text-sm font-mono', scrollAreaRef, onScrollbarDrag }: LogRendererProps) {
+export function LogRenderer({
+  logs,
+  preRef,
+  preClassName = 'text-sm font-mono',
+  scrollAreaRef,
+  onScrollbarGesture,
+}: LogRendererProps) {
   return (
-    <ScrollArea ref={scrollAreaRef} options={{ overflow: { x: 'scroll', y: 'scroll' } }} className={preClassName} onScrollbarDrag={onScrollbarDrag}>
+    <ScrollArea
+      ref={scrollAreaRef}
+      options={{ overflow: { x: 'scroll', y: 'scroll' } }}
+      className={preClassName}
+      onScrollbarGesture={onScrollbarGesture}
+    >
       <pre ref={preRef} className="contents">
         {logs.length === 0 ? (
           <span className="text-text-muted">No output yet</span>

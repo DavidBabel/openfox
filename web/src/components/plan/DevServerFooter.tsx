@@ -8,7 +8,8 @@ import { DevServerConfigModal } from './DevServerConfigModal'
 import { LogViewer } from './LogViewer'
 import { LogRenderer } from '../shared/LogRenderer'
 import { AutoScrollToggle } from '../shared/AutoScrollToggle'
-import { useAutoScroll } from '../../hooks/useAutoScroll'
+import { useAutoScroll, scrollbarGestureToEnable } from '../../hooks/useAutoScroll'
+import type { ScrollbarGestureKind } from '../../hooks/useAutoScroll'
 import { ansiToReact } from '../../lib/ansiParser'
 
 interface DevServerFooterProps {
@@ -35,6 +36,13 @@ const LogHoverExpand = memo(function LogHoverExpand({
   const osRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
   const onSetAutoScrollRef = useRef(onSetAutoScroll)
   onSetAutoScrollRef.current = onSetAutoScroll
+
+  const handleGesture = useCallback(
+    (kind: ScrollbarGestureKind, gapToEndPx: number | null) => {
+      onSetAutoScroll(scrollbarGestureToEnable(kind, gapToEndPx))
+    },
+    [onSetAutoScroll],
+  )
 
   const getViewport = useCallback(() => {
     return osRef.current?.osInstance()?.elements().viewport ?? null
@@ -89,7 +97,7 @@ const LogHoverExpand = memo(function LogHoverExpand({
       <ScrollArea
         ref={osRef}
         className="fixed z-40 text-sm font-mono text-text-primary bg-bg-primary p-2 rounded border border-border transition-all duration-150 ease-out select-text"
-        onScrollbarDrag={() => onSetAutoScroll(false)}
+        onScrollbarGesture={handleGesture}
         style={
           pos
             ? {
@@ -147,7 +155,7 @@ export const DevServerFooter = memo(function DevServerFooter({
   const getLogViewport = useCallback(() => {
     return logOsRef.current?.osInstance()?.elements().viewport ?? null
   }, [])
-  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(logOsRef, null, getLogViewport)
+  const { isAutoScrollActive, setAutoScroll, handleScrollbarGesture } = useAutoScroll(logOsRef, null, getLogViewport)
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logContainerRef = useRef<HTMLDivElement>(null)
@@ -284,7 +292,7 @@ export const DevServerFooter = memo(function DevServerFooter({
           preRef={logRef}
           preClassName="text-sm bg-bg-primary p-2 rounded max-h-[200px] border border-border"
           scrollAreaRef={logOsRef}
-          onScrollbarDrag={() => setAutoScroll(false)}
+          onScrollbarGesture={handleScrollbarGesture}
         />
 
         {hasConfig && isAlive && (

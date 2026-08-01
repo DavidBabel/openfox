@@ -9,6 +9,7 @@ import { useSessionStore } from '../../stores/session'
 import { useDisplaySettings } from '../../stores/settings'
 import { formatTokens } from '../../lib/format-stats'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
+import { useViewport } from '../../hooks/useViewport'
 import { ProgressBar } from '../shared/ProgressBar'
 
 interface SubAgentContainerProps {
@@ -72,11 +73,9 @@ export const SubAgentContainer = memo(function SubAgentContainer({
   const contextState = useSessionStore((state) => state.subAgentContextStates[subAgentId])
   const { showThinking, showVerboseToolOutput } = useDisplaySettings()
 
-  const getViewport = useCallback(() => {
-    return scrollRef.current?.osInstance()?.elements().viewport ?? null
-  }, [])
+  const getViewport = useViewport(scrollRef)
 
-  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollRef, null, getViewport)
+  const { isAutoScrollActive, setAutoScroll, handleScrollbarGesture } = useAutoScroll(scrollRef, null, getViewport)
 
   const handleToggleExpand = useCallback(() => {
     const willExpand = !expanded
@@ -127,7 +126,7 @@ export const SubAgentContainer = memo(function SubAgentContainer({
       <ScrollArea
         ref={scrollRef}
         className={`${expanded ? 'max-h-[calc(100vh-10rem)]' : 'max-h-80'} p-2 transition-[max-height] duration-200`}
-        onScrollbarDrag={() => setAutoScroll(false)}
+        onScrollbarGesture={handleScrollbarGesture}
       >
         {displayMessages.map((message) => {
           if (message.role === 'assistant') {

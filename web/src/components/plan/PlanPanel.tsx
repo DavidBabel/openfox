@@ -118,7 +118,11 @@ export function PlanPanel({
 
   const hiddenCount = propHiddenCount ?? computedHiddenCount
 
-  const { isAutoScrollActive, setAutoScroll } = useAutoScroll(scrollContainerRef, session, getViewport)
+  const { isAutoScrollActive, setAutoScroll, handleScrollbarGesture } = useAutoScroll(
+    scrollContainerRef,
+    session,
+    getViewport,
+  )
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
   const [pendingParamWorkflow, setPendingParamWorkflow] = useState<{
     id: string
@@ -268,7 +272,7 @@ export function PlanPanel({
           onLaunchWorkflow={handleLaunchWorkflow}
           onScrollToTop={() => setAutoScroll(false)}
           hiddenCount={hiddenCount}
-          onScrollbarDrag={() => setAutoScroll(false)}
+          onScrollbarGesture={handleScrollbarGesture}
         />
 
         <ChatInput

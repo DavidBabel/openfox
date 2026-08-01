@@ -2,45 +2,68 @@ import { forwardRef, useEffect, useMemo, useRef } from 'react'
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react'
 import type { OverlayScrollbarsComponentRef, OverlayScrollbarsComponentProps } from 'overlayscrollbars-react'
 import type { OverlayScrollbars } from 'overlayscrollbars'
+import type { ScrollbarGestureKind } from '@/hooks/useAutoScroll.ts'
+
+export type { ScrollbarGestureKind }
 
 export type ScrollAreaProps = OverlayScrollbarsComponentProps<'div'> & {
   horizontal?: boolean
   both?: boolean
-  onScrollbarDrag?: () => void
+  onScrollbarGesture?: (kind: ScrollbarGestureKind, gapToEndPx: number | null) => void
 }
 
 export const ScrollArea = forwardRef<OverlayScrollbarsComponentRef<'div'>, ScrollAreaProps>(
-  ({ options, horizontal, both, onScrollbarDrag, ...props }, ref) => {
+  ({ options, horizontal, both, onScrollbarGesture, ...props }, ref) => {
     const isHorizontal = horizontal || both
-    const osRef = useRef<OverlayScrollbars | null>(null)
-    const onDragRef = useRef(onScrollbarDrag)
-    onDragRef.current = onScrollbarDrag
+    const onGestureRef = useRef(onScrollbarGesture)
+    onGestureRef.current = onScrollbarGesture
+    const cleanupRef = useRef<(() => void) | null>(null)
 
     const events = useMemo(() => {
-      if (!onScrollbarDrag) return undefined
-      return {
-        initialized: (instance: OverlayScrollbars) => {
-          osRef.current = instance
-        },
+      const attach = (instance: OverlayScrollbars) => {
+        cleanupRef.current?.()
+        const scrollbar = instance.elements().scrollbarVertical
+        const getGap = (): number | null => {
+          const handleRect = scrollbar.handle.getBoundingClientRect()
+          const trackRect = scrollbar.track.getBoundingClientRect()
+          if (handleRect.height === 0 || trackRect.height === 0) return null
+          return Math.max(0, trackRect.bottom - handleRect.bottom)
+        }
+        let dragCleanup: (() => void) | null = null
+        const endDrag = () => {
+          onGestureRef.current?.('up', getGap())
+          dragCleanup?.()
+        }
+        const onMove = (e: PointerEvent) => {
+          if (e.buttons === 0) {
+            endDrag()
+            return
+          }
+          onGestureRef.current?.('move', getGap())
+        }
+        const beginDrag = () => {
+          onGestureRef.current?.('down', getGap())
+          dragCleanup?.()
+          window.addEventListener('pointermove', onMove)
+          window.addEventListener('pointerup', endDrag)
+          window.addEventListener('pointercancel', endDrag)
+          dragCleanup = () => {
+            window.removeEventListener('pointermove', onMove)
+            window.removeEventListener('pointerup', endDrag)
+            window.removeEventListener('pointercancel', endDrag)
+            dragCleanup = null
+          }
+        }
+        scrollbar.track.addEventListener('pointerdown', beginDrag)
+        cleanupRef.current = () => {
+          scrollbar.track.removeEventListener('pointerdown', beginDrag)
+          dragCleanup?.()
+        }
       }
-    }, [onScrollbarDrag])
+      return { initialized: attach }
+    }, [])
 
-    useEffect(() => {
-      const os = osRef.current
-      if (!os || !onScrollbarDrag) return
-
-      const handle = os.elements().scrollbarVertical.handle
-      const track = os.elements().scrollbarVertical.track
-      const onInteraction = () => onDragRef.current?.()
-
-      handle.addEventListener('pointerdown', onInteraction)
-      track.addEventListener('pointerdown', onInteraction)
-
-      return () => {
-        handle.removeEventListener('pointerdown', onInteraction)
-        track.removeEventListener('pointerdown', onInteraction)
-      }
-    }, [onScrollbarDrag])
+    useEffect(() => () => cleanupRef.current?.(), [])
 
     return (
       <OverlayScrollbarsComponent
