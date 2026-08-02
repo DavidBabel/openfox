@@ -49,8 +49,26 @@ vi.mock('wouter', () => {
 vi.mock('overlayscrollbars-react', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react')
-  const MockOverlayScrollbarsComponent = ({ children, ref: _ref, ...divProps }: any) => {
-    return React.createElement('div', divProps, children)
+  // The mocked component renders a plain div and exposes the OS instance shape
+  // (osInstance().elements().viewport) so refs resolved via useViewport point at
+  // the actual scrollable element, mirroring the real overlayscrollbars behavior.
+  // Hookless component: vi.mock factories run against a separate React copy, so
+  // using hooks here trips the "multiple copies of React" guard. It renders a
+  // plain div and exposes the OS instance shape (osInstance().elements().viewport)
+  // on the forwarded ref, mirroring the real overlayscrollbars behavior.
+  const MockOverlayScrollbarsComponent = ({ children, ref, ...divProps }: any) => {
+    const attachViewport = (element: any) => {
+      if (ref) {
+        ref.current = element
+          ? {
+              osInstance: () => ({
+                elements: () => ({ viewport: element }),
+              }),
+            }
+          : null
+      }
+    }
+    return React.createElement('div', { ...divProps, ref: attachViewport }, children)
   }
   MockOverlayScrollbarsComponent.displayName = 'OverlayScrollbarsComponent'
 

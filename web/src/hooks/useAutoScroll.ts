@@ -146,16 +146,23 @@ export const useAutoScroll = (
     }
   }, [session?.id, getEffectiveScroller, scroll_to_bottom, setActive])
 
-  return {
-    force_scroll_to_bottom: () => {
-      setActive(true)
-      scroll_to_bottom()
-    },
-    isAutoScrollActive,
-    setAutoScroll: (enabled: boolean) => {
+  const force_scroll_to_bottom = useCallback(() => {
+    setActive(true)
+    scroll_to_bottom()
+  }, [setActive, scroll_to_bottom])
+
+  const setAutoScroll = useCallback(
+    (enabled: boolean) => {
       setActive(enabled)
       if (enabled) scroll_to_bottom()
     },
+    [setActive, scroll_to_bottom],
+  )
+
+  return {
+    force_scroll_to_bottom,
+    isAutoScrollActive,
+    setAutoScroll,
     handleScrollbarGesture,
   }
 }

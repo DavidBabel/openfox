@@ -1,4 +1,7 @@
 import { ScrollArea } from './ScrollArea'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
+import { useAutoScroll } from '../../hooks/useAutoScroll'
+import { useViewport } from '../../hooks/useViewport'
 import { memo, useEffect, useRef, useState } from 'react'
 import { ansiToReact } from '../../lib/ansiParser'
 
@@ -31,15 +34,23 @@ export const RunCommandView = memo(function RunCommandView({
   error,
   durationMs,
 }: RunCommandViewProps) {
-  const outputRef = useRef<HTMLPreElement>(null)
+  const scrollRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
   const [elapsed, setElapsed] = useState(0)
 
-  // Auto-scroll to bottom when new output arrives
+  const getViewport = useViewport(scrollRef)
+  const { setAutoScroll, force_scroll_to_bottom, handleScrollbarGesture } = useAutoScroll(scrollRef, null, getViewport)
+
+  // Follow streaming output while the command is running. Completed output —
+  // whether reached via a live stream or mounted directly — settles at the tail,
+  // then following stops so the user can scroll freely.
   useEffect(() => {
-    if (outputRef.current && status === 'pending') {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight
+    if (status === 'pending') {
+      setAutoScroll(true)
+    } else {
+      force_scroll_to_bottom()
+      setAutoScroll(false)
     }
-  }, [streamingOutput, status])
+  }, [status, setAutoScroll, force_scroll_to_bottom])
 
   // Update elapsed time while pending
   useEffect(() => {
@@ -91,6 +102,8 @@ export const RunCommandView = memo(function RunCommandView({
       {/* Output display */}
       {(displayOutput || status === 'pending') && (
         <ScrollArea
+          ref={scrollRef}
+          onScrollbarGesture={handleScrollbarGesture}
           className={`text-xs bg-bg-primary p-2 rounded max-h-64 ${
             status === 'pending' ? 'border border-accent-warning/30' : ''
           }`}
