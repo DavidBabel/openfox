@@ -59,6 +59,13 @@ describe('buildBasePrompt', () => {
     expect(prompt).toContain(process.platform)
   })
 
+  it('tells the model the working directory may change and defers to the latest system reminder', () => {
+    const prompt = buildBasePrompt('/tmp/project')
+    expect(prompt).toContain('Working directory: /tmp/project')
+    expect(prompt).toMatch(/working directory.*(may change|can change)/i)
+    expect(prompt).toMatch(/<system-reminder>/) // the reminder is the authoritative override
+  })
+
   it('includes custom instructions when provided', () => {
     const prompt = buildBasePrompt('/tmp', 'Use tabs')
     expect(prompt).toContain('CUSTOM INSTRUCTIONS')

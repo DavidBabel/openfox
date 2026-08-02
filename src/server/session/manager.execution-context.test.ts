@@ -1,17 +1,16 @@
 /**
- * Session Manager – Execution Context Integrity Tests (RED)
+ * Session Manager – Workspace Switch & Execution Context Integrity Tests
  *
- * Issue #190: Refresh agent context after workspace or branch mutation during a turn.
- *
- * These tests pin two related responsibilities of SessionManager.switchWorkspace:
- *   - It MUST invalidate the cached system prompt so the next LLM call (same-turn
- *     continuation AND next user turn) rebuilds against the new workdir/branch
- *     instead of serving a stale prompt that still embeds the previous workspace.
- *   - It MUST emit a fresh session.updated event so the frontend never displays
+ * Cache discipline: the cached system prompt is SACRED for local LLMs — OpenFox
+ * never invalidates it on workspace or branch mutation. Those tests pin that
+ * switchWorkspace:
+ *   - MUST preserve the cached prompt untouched after a workspace/branch switch,
+ *     so the next LLM call reuses it instead of paying a full rebuild.
+ *   - MUST inject a workspace system reminder (<system-reminder> auto-prompt)
+ *     carrying the new workspace/branch, which the model is instructed to trust
+ *     over the static "Working directory" line in the cached prompt.
+ *   - MUST emit a fresh session.updated event so the frontend never displays
  *     a stale workspace/branch label after an authoritative mutation.
- *
- * The tests are RED until SessionManager.switchWorkspace (or its collaborators)
- * actually clears the cached prompt on success.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -104,26 +103,34 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
     await rm(workdir, { recursive: true, force: true })
   })
 
-  it('invalidates the cached prompt after a successful workspace switch (next-turn sees fresh context)', async () => {
+  it('preserves the cached prompt after a successful workspace switch (system reminder carries the new context)', async () => {
     // Session starts on /tmp/project (original workdir) with no workspace
     const session = manager.createSession(projectId, 'Ctx-1')
 
     // Simulate that the previous turn warmed up the prompt with the OLD workdir.
-    // The cached prompt embeds `Working directory: /tmp/project` — the
-    // stale state. This is exactly what buildTopLevelSystemPrompt(workdir) does.
+    // The cached prompt embeds `Working directory: /tmp/project` — the stale
+    // state. This is exactly what buildTopLevelSystemPrompt(workdir) does.
     manager.setCachedPrompt(session.id, 'System prompt with Working directory: /tmp/project', [], 'old-hash')
     expect(manager.getCachedPrompt(session.id)).toBeDefined()
 
     // Authoritative mutation: switch to workspace feat-x (it exists)
     await manager.switchWorkspace(session.id, 'feat-x')
 
-    // Issue #190: the next turn MUST rebuild the prompt against the new workdir.
-    // Therefore the cached prompt must be cleared (so assembleRequest rebuilds).
+    // The cache is sacred — it must survive the switch untouched so the next LLM
+    // call reuses it instead of paying a full rebuild.
     const cachedAfter = manager.getCachedPrompt(session.id)
-    expect(cachedAfter).toBeUndefined()
+    expect(cachedAfter).toBeDefined()
+    expect(cachedAfter?.hash).toBe('old-hash')
+    expect(cachedAfter?.systemPrompt).toBe('System prompt with Working directory: /tmp/project')
+
+    // The new workspace/branch reaches the model via an injected system reminder.
+    const messages = manager.getSession(session.id)!.messages
+    const reminders = messages.filter((m) => m.messageKind === 'auto-prompt')
+    expect(reminders.length).toBeGreaterThan(0)
+    expect(reminders[reminders.length - 1]!.content).toContain('feat-x')
   })
 
-  it('invalidates the cached prompt after a successful branch change on the current workspace (same-turn sees fresh context)', async () => {
+  it('preserves the cached prompt after a successful branch change on the current workspace (same-turn sees fresh context)', async () => {
     // Session currently on /ws/openfox/feat-x with branch=feat-x (default mock)
     const session = manager.createSession(projectId, 'Ctx-2', undefined, undefined, '/ws/openfox/feat-x')
     // Pre-seed a cached prompt referencing branch=feat-x workdir
@@ -138,9 +145,16 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
     mockGetGitBranch.mockResolvedValue('feat-y')
     await manager.switchWorkspace(session.id, 'feat-x', 'feat-y')
 
-    // The cached prompt must be cleared so the next LLM call rebuilds against the new branch
+    // The cached prompt must survive so the next LLM call reuses it — the new
+    // branch travels via the injected system reminder instead.
     const cachedAfter = manager.getCachedPrompt(session.id)
-    expect(cachedAfter).toBeUndefined()
+    expect(cachedAfter).toBeDefined()
+    expect(cachedAfter?.hash).toBe('feat-hash')
+
+    const messages = manager.getSession(session.id)!.messages
+    const reminders = messages.filter((m) => m.messageKind === 'auto-prompt')
+    expect(reminders.length).toBeGreaterThan(0)
+    expect(reminders[reminders.length - 1]!.content).toContain('feat-y')
   })
 
   it('does not invalidate the cached prompt when switchWorkspace is a no-op (no real mutation)', async () => {

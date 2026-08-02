@@ -234,17 +234,6 @@ export function updateSessionCachedPrompt(
   ).run(systemPrompt, JSON.stringify(tools), hash, now, id)
 }
 
-export function clearSessionCachedPrompt(id: string): void {
-  const db = getDatabase()
-  const now = new Date().toISOString()
-
-  db.prepare(
-    `
-    UPDATE sessions SET cached_system_prompt = NULL, cached_tools = NULL, cached_hash = NULL, updated_at = ? WHERE id = ?
-  `,
-  ).run(now, id)
-}
-
 export function getSessionCachedPrompt(id: string): {
   systemPrompt: string
   tools: import('../llm/types.js').LLMToolDefinition[]
