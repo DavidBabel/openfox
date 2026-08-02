@@ -62,7 +62,7 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build && npm run test:publish:e2e",
     "prepare": "husky",
-    "postinstall": "if [ ! -d web/node_modules ]; then cd web && npm install --prefer-offline; fi",
+    "postinstall": "if [ -f web/package.json ] && [ ! -d web/node_modules ]; then cd web && npm install --prefer-offline; fi",
     "test:publish:e2e": "tsx scripts/run-publish-e2e.ts"
   },
   "dependencies": {

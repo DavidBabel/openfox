@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.107 - 2026-08-02
+
+### Bug Fixes
+- **npm install works again** — installing openfox no longer fails because the postinstall tried to build web deps inside the published package; that only happens in source checkouts now.
+
 ## 2.0.106 - 2026-08-02
 
 ### Features
