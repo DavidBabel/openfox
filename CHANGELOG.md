@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.0.106 - 2026-08-02
+
+### Features
+
+- **Workflow choice steps** — user picks a fork and the run diverges down its own independent branch.
+- **Wrong-branch write protection** — Build & Verify won't run when session and actual git branches diverge.
+
+### Enhancements
+
+- **Vision fallback API key** — hosted OpenAI-compatible vision backends now accept an API key.
+- **RTK pairing warning** — settings warn when RTK auto-rewrite is paired with cmd/PowerShell on Windows.
+- **'What to test' tutorial** — the built-in Build & Verify workflow's last step summarizes it.
+- **Planner stops asking to switch to build** — it waits for the mode reminder instead of a moot yes/no.
+- **Clear-all confirmation stays visible** — no longer hidden below the fold in the criteria editor.
+
+### Bug Fixes
+
+- **run_command output auto-scroll restored** — streaming output follows the tail while the command runs.
+- **Per-project workflows** — follow the active project and show up in the launcher per project.
+- **Workspace switch keeps the prompt cache** — new workspace arrives via system reminder instead.
+- **Project skills load from the session dir** — no longer read from the server's working directory.
+- **Windows reliability fixes** — folder opening, workspace deletion, file search, and permission checks.
+- **Custom command deletion fixed** — overriding commands can be deleted again.
+- **sshpass/nix-wrapped commands detected** — remote execution is recognized and confirmed properly.
+
 ## 2.0.105 - 2026-08-01
 
 ### Features
