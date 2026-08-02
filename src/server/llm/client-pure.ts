@@ -165,7 +165,14 @@ export async function convertMessages(
   sendReasoningInMessages?: boolean,
 ): Promise<ChatCompletionMessageParam[]> {
   const filtered = messages.filter((msg) => {
-    return !(msg.role === 'assistant' && !msg.content?.trim() && (!msg.toolCalls || msg.toolCalls.length === 0))
+    if (msg.role !== 'assistant') return true
+    const isEmpty = !msg.content?.trim() && (!msg.toolCalls || msg.toolCalls.length === 0)
+    if (!isEmpty) return true
+    // Half-baked (aborted mid-thinking) assistant messages: keep only when their
+    // thinking block will actually be echoed back. Providers with
+    // sendReasoningInMessages=false (e.g. Mistral) reject empty-content
+    // assistant messages, so keep filtering those out.
+    return Boolean(msg.thinkingContent && sendReasoningInMessages !== false)
   })
 
   const result: ChatCompletionMessageParam[] = []

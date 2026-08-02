@@ -96,6 +96,91 @@ describe('llm client pure helpers', () => {
     expect(secondAssistant['reasoning']).toBeUndefined()
   })
 
+  it('keeps aborted (half-baked) assistant messages with thinking when sendReasoningInMessages is enabled', async () => {
+    const result = await convertMessages(
+      [
+        { role: 'user', content: 'do a thing' },
+        {
+          role: 'assistant',
+          content: '',
+          thinkingContent: 'I was interrupted halfway through thinking',
+          toolCalls: [],
+        },
+      ],
+      false,
+      undefined,
+      true,
+    )
+
+    expect(result).toEqual([
+      { role: 'user', content: 'do a thing' },
+      { role: 'assistant', content: null, reasoning: 'I was interrupted halfway through thinking' },
+    ])
+  })
+
+  it('keeps aborted (half-baked) assistant messages with thinking when sendReasoningInMessages is unset', async () => {
+    const result = await convertMessages(
+      [
+        { role: 'user', content: 'do a thing' },
+        {
+          role: 'assistant',
+          content: '',
+          thinkingContent: 'Interrupted mid-thought',
+          toolCalls: [],
+        },
+      ],
+      false,
+    )
+
+    expect(result).toEqual([
+      { role: 'user', content: 'do a thing' },
+      { role: 'assistant', content: null, reasoning: 'Interrupted mid-thought' },
+    ])
+  })
+
+  it('drops aborted (half-baked) assistant messages when sendReasoningInMessages is false', async () => {
+    const result = await convertMessages(
+      [
+        { role: 'user', content: 'do a thing' },
+        {
+          role: 'assistant',
+          content: '',
+          thinkingContent: 'Half-baked thought for a provider that rejects empty content',
+          toolCalls: [],
+        },
+      ],
+      false,
+      undefined,
+      false,
+    )
+
+    expect(result).toEqual([{ role: 'user', content: 'do a thing' }])
+  })
+
+  it('drops empty assistant messages without thinking regardless of sendReasoningInMessages', async () => {
+    const withFlag = await convertMessages(
+      [
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: '', toolCalls: [] },
+      ],
+      false,
+      undefined,
+      true,
+    )
+    const withoutFlag = await convertMessages(
+      [
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: '', toolCalls: [] },
+      ],
+      false,
+      undefined,
+      false,
+    )
+
+    expect(withFlag).toEqual([{ role: 'user', content: 'hi' }])
+    expect(withoutFlag).toEqual([{ role: 'user', content: 'hi' }])
+  })
+
   it('converts tool definitions to openai function schema', () => {
     expect(
       convertTools([
