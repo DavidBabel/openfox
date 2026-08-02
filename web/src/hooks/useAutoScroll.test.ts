@@ -130,6 +130,53 @@ describe('useAutoScroll', () => {
     expect(result.current.isAutoScrollActive).toBe(false)
   })
 
+  it('does not snap back to the bottom after wheel-up when a follow RAF was already queued', async () => {
+    const { el, metrics, result } = setup()
+    act(() => result.current.force_scroll_to_bottom())
+    expect(result.current.isAutoScrollActive).toBe(true)
+
+    metrics.scrollHeight = 3260
+
+    const rafs: FrameRequestCallback[] = []
+    const originalRaf = window.requestAnimationFrame.bind(window)
+    const spy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafs.push(cb)
+      return rafs.length
+    })
+    try {
+      act(() => el.append(document.createElement('div')))
+      await act(async () => {})
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
+      expect(rafs.length).toBeGreaterThan(0)
+
+      act(() => el.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 })))
+      expect(result.current.isAutoScrollActive).toBe(false)
+
+      el.scrollTop = 1520
+      act(() => {
+        for (const cb of rafs.splice(0)) originalRaf(cb)
+      })
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 35)))
+
+      expect(result.current.isAutoScrollActive).toBe(false)
+      expect(el.scrollTop).toBe(1520)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('does not re-enable from a delayed scroll event of a follow that landed right before wheel-up', () => {
+    const { el, result } = setup()
+    act(() => result.current.force_scroll_to_bottom())
+    expect(result.current.isAutoScrollActive).toBe(true)
+
+    act(() => el.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 })))
+    expect(result.current.isAutoScrollActive).toBe(false)
+
+    act(() => el.dispatchEvent(new Event('scroll')))
+    expect(result.current.isAutoScrollActive).toBe(false)
+  })
+
   it('disables instantly on scrollbar pointer-down and ignores scroll events while dragging', () => {
     const { el, result } = setup()
 
@@ -223,6 +270,7 @@ describe('useAutoScroll', () => {
       const { el, metrics, result } = setup()
       act(() => result.current.force_scroll_to_bottom())
       expect(result.current.isAutoScrollActive).toBe(true)
+      act(() => vi.advanceTimersByTime(100))
 
       metrics.scrollHeight = 4940
       vi.setSystemTime(Date.now() + 4600)

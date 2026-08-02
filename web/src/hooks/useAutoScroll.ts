@@ -22,6 +22,7 @@ export const useAutoScroll = (
   const startY = useRef<number | null>(null)
   const draggingRef = useRef(false)
   const lastFollowRef = useRef(0)
+  const programmaticRef = useRef(false)
   const [isAutoScrollActive, setIsAutoScrollActive] = useState(true)
 
   const getEffectiveScroller = useCallback((): HTMLElement | null => {
@@ -36,10 +37,21 @@ export const useAutoScroll = (
     setIsAutoScrollActive(value)
   }, [])
 
+  const disableAutoscroll = useCallback(() => {
+    setActive(false)
+  }, [setActive])
+
   const scroll_to_bottom = useCallback(() => {
+    if (!is_active.current) return
     const scroller = getEffectiveScroller()
     if (scroller) {
+      programmaticRef.current = true
       scroller.scrollTop = scroller.scrollHeight
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          programmaticRef.current = false
+        })
+      })
       lastFollowRef.current = Date.now()
     }
   }, [getEffectiveScroller])
@@ -72,7 +84,7 @@ export const useAutoScroll = (
         requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
         return
       }
-      setActive(false)
+      disableAutoscroll()
     }
 
     const onTouchStart = (e: TouchEvent) => {
@@ -84,7 +96,7 @@ export const useAutoScroll = (
       if (!touch) return
       const deltaY = touch.clientY - startY.current
       if (deltaY > 0) {
-        setActive(false)
+        disableAutoscroll()
         return
       }
       requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
@@ -92,6 +104,7 @@ export const useAutoScroll = (
 
     const onScroll = () => {
       if (draggingRef.current) return
+      if (programmaticRef.current) return
       const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
       if (distance < MAGNET_SCROLL_PX) {
         lastFollowRef.current = Date.now()
@@ -105,7 +118,7 @@ export const useAutoScroll = (
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
       if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'Home') {
-        setActive(false)
+        disableAutoscroll()
         return
       }
       if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'End') {
@@ -144,7 +157,7 @@ export const useAutoScroll = (
       observer.disconnect()
       clearInterval(interval)
     }
-  }, [session?.id, getEffectiveScroller, scroll_to_bottom, setActive])
+  }, [session?.id, getEffectiveScroller, scroll_to_bottom, setActive, disableAutoscroll])
 
   const force_scroll_to_bottom = useCallback(() => {
     setActive(true)
