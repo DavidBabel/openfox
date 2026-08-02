@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.110 - 2026-08-02
+
+### Bug Fixes
+
+- **No more phantom gaps below streamed messages** — content-visibility containment only applies when feed virtualization is on, so messages render at their natural height
+- **"View full history" button restored on trimmed sessions** — the chat now trusts the server-reported hidden message count instead of guessing
+- **Fresh sessions pin to the bottom again** — a stray early scroll event no longer disables auto-scroll and strands the feed at the top
+
 ## 2.0.109 - 2026-08-02
 
 ### Enhancements
