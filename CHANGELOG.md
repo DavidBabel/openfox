@@ -1,8 +1,30 @@
 # Changelog
 
+## 2.0.108 - 2026-08-02
+
+### Features
+
+- **New performance settings for long sessions** — use native scrollbars in tool calls and code blocks, auto-collapse large tool call outputs, and defer code highlighting while streaming, all off by default
+
+### Enhancements
+
+- **Long chats virtualize** — only recent messages render; older ones load in batches as you scroll up
+- **Sessions load faster** — data is prefetched at boot and served from a server-side snapshot cache
+- **Streaming renders once per frame** — incoming deltas coalesce into a single render for smoother output
+- **Rendered markdown is cached** — repeat renders skip re-parsing, and plain or oversized code blocks skip syntax highlighting
+- **Finished tool call outputs trimmed to the last 1MB** — keeps session snapshots lean so long sessions load faster
+
+### Bug Fixes
+
+- **Feed no longer snaps back to bottom** — scrolling up during streaming now disables auto-scroll instantly for good
+- **Workflows no longer blocked by a mismatched branch** — the execution-context gate is gone
+- **New workspaces inherit the session's branch** — no longer forking from the clone's default branch
+- **Aborted mid-thinking content is preserved** — carried into the next LLM call when reasoning echo is enabled
+
 ## 2.0.107 - 2026-08-02
 
 ### Bug Fixes
+
 - **npm install works again** — installing openfox no longer fails because the postinstall tried to build web deps inside the published package; that only happens in source checkouts now.
 
 ## 2.0.106 - 2026-08-02
