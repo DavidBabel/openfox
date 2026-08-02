@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.109 - 2026-08-02
+
+### Enhancements
+
+- **Feed virtualization is opt-in** — a "Virtualize long feeds" display setting mounts only recent messages on very long sessions
+
+### Bug Fixes
+
+- **No more stranded history when scrolling up** — the experimental virtualized feed is off by default, so older messages render as before
+- **Git `-n` respected for non-commit subcommands** — only commit/amend treat `-n` as no-verify
+
 ## 2.0.108 - 2026-08-02
 
 ### Features
