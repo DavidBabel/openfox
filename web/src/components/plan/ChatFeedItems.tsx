@@ -56,6 +56,11 @@ export const ChatFeedItems = memo(function ChatFeedItems({
   const userScrolledRef = useRef(false)
   // Virtualization is opt-in: off by default, the full feed renders as before.
   const displayStart = feedVirtualization ? startIndex : 0
+  // Only virtualized feeds get content-visibility containment. Off-screen it
+  // freezes element heights at the last-known intrinsic size, so applying it to
+  // dynamically-mutating content (streaming LLM output) leaves stale phantom
+  // gaps below messages. Non-virtualized feeds render at natural height.
+  const itemContainmentStyle = feedVirtualization ? ITEM_CONTAINMENT_STYLE : undefined
 
   // Reset the virtual window when switching sessions.
   useEffect(() => {
@@ -198,7 +203,7 @@ export const ChatFeedItems = memo(function ChatFeedItems({
               key={itemKey(item)}
               data-item-index={displayIndex}
               className="px-2 md:px-4"
-              style={ITEM_CONTAINMENT_STYLE}
+              style={itemContainmentStyle}
             >
               <SubAgentContainer
                 messages={item.messages}
@@ -217,7 +222,7 @@ export const ChatFeedItems = memo(function ChatFeedItems({
               key={itemKey(item)}
               data-item-index={displayIndex}
               className="px-2 md:px-4"
-              style={ITEM_CONTAINMENT_STYLE}
+              style={itemContainmentStyle}
             >
               <AssistantMessage
                 message={message}
@@ -238,12 +243,7 @@ export const ChatFeedItems = memo(function ChatFeedItems({
         }
 
         return (
-          <div
-            key={itemKey(item)}
-            data-item-index={displayIndex}
-            className="px-2 md:px-4"
-            style={ITEM_CONTAINMENT_STYLE}
-          >
+          <div key={itemKey(item)} data-item-index={displayIndex} className="px-2 md:px-4" style={itemContainmentStyle}>
             <div
               data-message-id={message.id}
               className={highlightedMessageId === message.id ? 'rounded animate-highlight-fade' : undefined}
