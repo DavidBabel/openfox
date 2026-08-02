@@ -31,6 +31,7 @@ import { createServerMessage } from '../shared/protocol.js'
 import { createContextStateMessage } from './ws/protocol.js'
 import { createWebSocketServer } from './ws/index.js'
 import { SessionManager } from './session/manager.js'
+import { toClientSession } from './session/client-session.js'
 import { setRuntimeConfig } from './runtime-config.js'
 import { createSkillRoutes } from './routes/skills.js'
 import { createCommandRoutes } from './routes/commands.js'
@@ -751,7 +752,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         },
       },
     })
-    res.status(201).json({ session })
+    res.status(201).json({ session: toClientSession(session) })
   })
 
   /** Switch to a workspace — target is "original" or a workspace name */
@@ -771,7 +772,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     try {
       const updated = await sessionManager.switchWorkspace(req.params.id, target, branch, sourceBranch)
-      res.json({ session: updated })
+      res.json({ session: toClientSession(updated) })
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to switch workspace' })
     }
@@ -794,7 +795,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     try {
       const updated = await sessionManager.deleteWorkspace(req.params.id, target, force === true)
-      res.json({ session: updated })
+      res.json({ session: toClientSession(updated) })
     } catch (err) {
       if (err instanceof WorkspaceInUseError) {
         return res.status(409).json({
@@ -843,7 +844,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const activeWorkflowExecution = sessionManager.getActiveWorkflowExecution(req.params.id)
 
     res.json({
-      session,
+      session: toClientSession(session!),
       messages,
       hiddenCount,
       contextState,
@@ -930,7 +931,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { messages, hiddenCount } = buildMessagesFromStoredEvents(events, maxVisibleItems || undefined)
     const updatedSession = sessionManager.getSession(sessionId)
 
-    res.json({ session: updatedSession, messages, hiddenCount, contextState })
+    res.json({ session: toClientSession(updatedSession!), messages, hiddenCount, contextState })
   })
 
   // Set global default model (persisted to config, used for new sessions)
@@ -1099,7 +1100,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { messages, hiddenCount } = buildMessagesFromStoredEvents(events, maxVisibleItems || undefined)
     const updatedSession = sessionManager.getSession(sessionId)
 
-    res.json({ session: updatedSession, messages, hiddenCount })
+    res.json({ session: toClientSession(updatedSession!), messages, hiddenCount })
   })
 
   // Danger level (REST)
@@ -1118,7 +1119,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     sessionManager.setDangerLevel(sessionId, dangerLevel)
     const updatedSession = sessionManager.getSession(sessionId)
 
-    res.json({ session: updatedSession })
+    res.json({ session: toClientSession(updatedSession!) })
   })
 
   // Session MCP server overrides (per-session)
@@ -1164,7 +1165,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     sessionManager.renameSession(sessionId, title.slice(0, 100))
     const updatedSession = sessionManager.getSession(sessionId)
-    res.json({ session: updatedSession })
+    res.json({ session: toClientSession(updatedSession!) })
   })
 
   // Path confirmation (REST)
@@ -1476,7 +1477,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     try {
       const newSession = sessionManager.forkSession(sessionId, messageId, title)
-      return res.status(201).json({ session: newSession })
+      return res.status(201).json({ session: toClientSession(newSession) })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (message.includes('not found')) {

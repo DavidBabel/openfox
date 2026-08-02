@@ -1,4 +1,4 @@
-import { ScrollArea } from './ScrollArea'
+import { OptionalScrollArea } from './OptionalScrollArea'
 import { memo } from 'react'
 import type { BackgroundProcess, LogLine } from '@shared/protocol.js'
 import { tryParseResult } from './tryParseResult'
@@ -36,9 +36,9 @@ export const BackgroundProcessView = memo(function BackgroundProcessView({
   return (
     <div className="space-y-2 text-xs">
       <div className="text-accent-warning">Unknown action: {action}</div>
-      <ScrollArea horizontal className="max-h-[60vh]">
+      <OptionalScrollArea horizontal className="max-h-[60vh]">
         <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result}</pre>
-      </ScrollArea>
+      </OptionalScrollArea>
     </div>
   )
 })
@@ -54,13 +54,13 @@ function renderLogs(parsed: Record<string, unknown>) {
 
   return (
     <div className="space-y-2">
-      <ScrollArea className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] break-words">
+      <OptionalScrollArea className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] break-words">
         {lines.map((line, i) => (
           <div key={i} className={line.stream === 'stderr' ? 'text-accent-warning' : ''}>
             {line.content}
           </div>
         ))}
-      </ScrollArea>
+      </OptionalScrollArea>
       {hasMore && totalLines != null && (
         <div className="text-[10px] text-text-muted">
           Showing {lines.length} of {totalLines} lines

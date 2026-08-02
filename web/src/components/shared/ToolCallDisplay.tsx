@@ -1,5 +1,6 @@
-import { ScrollArea } from './ScrollArea'
 import { memo, useState } from 'react'
+import { OptionalScrollArea } from './OptionalScrollArea'
+import { useDisplaySettings } from '../../stores/settings'
 import type { Diagnostic, EditContextRegion } from '@shared/types.js'
 import { ToolIcon } from './ToolIcon'
 import { DiffView, FilePreview, EditContextView, ReadFileView } from './DiffView'
@@ -46,6 +47,25 @@ interface ToolCallDisplayProps {
   callId?: string
 }
 
+// Finished tool calls with content above this size start collapsed when the
+// collapseLargeToolCalls performance setting is on — large read_file dumps or
+// command outputs dominate the initial DOM otherwise.
+const COLLAPSE_THRESHOLD = 600
+
+function getContentSize(
+  result: string | undefined,
+  streamingOutput: StreamingChunk[] | undefined,
+  args: Record<string, unknown>,
+): number {
+  let size = result?.length ?? 0
+  if (streamingOutput) {
+    for (const chunk of streamingOutput) size += chunk.content.length
+  }
+  const content = args['content']
+  if (typeof content === 'string') size += content.length
+  return size
+}
+
 const statusConfig = {
   pending: {
     icon: '●',
@@ -86,8 +106,19 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
   truncated,
   callId,
 }: ToolCallDisplayProps) {
-  // Auto-expand file operations and running commands so content is immediately visible
-  const shouldAutoExpand = !forceCompact
+  // Expand by default for parity — a call seen streaming stays visible once it
+  // finishes and a reload shows the same content. When the collapseLargeToolCalls
+  // performance setting is on, large finished calls start collapsed (pending
+  // calls still expand, so a live stream never collapses mid-run). `expanded`
+  // is initialized once at mount; the component remounts when the tool call
+  // identity changes, and forceCompact comes from a display setting stable
+  // during the message's lifetime.
+  const { collapseLargeToolCalls } = useDisplaySettings()
+  const shouldAutoExpand =
+    !forceCompact &&
+    (!collapseLargeToolCalls ||
+      status === 'pending' ||
+      getContentSize(result, streamingOutput, args) < COLLAPSE_THRESHOLD)
   const [expanded, setExpanded] = useState(shouldAutoExpand)
   const config = statusConfig[status]
   const remoteProtocol = detectRemoteExecution(tool, args)
@@ -222,18 +253,18 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
               <div className="text-[10px] text-accent-primary font-medium mb-1 uppercase tracking-wide">
                 {String(args.subAgentType ?? 'Sub-Agent')} Prompt
               </div>
-              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
+              <OptionalScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={String(args.prompt ?? '')} />
-              </ScrollArea>
+              </OptionalScrollArea>
             </div>
           )}
 
           {/* Specialized rendering for web_search */}
           {tool === 'web_search' && status === 'success' && (
             <div>
-              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
+              <OptionalScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </ScrollArea>
+              </OptionalScrollArea>
               {truncated && <TruncatedIndicator className="mt-1" />}
             </div>
           )}
@@ -244,9 +275,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
               <div className="text-[10px] text-accent-primary font-medium mb-1 uppercase tracking-wide">
                 Skill: {String(args.skillId ?? '')}
               </div>
-              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
+              <OptionalScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </ScrollArea>
+              </OptionalScrollArea>
               {truncated && <TruncatedIndicator className="mt-1" />}
             </div>
           )}
@@ -273,9 +304,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                   )}
                 </div>
               )}
-              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
+              <OptionalScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </ScrollArea>
+              </OptionalScrollArea>
               {truncated && <TruncatedIndicator />}
             </div>
           )}
@@ -298,9 +329,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
           {/* Specialized rendering for mcp_config */}
           {tool === 'mcp_config' && status === 'success' && (
             <div>
-              <ScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
+              <OptionalScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
-              </ScrollArea>
+              </OptionalScrollArea>
               {truncated && <TruncatedIndicator className="mt-1" />}
             </div>
           )}
@@ -328,9 +359,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                 {Object.keys(args).length > 0 && (
                   <div>
                     <div className="text-[10px] text-text-muted mb-0.5">Arguments:</div>
-                    <ScrollArea horizontal>
+                    <OptionalScrollArea horizontal>
                       <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{formatToolArgsFull(args)}</pre>
-                    </ScrollArea>
+                    </OptionalScrollArea>
                   </div>
                 )}
 
@@ -340,9 +371,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                     <div className="text-[10px] text-text-muted mb-0.5">
                       Result{durationMs !== undefined && ` (${durationMs}ms)`}:
                     </div>
-                    <ScrollArea horizontal className="max-h-[60vh]">
+                    <OptionalScrollArea horizontal className="max-h-[60vh]">
                       <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result || 'No output'}</pre>
-                    </ScrollArea>
+                    </OptionalScrollArea>
                     {truncated && <TruncatedIndicator className="mt-1" />}
                   </div>
                 )}

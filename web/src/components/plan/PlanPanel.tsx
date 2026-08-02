@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useSessionStore, useIsRunning } from '../../stores/session'
 import { useDisplaySettings } from '../../stores/settings'
-import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 
 import { type TurnStats } from '../../lib/types'
 import type { Message } from '@shared/types.js'
@@ -26,8 +25,11 @@ import { SidebarSummaryHeader } from './SidebarSummaryHeader'
 import { shouldCaptureMessageSearchShortcut } from './message-search-shortcut'
 
 import { groupMessages, type DisplayItem } from './groupMessages.js'
+import { FEED_REVEAL_EVENT } from './feed-window'
 import { usePromptHistory } from '../../hooks/usePromptHistory.js'
 import { useAutoScroll } from '@/hooks/useAutoScroll.ts'
+import { useViewport } from '../../hooks/useViewport'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { useScrolledSend } from '@/hooks/useScrolledSend.ts'
 import { useKeybindings, useBinding, useAgentSwitchingBindings } from '../../hooks/useKeybindings'
 
@@ -57,9 +59,7 @@ export function PlanPanel({
   const [turnStatsModal, setTurnStatsModal] = useState<TurnStats | null>(null)
   const scrollContainerRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
 
-  const getViewport = useCallback(() => {
-    return scrollContainerRef.current?.osInstance()?.elements().viewport ?? null
-  }, [])
+  const getViewport = useViewport(scrollContainerRef)
 
   const session = useSessionStore((state) => state.currentSession)
   const storeMessages = useSessionStore((state) => state.messages)
@@ -174,7 +174,18 @@ export function PlanPanel({
       setAutoScroll(false)
       const element = document.querySelector(`[data-item-index="${index}"]`)
       if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        if (element.hasAttribute('data-placeholder')) {
+          window.dispatchEvent(new CustomEvent(FEED_REVEAL_EVENT, { detail: { index } }))
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              document
+                .querySelector(`[data-item-index="${index}"]`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }),
+          )
+        } else {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
       }
     },
     [setAutoScroll],
@@ -278,6 +289,10 @@ export function PlanPanel({
         <MessageList
           displayItems={displayItems}
           scrollContainerRef={scrollContainerRef}
+          // Highlight is intentionally wired to the timeline's FEED_REVEAL_EVENT:
+          // navigation reveals the target placeholder region before scrolling,
+          // so no highlight target is ever an unmounted item. Passing null here
+          // keeps the highlight path dead until a caller reveals first.
           highlightedMessageId={null}
           onLaunchWorkflow={handleLaunchWorkflow}
           onScrollToTop={() => setAutoScroll(false)}

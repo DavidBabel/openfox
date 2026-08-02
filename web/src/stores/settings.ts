@@ -20,6 +20,10 @@ export const SETTINGS_KEYS = {
   DISPLAY_MAX_VISIBLE_ITEMS: 'display.maxVisibleItems',
   DISPLAY_CUSTOM_CSS: 'display.customCss',
   DISPLAY_TERMINAL_FONT: 'display.terminalFont',
+  DISPLAY_USE_NATIVE_SCROLLBARS: 'display.useNativeScrollbars',
+  DISPLAY_USE_NATIVE_SCROLLBARS_CODE_BLOCKS: 'display.useNativeScrollbarsCodeBlocks',
+  DISPLAY_COLLAPSE_LARGE_TOOL_CALLS: 'display.collapseLargeToolCalls',
+  DISPLAY_DEFER_CODE_HIGHLIGHT_WHILE_STREAMING: 'display.deferCodeHighlightWhileStreaming',
   LLM_DYNAMIC_SYSTEM_PROMPT: 'llm.dynamicSystemPrompt',
   CACHE_WARMING: 'cache.warming',
   KEYBINDINGS: 'keybindings',
@@ -71,6 +75,10 @@ export const DISPLAY_SETTINGS_KEYS = [
   SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE,
   SETTINGS_KEYS.DISPLAY_MAX_VISIBLE_ITEMS,
   SETTINGS_KEYS.DISPLAY_TERMINAL_FONT,
+  SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS,
+  SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS_CODE_BLOCKS,
+  SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS,
+  SETTINGS_KEYS.DISPLAY_DEFER_CODE_HIGHLIGHT_WHILE_STREAMING,
 ] as const
 
 export function useDisplaySettings() {
@@ -88,6 +96,19 @@ export function useDisplaySettings() {
     maxVisibleItems: Number(
       useSettingsStore((state) => state.settings[SETTINGS_KEYS.DISPLAY_MAX_VISIBLE_ITEMS] ?? '300'),
     ),
+    useNativeScrollbars:
+      useSettingsStore((state) => state.settings[SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS] ?? 'false') === 'true',
+    useNativeScrollbarsCodeBlocks:
+      useSettingsStore(
+        (state) => state.settings[SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS_CODE_BLOCKS] ?? 'false',
+      ) === 'true',
+    collapseLargeToolCalls:
+      useSettingsStore((state) => state.settings[SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS] ?? 'false') ===
+      'true',
+    deferCodeHighlightWhileStreaming:
+      useSettingsStore(
+        (state) => state.settings[SETTINGS_KEYS.DISPLAY_DEFER_CODE_HIGHLIGHT_WHILE_STREAMING] ?? 'false',
+      ) === 'true',
   }
 }
 

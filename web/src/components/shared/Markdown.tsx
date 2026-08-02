@@ -1,5 +1,5 @@
-import { ScrollArea } from './ScrollArea'
 import { memo, useMemo, useEffect, useState, useRef } from 'react'
+import { OptionalScrollArea } from './OptionalScrollArea'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { highlightCode, useShikiTheme } from '../../lib/syntax-highlighter'
@@ -11,31 +11,71 @@ interface MarkdownProps {
   content: string
   className?: string
   muted?: boolean
+  isStreaming?: boolean
+}
+
+// Blocks larger than this are rendered without shiki (tool outputs, dumps).
+const SKIP_HIGHLIGHT_THRESHOLD = 5000
+
+// Cache the parsed markdown output per content string + render options.
+// Non-streaming messages are immutable, so re-parsing them on every re-render
+// (session switch, theme change, unrelated state updates) wastes main-thread
+// CPU. Keyed by content + options — cheap string compare, no hashing needed.
+// Bounded both by entry count and by total key+content bytes: large tool
+// outputs can each weigh hundreds of KB.
+const markdownRenderCache = new Map<string, React.ReactNode>()
+const MARKDOWN_CACHE_MAX = 100
+const MARKDOWN_CACHE_MAX_BYTES = 20 * 1024 * 1024
+let markdownCacheBytes = 0
+
+// Exposed for tests: verifies the byte-bounded eviction without parsing tens
+// of MB of markdown.
+export function getMarkdownCacheBytesForTest(): number {
+  return markdownCacheBytes
+}
+
+function cacheMarkdown(key: string, node: React.ReactNode): React.ReactNode {
+  markdownRenderCache.set(key, node)
+  markdownCacheBytes += key.length
+  while (markdownRenderCache.size > MARKDOWN_CACHE_MAX || markdownCacheBytes > MARKDOWN_CACHE_MAX_BYTES) {
+    const firstKey = markdownRenderCache.keys().next().value
+    if (firstKey === undefined) break
+    markdownRenderCache.delete(firstKey)
+    markdownCacheBytes -= firstKey.length
+  }
+  return node
 }
 
 const CodeBlock = memo(function CodeBlock({
   language,
   codeString,
   showSyntaxHighlighting,
+  deferHighlight,
 }: {
   language: string
   codeString: string
   showSyntaxHighlighting: boolean
+  deferHighlight: boolean
 }) {
   const { copied, copy } = useCopyToClipboard()
   const [html, setHtml] = useState<string | null>(null)
   const shikiTheme = useShikiTheme()
   const latestCodeRef = useRef(codeString)
 
+  // Skip shiki for plain-text blocks (no syntax to highlight) and for very
+  // large blocks (tool outputs, read_file dumps): highlighting tens of
+  // thousands of characters costs seconds of main-thread CPU for no benefit.
+  const skipHighlight = language === 'text' || codeString.length > SKIP_HIGHLIGHT_THRESHOLD
+
   useEffect(() => {
-    if (!showSyntaxHighlighting) return
+    if (!showSyntaxHighlighting || deferHighlight || skipHighlight) return
     latestCodeRef.current = codeString
     highlightCode(codeString, language, shikiTheme).then((result) => {
       if (latestCodeRef.current === codeString) {
         setHtml(result)
       }
     })
-  }, [codeString, language, shikiTheme, showSyntaxHighlighting])
+  }, [codeString, language, shikiTheme, showSyntaxHighlighting, deferHighlight, skipHighlight])
 
   return (
     <div className="relative group my-1.5 rounded overflow-hidden">
@@ -57,17 +97,17 @@ const CodeBlock = memo(function CodeBlock({
       {showSyntaxHighlighting && html ? (
         <div className="min-w-0" dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
-        <ScrollArea horizontal>
+        <OptionalScrollArea horizontal scope="codeBlocks">
           <pre className="my-0 px-4 py-3 font-mono text-sm whitespace-pre-wrap break-word">
             <code className={`language-${language}`}>{codeString}</code>
           </pre>
-        </ScrollArea>
+        </OptionalScrollArea>
       )}
     </div>
   )
 })
 
-function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolean) {
+function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolean, deferHighlight: boolean) {
   const headingColor = muted ? 'text-text-muted' : 'text-text-heading'
   const strongColor = muted ? 'text-text-secondary' : 'text-text-bold'
 
@@ -88,7 +128,14 @@ function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolea
       const language = match?.[1] || 'text'
       const codeString = String(children).replace(/\n$/, '')
 
-      return <CodeBlock language={language} codeString={codeString} showSyntaxHighlighting={showSyntaxHighlighting} />
+      return (
+        <CodeBlock
+          language={language}
+          codeString={codeString}
+          showSyntaxHighlighting={showSyntaxHighlighting}
+          deferHighlight={deferHighlight}
+        />
+      )
     },
 
     p({ children }: { children?: React.ReactNode }) {
@@ -152,9 +199,9 @@ function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolea
 
     table({ children }: { children?: React.ReactNode }) {
       return (
-        <ScrollArea horizontal className="my-1.5">
+        <OptionalScrollArea horizontal className="my-1.5" scope="codeBlocks">
           <table className="min-w-full border border-border">{children}</table>
-        </ScrollArea>
+        </OptionalScrollArea>
       )
     },
 
@@ -179,29 +226,113 @@ function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolea
 }
 
 // Memoize to prevent re-renders during streaming from causing flicker
-export const Markdown = memo(function Markdown({ content, className = '', muted = false }: MarkdownProps) {
-  const { showSyntaxHighlighting } = useDisplaySettings()
+export const Markdown = memo(function Markdown({
+  content,
+  className = '',
+  muted = false,
+  isStreaming = false,
+}: MarkdownProps) {
+  const { showSyntaxHighlighting, deferCodeHighlightWhileStreaming } = useDisplaySettings()
 
-  // Preprocess markdown to fix common LLM formatting quirks
-  const processedContent = useMemo(() => {
-    let processed = preprocessMarkdown(content)
-    processed = fixUnclosedCodeBlocks(processed)
-    return processed
-  }, [content])
+  // While streaming, defer syntax highlighting while a code block is still open
+  // (odd number of ``` fences) so the block is not re-highlighted on every frame.
+  // Opt-in: default keeps code highlighted progressively as it streams in; the
+  // deferral trades that for smoother streaming at the cost of one paint at the end.
+  const deferCodeHighlight = useMemo(
+    () => isStreaming && deferCodeHighlightWhileStreaming && countCodeFences(content) % 2 === 1,
+    [isStreaming, deferCodeHighlightWhileStreaming, content],
+  )
 
   const components = useMemo(
-    () => createMarkdownComponents(muted, showSyntaxHighlighting),
-    [muted, showSyntaxHighlighting],
+    () => createMarkdownComponents(muted, showSyntaxHighlighting, deferCodeHighlight),
+    [muted, showSyntaxHighlighting, deferCodeHighlight],
   )
 
-  return (
-    <div className={`markdown-content [&_li>p]:inline ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {processedContent}
-      </ReactMarkdown>
-    </div>
-  )
+  // Non-streaming messages are immutable: cache the parsed tree per content so
+  // re-renders (session switches, sidebar updates) don't re-parse markdown.
+  // CodeBlock manages its own shiki theme, so theme changes stay correct.
+  // The cache key includes the render options (muted, syntax highlighting):
+  // the same content can legitimately render in different contexts.
+  const body = useMemo(() => {
+    const processed = preprocessForRender(content)
+    if (!containsMarkdownSyntax(processed)) {
+      if (!processed.trim()) return null
+      const color = muted ? 'text-text-muted' : 'text-text-primary'
+      return (
+        <p className={`${color} mb-1.5 last:mb-0 leading-tight break-words whitespace-pre-line`}>
+          {linkifyBareUrls(processed)}
+        </p>
+      )
+    }
+    if (isStreaming) return renderMarkdown(processed, components)
+    return getCachedMarkdown(processed, components, muted, showSyntaxHighlighting)
+  }, [content, isStreaming, components, muted, showSyntaxHighlighting])
+
+  return <div className={`markdown-content [&_li>p]:inline ${className}`}>{body}</div>
 })
+
+function preprocessForRender(content: string): string {
+  let processed = preprocessMarkdown(content)
+  processed = fixUnclosedCodeBlocks(processed)
+  return processed
+}
+
+// Linkify bare http(s) URLs in plain-text content, matching what remark-gfm
+// autolinking would do for the markdown path.
+function linkifyBareUrls(text: string): React.ReactNode {
+  const parts = text.split(/(https?:\/\/[^\s<>"']+)/g)
+  if (parts.length === 1) return text
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a key={i} href={part} className="text-text-link hover:underline" target="_blank" rel="noopener noreferrer">
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  )
+}
+
+// Conservative check: any markdown-ish construct routes to the full parser,
+// so the plain fast path only handles genuinely plain prose.
+function containsMarkdownSyntax(content: string): boolean {
+  return (
+    content.includes('`') ||
+    content.includes('~') ||
+    content.includes('<') ||
+    /^#{1,6}\s/m.test(content) ||
+    /^\s*[-*+]\s/m.test(content) ||
+    /^\s*\d+[.)]\s/m.test(content) ||
+    /^\s*>\s?/m.test(content) ||
+    /^\s*\|.*\|/m.test(content) ||
+    /^\s*([-*_])\1{2,}\s*$/m.test(content) ||
+    /\[[^\]]*\]\([^)]*\)/.test(content) ||
+    /!\[[^\]]*\]/.test(content) ||
+    /[*_]/.test(content) ||
+    content.includes('&')
+  )
+}
+
+function renderMarkdown(content: string, components: ReturnType<typeof createMarkdownComponents>): React.ReactNode {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {content}
+    </ReactMarkdown>
+  )
+}
+
+function getCachedMarkdown(
+  content: string,
+  components: ReturnType<typeof createMarkdownComponents>,
+  muted: boolean,
+  showSyntaxHighlighting: boolean,
+): React.ReactNode {
+  const key = `${muted ? 'm' : 'n'}|${showSyntaxHighlighting ? 'h' : 'p'}|${content}`
+  const cached = markdownRenderCache.get(key)
+  if (cached !== undefined) return cached
+  const node = renderMarkdown(content, components)
+  return cacheMarkdown(key, node)
+}
 
 /**
  * Preprocess markdown to fix common LLM formatting issues:
@@ -228,6 +359,10 @@ function preprocessMarkdown(content: string): string {
   return processed
 }
 
+function countCodeFences(content: string): number {
+  return content.match(/```/g)?.length ?? 0
+}
+
 /**
  * Fix unclosed code blocks during streaming.
  * This prevents raw markdown backticks from showing while the model
@@ -235,9 +370,7 @@ function preprocessMarkdown(content: string): string {
  */
 function fixUnclosedCodeBlocks(content: string): string {
   // Count occurrences of code block delimiters
-  const codeBlockRegex = /```/g
-  const matches = content.match(codeBlockRegex)
-  const count = matches?.length ?? 0
+  const count = countCodeFences(content)
 
   // If odd number of ```, we have an unclosed code block
   if (count % 2 === 1) {

@@ -2,6 +2,7 @@ import { memo, useState, useRef, useCallback, useEffect, useLayoutEffect } from 
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { ScrollArea } from '../shared/ScrollArea'
 import type { ScrollbarGestureKind } from '../shared/ScrollArea'
+import { useViewport } from '../../hooks/useViewport'
 import { useSessionStore, useIsRunning } from '../../stores/session'
 import { useWorkflowsStore } from '../../stores/workflows'
 import { useDisplaySettings } from '../../stores/settings'
@@ -60,9 +61,7 @@ export const MessageList = memo(function MessageList({
   const [isScrollable, setIsScrollable] = useState(false)
   const [scrolledPastTop, setScrolledPastTop] = useState(false)
 
-  const getViewport = useCallback(() => {
-    return scrollContainerRef.current?.osInstance()?.elements().viewport ?? null
-  }, [scrollContainerRef])
+  const getViewport = useViewport(scrollContainerRef)
 
   useLayoutEffect(() => {
     const el = getViewport()
@@ -143,6 +142,7 @@ export const MessageList = memo(function MessageList({
             displayItems={displayItems}
             highlightedMessageId={highlightedMessageId}
             sessionId={sessionId}
+            scrollContainerRef={scrollContainerRef}
             showThinking={showThinking}
             showVerboseToolOutput={showVerboseToolOutput}
             showStats={showStats}

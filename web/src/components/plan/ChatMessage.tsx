@@ -1,5 +1,5 @@
-import { ScrollArea } from '../shared/ScrollArea'
 import { memo, useCallback, useRef, useState } from 'react'
+import { OptionalScrollArea } from '../shared/OptionalScrollArea'
 import type { Message } from '@shared/types.js'
 import type { TaskCompletedPayload } from '@shared/protocol.js'
 import { Markdown } from '../shared/Markdown'
@@ -83,7 +83,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     const ok = await replayMessage(sessionId, messageId)
     setPending(false)
     if (ok) {
-      loadSession(sessionId)
+      loadSession(sessionId, true)
     } else {
       setError('Failed to replay')
     }
@@ -96,7 +96,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     const ok = await replayMessage(sessionId, messageId, editContent)
     setPending(false)
     if (ok) {
-      loadSession(sessionId)
+      loadSession(sessionId, true)
       setEditing(false)
     } else {
       setError('Failed to send')
@@ -277,12 +277,12 @@ export const ChatMessage = memo(function ChatMessage({
     return (
       <div className="feed-item bg-bg-tertiary/30 border-l-2 border-accent-primary rounded-r p-2">
         <div className="text-accent-primary text-xs mb-0.5">Tool: {message.toolName}</div>
-        <ScrollArea horizontal className="max-h-32">
+        <OptionalScrollArea horizontal className="max-h-32">
           <pre className="text-text-secondary text-xs whitespace-pre-wrap break-words">
             {message.content.slice(0, 500)}
             {message.content.length > 500 && '...'}
           </pre>
-        </ScrollArea>
+        </OptionalScrollArea>
       </div>
     )
   }

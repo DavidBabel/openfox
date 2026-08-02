@@ -5,6 +5,7 @@ import {
   buildContextMessagesFromEventHistory,
   buildContextMessagesFromStoredEvents,
   buildMessagesFromStoredEvents,
+  buildSnapshot,
   buildSnapshotFromSessionState,
   foldContextState,
   foldSessionState,
@@ -2697,5 +2698,88 @@ describe('foldSessionState metadataEntries snapshot fallback merge', () => {
 
     // foldMetadata returns {} by default; snapshot has no metadataEntries → result should be {}
     expect(state.metadataEntries).toEqual({})
+  })
+})
+
+describe('buildSnapshot streamingOutput truncation', () => {
+  const baseEvent = { seq: 0, timestamp: 1000, sessionId: 's1' }
+
+  function makeEvents(streamChunks: number, chunkSize: number, withResult: boolean): StoredEvent[] {
+    const events: StoredEvent[] = [
+      { ...baseEvent, type: 'message.start', data: { messageId: 'm1', role: 'assistant' } },
+      {
+        ...baseEvent,
+        type: 'tool.call',
+        data: { messageId: 'm1', toolCall: { id: 'call-1', name: 'run_command', arguments: {} } },
+      },
+    ]
+    for (let i = 0; i < streamChunks; i++) {
+      events.push({
+        ...baseEvent,
+        type: 'tool.output',
+        data: {
+          messageId: 'm1',
+          toolCallId: 'call-1',
+          stream: 'stdout',
+          content: `chunk-${String(i).padStart(5, '0')}:` + 'x'.repeat(Math.max(0, chunkSize - 12)),
+        },
+      })
+    }
+    if (withResult) {
+      events.push({
+        ...baseEvent,
+        type: 'tool.result',
+        data: {
+          messageId: 'm1',
+          toolCallId: 'call-1',
+          result: { success: true, output: 'Done', durationMs: 1, truncated: false },
+        },
+      })
+    }
+    return events
+  }
+
+  it('truncates streamingOutput of finished tool calls to the tail + marker', () => {
+    // 1100 chunks × 1KB ≈ 1.1MB, above the 1MB tail budget
+    const state = foldSessionState(makeEvents(1100, 1024, true), 'window-1', 200000)
+    const snapshot = buildSnapshot(state, 100)
+
+    const tc = snapshot.messages[0]!.toolCalls![0]!
+    const joined = tc.streamingOutput?.map((c) => c.content).join('') ?? ''
+    expect(joined.length).toBeLessThanOrEqual(1024 * 1024 + 1024)
+    expect(joined.endsWith('chunk-01099:' + 'x'.repeat(1024 - 12))).toBe(true) // tail preserved
+    expect(joined.startsWith('chunk-00000:')).toBe(false) // head dropped
+    expect(tc.streamingOutputTruncated).toBe(true)
+  })
+
+  it('keeps streamingOutput integral for pending tool calls (no result yet)', () => {
+    const state = foldSessionState(makeEvents(1100, 1024, false), 'window-1', 200000)
+    const snapshot = buildSnapshot(state, 100)
+
+    const tc = snapshot.messages[0]!.toolCalls![0]!
+    const joined = tc.streamingOutput?.map((c) => c.content).join('') ?? ''
+    expect(joined.length).toBe(1100 * 1024)
+    expect(tc.streamingOutputTruncated).toBeUndefined()
+  })
+
+  it('keeps short streamingOutput untouched for finished tool calls', () => {
+    // 500KB — under the 1MB budget, nothing is truncated
+    const state = foldSessionState(makeEvents(500, 1024, true), 'window-1', 200000)
+    const snapshot = buildSnapshot(state, 100)
+
+    const tc = snapshot.messages[0]!.toolCalls![0]!
+    const joined = tc.streamingOutput?.map((c) => c.content).join('') ?? ''
+    expect(joined.length).toBe(500 * 1024)
+    expect(tc.streamingOutputTruncated).toBeUndefined()
+  })
+
+  it('does not mutate foldedState when building a snapshot', () => {
+    const state = foldSessionState(makeEvents(1100, 1024, true), 'window-1', 200000)
+    const originalLength = state.messages[0]!.toolCalls![0]!.streamingOutput!.length
+
+    buildSnapshot(state, 100)
+
+    expect(state.messages[0]!.toolCalls![0]!.streamingOutput!.length).toBe(originalLength)
+    expect(state.messages[0]!.toolCalls![0]!.streamingOutputTruncated).toBeUndefined()
   })
 })

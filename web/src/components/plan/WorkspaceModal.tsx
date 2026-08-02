@@ -84,7 +84,7 @@ export function WorkspaceModal({
           setBusy(false)
           return
         }
-        await refreshSession(sessionId)
+        await refreshSession(sessionId, true)
         onClose()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to switch workspace')
@@ -118,7 +118,7 @@ export function WorkspaceModal({
         }
         setConfirmDelete(null)
         setForceDeleting(false)
-        await refreshSession(sessionId)
+        await refreshSession(sessionId, true)
         // Refresh the workspace list
         const listRes = await authFetch(`/api/projects/${projectId}/workspaces`)
         const listData = await listRes.json()

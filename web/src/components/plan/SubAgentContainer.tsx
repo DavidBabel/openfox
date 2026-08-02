@@ -1,5 +1,3 @@
-import { ScrollArea } from '../shared/ScrollArea'
-import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { memo, useRef, useState, useCallback } from 'react'
 import type { Message, ContextState } from '@shared/types.js'
 import { AssistantMessage } from './AssistantMessage'
@@ -10,6 +8,8 @@ import { useDisplaySettings } from '../../stores/settings'
 import { formatTokens } from '../../lib/format-stats'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
 import { useViewport } from '../../hooks/useViewport'
+import { ScrollArea } from '../shared/ScrollArea'
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { ProgressBar } from '../shared/ProgressBar'
 
 interface SubAgentContainerProps {

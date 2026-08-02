@@ -1,4 +1,4 @@
-import { ScrollArea } from './ScrollArea'
+import { OptionalScrollArea } from './OptionalScrollArea'
 import { memo, useMemo, useState } from 'react'
 import { CodeHighlight } from './CodeHighlight'
 import { getLanguageFromPath } from '../../lib/syntax-highlighter'
@@ -74,11 +74,11 @@ export const FilePreview = memo(function FilePreview({ content, filePath }: File
   const language = useMemo(() => getLanguageFromPath(filePath), [filePath])
 
   return (
-    <ScrollArea className="rounded border border-border max-h-[45vh]">
+    <OptionalScrollArea className="rounded border border-border max-h-[45vh]">
       <DiffSection type="added">
         <CodeHighlight code={content} language={language} variant="block" showLineNumbers />
       </DiffSection>
-    </ScrollArea>
+    </OptionalScrollArea>
   )
 })
 
@@ -248,9 +248,9 @@ export const ReadFileView = memo(function ReadFileView({ result, metadata, fileP
     const strippedContent = stripLineNumbers(content)
 
     return (
-      <ScrollArea className="rounded border border-border max-h-[45vh] p-2">
+      <OptionalScrollArea className="rounded border border-border max-h-[45vh] p-2">
         <Markdown content={strippedContent} />
-      </ScrollArea>
+      </OptionalScrollArea>
     )
   }
 
@@ -261,9 +261,9 @@ export const ReadFileView = memo(function ReadFileView({ result, metadata, fileP
   const startLine = startMatch ? parseInt(startMatch[1]!, 10) : 1
 
   return (
-    <ScrollArea className="rounded border border-border max-h-[45vh]">
+    <OptionalScrollArea className="rounded border border-border max-h-[45vh]">
       <CodeHighlight code={strippedContent} language={language} variant="block" showLineNumbers startLine={startLine} />
-    </ScrollArea>
+    </OptionalScrollArea>
   )
 })
 

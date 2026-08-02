@@ -11,6 +11,7 @@ import type {
   MessageStatsEntry,
   CompactionRecord,
   SnapshotMessage,
+  ToolCallWithResult,
 } from './types.js'
 import type { FormatRetry } from './apply-events.js'
 import type { WorkflowWaitingPayload } from '../../shared/protocol.js'
@@ -406,16 +407,59 @@ export function foldWaitingWorkflow(events: EventLike[]): FoldedSessionState['wa
   return waitingWorkflow
 }
 
+// Maximum retained streaming output per finished tool call in a snapshot.
+// RunCommandView only renders `result` once a command is done — the raw
+// stdout/stderr stream is never displayed afterwards — so persisting it in
+// full just bloats the snapshot (a single long session accumulated 41MB).
+// The threshold is deliberately high (1MB) so ordinary command outputs keep
+// their full stream in the snapshot (the data contract for CLI/mobile
+// clients); only pathological outputs (giant builds, log dumps) are trimmed
+// to the tail, and the raw tool.output events remain the source of truth
+// until cleanupOldEvents prunes them.
+export const SNAPSHOT_STREAMING_TAIL_BYTES = 1024 * 1024
+
+function truncateSnapshotStreamingOutput(messages: SnapshotMessage[]): SnapshotMessage[] {
+  return messages.map((message) => {
+    const toolCalls = message.toolCalls
+    if (!toolCalls) return message
+    let changed = false
+    const newToolCalls = toolCalls.map((tc) => {
+      if (!tc.streamingOutput || tc.streamingOutput.length === 0) return tc
+      // Finished calls (with a result) no longer need the live stream —
+      // keep only the tail. Pending calls keep everything (reload while running).
+      if (tc.result === undefined) return tc
+      let total = 0
+      for (const chunk of tc.streamingOutput) total += chunk.content.length
+      if (total <= SNAPSHOT_STREAMING_TAIL_BYTES) return tc
+      const kept: typeof tc.streamingOutput = []
+      let keptBytes = 0
+      for (let i = tc.streamingOutput.length - 1; i >= 0 && keptBytes < SNAPSHOT_STREAMING_TAIL_BYTES; i--) {
+        const chunk = tc.streamingOutput[i]!
+        kept.unshift(chunk)
+        keptBytes += chunk.content.length
+      }
+      changed = true
+      return { ...tc, streamingOutput: kept, streamingOutputTruncated: true } satisfies ToolCallWithResult
+    })
+    if (!changed) return message
+    return { ...message, toolCalls: newToolCalls }
+  })
+}
+
 export function buildSnapshot(
   foldedState: FoldedSessionState,
   latestSeq: number,
   snapshotAt: number = Date.now(),
 ): SessionSnapshot {
+  // The snapshot is the hot path loaded on every session open — trim the
+  // never-displayed streaming output before persisting it. The function
+  // returns new objects for any modified messages so foldedState is not mutated.
+  const messages = truncateSnapshotStreamingOutput(foldedState.messages)
   return {
     mode: foldedState.mode,
     phase: foldedState.phase,
     isRunning: foldedState.isRunning,
-    messages: foldedState.messages,
+    messages,
     criteria: foldedState.criteria,
     metadataEntries: foldedState.metadataEntries,
     contextState: foldedState.contextState,
@@ -474,12 +518,16 @@ export function buildSnapshotFromSessionState(input: {
         events.slice(latestSnapshotIndex + 1),
       )
     : foldedState.messages
+  // The snapshot is the hot path loaded on every session open — trim the
+  // never-displayed streaming output before persisting it. The function
+  // returns new objects for modified messages so the source arrays are not mutated.
+  const trimmedMessages = truncateSnapshotStreamingOutput(messages)
 
   return {
     mode: session.mode,
     phase: session.phase,
     isRunning: session.isRunning,
-    messages,
+    messages: trimmedMessages,
     criteria: session.criteria,
     metadataEntries: foldedState.metadataEntries,
     contextState: {

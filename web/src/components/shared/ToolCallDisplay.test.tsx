@@ -2,7 +2,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '../../stores/session'
-import { useSettingsStore } from '../../stores/settings'
+import { SETTINGS_KEYS, useSettingsStore } from '../../stores/settings'
 import { ToolCallDisplay } from './ToolCallDisplay'
 
 vi.mock('./RunCommandView', () => ({
@@ -22,6 +22,10 @@ vi.mock('./DiagnosticsView', () => ({
 
 vi.mock('./Markdown', () => ({
   Markdown: ({ content }: { content: string }) => <div data-testid="markdown">{content}</div>,
+}))
+
+vi.mock('./ScrollArea', () => ({
+  ScrollArea: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }))
 
 const pendingConfirmation = {
@@ -199,5 +203,71 @@ describe('ToolCallDisplay — PathConfirmationButtons placement', () => {
     expect(previewPos).not.toBe(-1)
     expect(denyPos).not.toBe(-1)
     expect(denyPos).toBeGreaterThan(previewPos)
+  })
+})
+
+describe('ToolCallDisplay — default expansion', () => {
+  beforeEach(() => {
+    useSessionStore.setState({ pendingPathConfirmations: [] })
+    useSettingsStore.setState({ settings: {} })
+  })
+
+  afterEach(cleanup)
+
+  it('expands large results by default', () => {
+    const bigResult = 'x'.repeat(10_000)
+    const { container } = render(
+      <ToolCallDisplay tool="custom_tool" args={{}} status="success" result={bigResult} variant="expandable" />,
+    )
+
+    expect(container.querySelector('pre')?.textContent).toContain(bigResult)
+  })
+
+  it('collapses large finished results when collapseLargeToolCalls is enabled', () => {
+    useSettingsStore.setState({
+      settings: { [SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS]: 'true' },
+    })
+    const bigResult = 'x'.repeat(10_000)
+    const { container } = render(
+      <ToolCallDisplay tool="custom_tool" args={{}} status="success" result={bigResult} variant="expandable" />,
+    )
+
+    expect(container.querySelector('pre')).toBeNull()
+  })
+
+  it('expands small results by default', () => {
+    const { container } = render(
+      <ToolCallDisplay tool="custom_tool" args={{}} status="success" result="small output" variant="expandable" />,
+    )
+
+    expect(container.querySelector('pre')?.textContent).toContain('small output')
+  })
+
+  it('expands streaming tool calls regardless of accumulated output size', () => {
+    const { container } = render(
+      <ToolCallDisplay
+        tool="run_command"
+        args={{ command: 'make build' }}
+        status="pending"
+        variant="expandable"
+        streamingOutput={[{ stream: 'stdout', content: 'y'.repeat(10_000) }]}
+      />,
+    )
+
+    expect(container.textContent).toContain('command output content')
+  })
+
+  it('expands large write_file content by default', () => {
+    const bigContent = 'z'.repeat(10_000)
+    const { container } = render(
+      <ToolCallDisplay
+        tool="write_file"
+        args={{ path: '/tmp/x.ts', content: bigContent }}
+        status="success"
+        variant="expandable"
+      />,
+    )
+
+    expect(container.querySelector('[data-testid="file-preview"]')).not.toBeNull()
   })
 })

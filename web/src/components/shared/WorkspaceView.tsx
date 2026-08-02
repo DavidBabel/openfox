@@ -1,4 +1,4 @@
-import { ScrollArea } from './ScrollArea'
+import { OptionalScrollArea } from './OptionalScrollArea'
 import { memo } from 'react'
 
 interface WorkspaceViewProps {
@@ -29,9 +29,9 @@ export const WorkspaceView = memo(function WorkspaceView({ result, action }: Wor
     parsed = JSON.parse(result) as Record<string, unknown>
   } catch {
     return (
-      <ScrollArea horizontal className="max-h-[60vh]">
+      <OptionalScrollArea horizontal className="max-h-[60vh]">
         <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result}</pre>
-      </ScrollArea>
+      </OptionalScrollArea>
     )
   }
 
@@ -43,9 +43,9 @@ export const WorkspaceView = memo(function WorkspaceView({ result, action }: Wor
       return renderActionResult(parsed as ActionResultData)
     default:
       return (
-        <ScrollArea horizontal className="max-h-[60vh]">
+        <OptionalScrollArea horizontal className="max-h-[60vh]">
           <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result}</pre>
-        </ScrollArea>
+        </OptionalScrollArea>
       )
   }
 })

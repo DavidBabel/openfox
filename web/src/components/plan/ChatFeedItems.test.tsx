@@ -1,9 +1,29 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
+import { act } from 'react'
 import { ChatFeedItems } from './ChatFeedItems'
+import { FEED_REVEAL_EVENT } from './feed-window'
 import type { DisplayItem } from './groupMessages'
+
+class MockIntersectionObserver {
+  static instances: MockIntersectionObserver[] = []
+  callback: IntersectionObserverCallback
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback
+    MockIntersectionObserver.instances.push(this)
+  }
+
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+
+  trigger() {
+    this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+  }
+}
 
 function msg(id: string, role: 'user' | 'assistant' = 'user', content = 'Hello'): DisplayItem {
   return {
@@ -74,5 +94,233 @@ describe('ChatFeedItems stable keys', () => {
     expect(container.querySelector('[data-message-id="a"]')).toBe(nodeA)
     expect(container.querySelector('[data-message-id="b"]')).toBe(nodeB)
     expect(container.textContent).toContain('Third')
+  })
+})
+
+describe('ChatFeedItems progressive rendering', () => {
+  beforeEach(() => {
+    MockIntersectionObserver.instances = []
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('mounts only the most recent items first', () => {
+    const items = Array.from({ length: 70 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    flushSync(() => root.render(<ChatFeedItems displayItems={items} />))
+
+    // Only the 30 most recent are mounted: m40..m69
+    expect(container.querySelector('[data-message-id="m0"]')).toBeNull()
+    expect(container.querySelector('[data-message-id="m39"]')).toBeNull()
+    expect(container.querySelector('[data-message-id="m40"]')).toBeTruthy()
+    expect(container.querySelector('[data-message-id="m69"]')).toBeTruthy()
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(30)
+    // The rest are unmounted placeholders
+    expect(container.querySelectorAll('[data-placeholder]')).toHaveLength(40)
+  })
+
+  it('reveals older items in batches when the sentinel becomes visible', () => {
+    const items = Array.from({ length: 70 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    flushSync(() => root.render(<ChatFeedItems displayItems={items} />))
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(30)
+    expect(container.querySelector('[data-testid="feed-sentinel"]')).toBeTruthy()
+
+    // Each reveal moves the window up by 20 items
+    act(() => {
+      MockIntersectionObserver.instances.at(-1)!.trigger()
+    })
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(50)
+    expect(container.querySelector('[data-message-id="m20"]')).toBeTruthy()
+
+    act(() => {
+      MockIntersectionObserver.instances.at(-1)!.trigger()
+    })
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(70)
+    expect(container.querySelector('[data-message-id="m0"]')).toBeTruthy()
+    expect(container.querySelector('[data-placeholder]')).toBeNull()
+    expect(container.querySelector('[data-testid="feed-sentinel"]')).toBeNull()
+  })
+
+  it('reveals up to a target index on the feed reveal event', () => {
+    const items = Array.from({ length: 100 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    flushSync(() => root.render(<ChatFeedItems displayItems={items} />))
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(30)
+
+    // Timeline navigation targets index 10 — everything up to it is revealed
+    act(() => {
+      window.dispatchEvent(new CustomEvent(FEED_REVEAL_EVENT, { detail: { index: 10 } }))
+    })
+    expect(container.querySelector('[data-message-id="m0"]')).toBeTruthy()
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(100)
+  })
+
+  it('keeps the window stable when new items are appended', () => {
+    const items = Array.from({ length: 70 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    flushSync(() => root.render(<ChatFeedItems displayItems={items} />))
+    const nodeM69 = container.querySelector('[data-message-id="m69"]')
+
+    const items2 = [...items, msg('m70', 'user', 'Newest')]
+    flushSync(() => root.render(<ChatFeedItems displayItems={items2} />))
+
+    // Newest item is mounted, previously mounted items keep their identity
+    expect(container.querySelector('[data-message-id="m70"]')).toBeTruthy()
+    expect(container.querySelector('[data-message-id="m69"]')).toBe(nodeM69)
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(31)
+  })
+
+  it('re-anchors to the latest window when a large batch arrives (initial load)', () => {
+    const items = Array.from({ length: 70 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    // Session arrives in chunks, like the real WS/REST load flow
+    flushSync(() => root.render(<ChatFeedItems displayItems={items.slice(0, 16)} />))
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(16)
+
+    act(() => {
+      root.render(<ChatFeedItems displayItems={items} />)
+    })
+    // Bulk append re-anchors the window: only the 30 most recent are mounted
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(30)
+    expect(container.querySelector('[data-message-id="m40"]')).toBeTruthy()
+    expect(container.querySelector('[data-message-id="m0"]')).toBeNull()
+    expect(container.querySelectorAll('[data-placeholder]')).toHaveLength(40)
+  })
+
+  it('resets userScrolled state when sessionId changes', () => {
+    const items = Array.from({ length: 70 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    const scrollListeners: Array<() => void> = []
+    const viewport = {
+      scrollTop: 0,
+      addEventListener: (_: string, cb: () => void) => scrollListeners.push(cb),
+      removeEventListener: () => {},
+    }
+    const scrollContainerRef = {
+      current: {
+        osInstance: () => ({ elements: () => ({ viewport }) }),
+        getElement: () => null,
+      },
+    } as never
+
+    // Load session A and simulate user scrolling into history
+    flushSync(() =>
+      root.render(
+        <ChatFeedItems
+          displayItems={items.slice(0, 16)}
+          sessionId="session-a"
+          scrollContainerRef={scrollContainerRef}
+        />,
+      ),
+    )
+    act(() => {
+      root.render(<ChatFeedItems displayItems={items} sessionId="session-a" scrollContainerRef={scrollContainerRef} />)
+    })
+    act(() => {
+      viewport.scrollTop = 500
+      for (const cb of scrollListeners) cb()
+      MockIntersectionObserver.instances.at(-1)!.trigger()
+      MockIntersectionObserver.instances.at(-1)!.trigger()
+    })
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(70)
+
+    // Switch to session B — userScrolled must be reset; window re-anchors
+    const itemsB = Array.from({ length: 70 }, (_, i) => msg(`b${i}`, 'user', `B ${i}`))
+    act(() => {
+      root.render(<ChatFeedItems displayItems={itemsB} sessionId="session-b" scrollContainerRef={scrollContainerRef} />)
+    })
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(30)
+    expect(container.querySelector('[data-message-id="b69"]')).toBeTruthy()
+    expect(container.querySelector('[data-message-id="b0"]')).toBeNull()
+
+    // A bulk batch on session B also re-anchors (userScrolled was reset)
+    const bigBatch = Array.from({ length: 100 }, (_, i) => msg(`b${i}`, 'user', `B ${i}`))
+    act(() => {
+      root.render(
+        <ChatFeedItems displayItems={bigBatch} sessionId="session-b" scrollContainerRef={scrollContainerRef} />,
+      )
+    })
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(30)
+    expect(container.querySelector('[data-message-id="b99"]')).toBeTruthy()
+    expect(container.querySelector('[data-message-id="b0"]')).toBeNull()
+  })
+
+  it('does not re-anchor when the user has scrolled into history (reconnect replay)', () => {
+    const items = Array.from({ length: 70 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    // OS viewport mock: scrollTop > 4 means the user scrolled up
+    const scrollListeners: Array<() => void> = []
+    const viewport = {
+      scrollTop: 0,
+      addEventListener: (_: string, cb: () => void) => scrollListeners.push(cb),
+      removeEventListener: () => {},
+    }
+    const scrollContainerRef = {
+      current: {
+        osInstance: () => ({ elements: () => ({ viewport }) }),
+        getElement: () => null,
+      },
+    } as never
+
+    // Initial load re-anchors to the bottom
+    flushSync(() =>
+      root.render(<ChatFeedItems displayItems={items.slice(0, 16)} scrollContainerRef={scrollContainerRef} />),
+    )
+    act(() => {
+      root.render(<ChatFeedItems displayItems={items} scrollContainerRef={scrollContainerRef} />)
+    })
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(30)
+
+    // User scrolls up (fires the scroll listener) and reveals everything
+    act(() => {
+      viewport.scrollTop = 500
+      for (const cb of scrollListeners) cb()
+      MockIntersectionObserver.instances.at(-1)!.trigger()
+      MockIntersectionObserver.instances.at(-1)!.trigger()
+    })
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(70)
+    expect(container.querySelector('[data-message-id="m0"]')).toBeTruthy()
+
+    // Reconnect replay delivers a large batch — the window must NOT jump back down
+    const replayItems = Array.from({ length: 100 }, (_, i) => msg(`r${i}`, 'user', `Replay ${i}`))
+    act(() => {
+      root.render(<ChatFeedItems displayItems={replayItems} scrollContainerRef={scrollContainerRef} />)
+    })
+    // Window stays anchored at the top: all 100 items mounted, no placeholders
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(100)
+    expect(container.querySelector('[data-message-id="r0"]')).toBeTruthy()
+    expect(container.querySelector('[data-placeholder]')).toBeNull()
   })
 })

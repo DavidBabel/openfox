@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { Markdown } from './Markdown'
+import { Markdown, getMarkdownCacheBytesForTest } from './Markdown'
 import { renderToString } from 'react-dom/server'
 
 describe('Markdown', () => {
@@ -104,6 +104,110 @@ describe('Markdown', () => {
       expect(html).toContain('<ol')
       expect(html).toContain('verifier')
       expect(html).toContain('reviewer')
+    })
+  })
+
+  describe('plain text fast path', () => {
+    it('renders plain prose as a single paragraph with the same styling as markdown paragraphs', () => {
+      const html = renderToString(<Markdown content="Hello world, this is plain prose." />)
+
+      expect(html).toContain(
+        '<p class="text-text-primary mb-1.5 last:mb-0 leading-tight break-words whitespace-pre-line">Hello world, this is plain prose.</p>',
+      )
+    })
+
+    it('preserves paragraph breaks in plain prose', () => {
+      const html = renderToString(<Markdown content={'First paragraph.\n\nSecond paragraph.'} />)
+
+      expect(html).toContain('First paragraph.')
+      expect(html).toContain('Second paragraph.')
+      expect(html).toContain('whitespace-pre-line')
+    })
+
+    it('linkifies bare URLs like the markdown path does', () => {
+      const html = renderToString(<Markdown content={'See https://example.com/docs for details'} />)
+
+      expect(html).toContain('<a href="https://example.com/docs"')
+      expect(html).toContain('example.com/docs')
+    })
+
+    it('applies the muted color for muted plain text', () => {
+      const html = renderToString(<Markdown content="Quiet thought." muted />)
+
+      expect(html).toContain('text-text-muted')
+      expect(html).toContain('Quiet thought.')
+    })
+
+    it('renders empty or whitespace-only content as nothing', () => {
+      const html = renderToString(<Markdown content="   " />)
+
+      expect(html).not.toContain('<p')
+    })
+
+    it('still routes markdown syntax to the full parser', () => {
+      const html = renderToString(<Markdown content="This has **bold** text." />)
+
+      expect(html).toContain('<strong')
+      expect(html).toContain('bold')
+    })
+
+    it('renders the muted variant distinctly even when the same content was rendered before', () => {
+      // Same content string, different context: the parse cache must not
+      // serve the non-muted node to the muted render.
+      const normal = renderToString(<Markdown content="Quiet thought." />)
+      const mutedHtml = renderToString(<Markdown content="Quiet thought." muted />)
+
+      expect(normal).toContain('text-text-primary')
+      expect(mutedHtml).toContain('text-text-muted')
+      expect(normal).not.toBe(mutedHtml)
+    })
+
+    it('evicts large cached entries so the byte budget is not exceeded', () => {
+      // ~30 entries of ~800KB each would blow past the 20MB budget — the
+      // byte-bounded eviction must kick in. Keep the payloads small enough
+      // that the parse itself stays fast for CI.
+      const big = `# Heading\n\n${'x'.repeat(800_000)}`
+      for (let i = 0; i < 30; i++) {
+        renderToString(<Markdown content={`${big} ${i}`} />)
+      }
+      // The byte budget caps total key bytes — verify it stayed bounded
+      // (30 × ~800KB = 24MB would exceed 20MB without eviction).
+      expect(getMarkdownCacheBytesForTest()).toBeLessThanOrEqual(20 * 1024 * 1024)
+      // And the cache still works for fresh content
+      const html = renderToString(<Markdown content={`${big} fresh`} />)
+      expect(html).toContain('Heading')
+    }, 30_000)
+  })
+
+  describe('markdown edge cases (full parser routing)', () => {
+    it('routes strikethrough (~~text~~) to the full parser', () => {
+      const html = renderToString(<Markdown content="This is ~~deleted~~ text." />)
+
+      expect(html).toContain('<del')
+      expect(html).toContain('deleted')
+      expect(html).not.toContain('~~deleted~~')
+    })
+
+    it('routes blockquotes without space after > to the full parser', () => {
+      const html = renderToString(<Markdown content=">quoted without space" />)
+
+      expect(html).toContain('<blockquote')
+      expect(html).toContain('quoted without space')
+    })
+
+    it('routes ordered list items with ) delimiter to the full parser', () => {
+      const html = renderToString(<Markdown content="1) First item\n2) Second item" />)
+
+      expect(html).toContain('<ol')
+      expect(html).toContain('First item')
+      expect(html).toContain('Second item')
+    })
+
+    it('routes angular autolinks (<https://…>) to the full parser', () => {
+      const html = renderToString(<Markdown content="See <https://example.com/page> here" />)
+
+      expect(html).toContain('<a href="https://example.com/page"')
+      expect(html).not.toContain('&lt;https://example.com/page&gt;')
     })
   })
 

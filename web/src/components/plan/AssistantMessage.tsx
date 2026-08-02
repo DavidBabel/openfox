@@ -197,7 +197,7 @@ export const AssistantMessage = memo(function AssistantMessage({
             case 'text':
               return (
                 <div key={i} className="prose prose-sm prose-invert max-w-none">
-                  <Markdown content={element.content} />
+                  <Markdown content={element.content} isStreaming={message.isStreaming} />
                 </div>
               )
 

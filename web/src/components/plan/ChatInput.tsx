@@ -477,7 +477,7 @@ export function ChatInput({
       }
 
       // Warmup: on first keystroke in an empty session, prefill the LLM cache
-      if (!warmupSentRef.current && sessionId && value && currentSession && currentSession.messages.length === 0) {
+      if (!warmupSentRef.current && sessionId && value && currentSession && (currentSession.messageCount ?? 0) === 0) {
         warmupSentRef.current = true
         authFetch(`/api/sessions/${sessionId}/warmup`, { method: 'POST' }).catch(() => {})
       }

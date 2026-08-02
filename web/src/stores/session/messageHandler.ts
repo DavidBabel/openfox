@@ -68,7 +68,7 @@ function mergeSessionIntoSummary(
   session: import('@shared/types.js').Session,
 ): import('@shared/types.js').SessionSummary[] {
   const existingSession = sessions.find((candidate) => candidate.id === session.id)
-  const messageCount = session.messageCount ?? session.messages.length
+  const messageCount = session.messageCount ?? 0
   const nextSummary: import('@shared/types.js').SessionSummary = existingSession
     ? {
         ...existingSession,
@@ -510,11 +510,6 @@ export function handleServerMessage(
         break
       }
       cancelStreamingFlush()
-      const buf = getBuffer()
-      buf.messageId = null
-      buf.deltaContent = ''
-      buf.thinkingContent = ''
-      buf.toolOutput = []
       triggeredNewMessageSound.delete((message.payload as ChatDonePayload).messageId)
 
       const payload = message.payload as ChatDonePayload
@@ -543,16 +538,9 @@ export function handleServerMessage(
         break
       }
       cancelStreamingFlush()
-      const buf = getBuffer()
 
       const payload = message.payload as ChatErrorPayload
       console.error('Chat error:', payload.error, 'recoverable:', payload.recoverable)
-      if (!payload.recoverable) {
-        buf.messageId = null
-        buf.deltaContent = ''
-        buf.thinkingContent = ''
-        buf.toolOutput = []
-      }
       set((state) => ({
         error: { code: 'CHAT_ERROR', message: payload.error },
         ...(payload.recoverable

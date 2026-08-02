@@ -63,27 +63,59 @@ export function DisplayTab() {
       label: 'Show workflow bars',
       description: 'Display workflow start and end markers',
     },
+  ] as const
+
+  const perfToggles = [
+    {
+      key: SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS,
+      label: 'Use native scrollbars in tool calls',
+      description:
+        'Swap custom styled scrollbars for native ones in tool call views (file previews, arguments, results). Faster, but native scrollbars look different on some platforms.',
+      defaultValue: 'false',
+    },
+    {
+      key: SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS_CODE_BLOCKS,
+      label: 'Use native scrollbars in code blocks',
+      description: 'Swap custom styled scrollbars for native ones in markdown code blocks and tables.',
+      defaultValue: 'false',
+    },
+    {
+      key: SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS,
+      label: 'Collapse large tool calls automatically',
+      description:
+        'Start finished tool calls with large outputs collapsed; click to expand. Speeds up loading long sessions.',
+      defaultValue: 'false',
+    },
+    {
+      key: SETTINGS_KEYS.DISPLAY_DEFER_CODE_HIGHLIGHT_WHILE_STREAMING,
+      label: 'Defer code highlighting while streaming',
+      description:
+        'While a code block is streaming, wait until it closes to highlight it. Smoother streaming, but code stays plain until the end.',
+      defaultValue: 'false',
+    },
     {
       key: SETTINGS_KEYS.DISPLAY_SHOW_SYNTAX_HIGHLIGHTING,
       label: 'Show syntax highlighting',
       description: 'Nicer formatting, but costly - applies to code blocks, diffs, and file previews',
+      defaultValue: 'true',
     },
   ] as const
 
-  const localValues = Object.fromEntries(toggles.map((t) => [t.key, settings[t.key] ?? 'true'])) as Record<
-    (typeof toggles)[number]['key'],
-    string
-  >
+  const allToggles = [...toggles, ...perfToggles]
+
+  const feedLocalValues = Object.fromEntries(toggles.map((t) => [t.key, settings[t.key] ?? 'true']))
+  const perfLocalValues = Object.fromEntries(perfToggles.map((t) => [t.key, settings[t.key] ?? t.defaultValue]))
+  const localValues = { ...feedLocalValues, ...perfLocalValues } as Record<(typeof allToggles)[number]['key'], string>
   const [local, setLocal] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(toggles.map((t) => [t.key, localValues[t.key] === 'true'])),
+    Object.fromEntries(allToggles.map((t) => [t.key, localValues[t.key] === 'true'])),
   )
 
   useEffect(() => {
-    toggles.forEach((t) => getSetting(t.key))
+    allToggles.forEach((t) => getSetting(t.key))
   }, [getSetting])
 
   useEffect(() => {
-    setLocal(Object.fromEntries(toggles.map((t) => [t.key, localValues[t.key] === 'true'])))
+    setLocal(Object.fromEntries(allToggles.map((t) => [t.key, localValues[t.key] === 'true'])))
   }, [JSON.stringify(localValues)])
 
   const handleToggle = async (key: string) => {
@@ -102,63 +134,44 @@ export function DisplayTab() {
 
       <div className="border-t border-border pt-4">
         <h3 className="text-sm font-medium text-text-primary mb-2">Custom CSS</h3>
-        <p className="text-xs text-text-muted mb-3">
-          Add global CSS overrides for any element.
-        </p>
+        <p className="text-xs text-text-muted mb-3">Add global CSS overrides for any element.</p>
         <CustomCssEditor />
       </div>
 
       <div className="border-t border-border pt-4">
         <h3 className="text-sm font-medium text-text-primary mb-4">Feed Display</h3>
-        <div className="space-y-4">
-          {toggles.map(({ key, label, description }) => (
-            <label key={key} className="flex items-start justify-between gap-3 cursor-pointer">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-text-primary font-medium">{label}</div>
-                <div className="text-xs text-text-muted mt-0.5">{description}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleToggle(key)}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                  local[key] ? 'bg-accent-primary' : 'bg-bg-tertiary'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    local[key] ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
-          ))}
-        </div>
+        <ToggleList toggles={toggles} local={local} onToggle={handleToggle} />
       </div>
 
       <div className="border-t border-border pt-4">
-        <label className="flex items-center justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="text-sm text-text-primary font-medium">Max visible items</div>
-            <div className="text-xs text-text-muted mt-0.5">
-              Keep only the last N items in the feed. Set to 0 to show all.
+        <h3 className="text-sm font-medium text-text-primary mb-4">Performance</h3>
+        <div className="space-y-4">
+          <ToggleList toggles={perfToggles} local={local} onToggle={handleToggle} />
+
+          <label className="flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-text-primary font-medium">Max visible items</div>
+              <div className="text-xs text-text-muted mt-0.5">
+                Keep only the last N items in the feed. Set to 0 to show all.
+              </div>
             </div>
-          </div>
-          <input
-            type="number"
-            min={0}
-            max={9999}
-            value={maxItemsLocal}
-            onChange={(e) => {
-              const cleaned = e.target.value.replace(/[^0-9]/g, '')
-              setMaxItemsLocal(cleaned)
-            }}
-            onBlur={saveMaxItems}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveMaxItems()
-            }}
-            className="w-20 px-2 py-1 text-sm text-text-primary bg-bg-tertiary border border-border rounded text-right"
-          />
-        </label>
+            <input
+              type="number"
+              min={0}
+              max={9999}
+              value={maxItemsLocal}
+              onChange={(e) => {
+                const cleaned = e.target.value.replace(/[^0-9]/g, '')
+                setMaxItemsLocal(cleaned)
+              }}
+              onBlur={saveMaxItems}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveMaxItems()
+              }}
+              className="w-20 px-2 py-1 text-sm text-text-primary bg-bg-tertiary border border-border rounded text-right"
+            />
+          </label>
+        </div>
       </div>
 
       <div className="border-t border-border pt-4">
@@ -170,6 +183,42 @@ export function DisplayTab() {
 }
 
 const FONT_PREVIEW_TEXT = '~/project \ue0b0 git status \u2713 \u2717 \u2192 0123 iIlL1 |\u2500\u2524'
+
+function ToggleList({
+  toggles,
+  local,
+  onToggle,
+}: {
+  toggles: readonly { key: string; label: string; description: string }[]
+  local: Record<string, boolean>
+  onToggle: (key: string) => void
+}) {
+  return (
+    <div className="space-y-4">
+      {toggles.map(({ key, label, description }) => (
+        <label key={key} className="flex items-start justify-between gap-3 cursor-pointer">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-text-primary font-medium">{label}</div>
+            <div className="text-xs text-text-muted mt-0.5">{description}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onToggle(key)}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+              local[key] ? 'bg-accent-primary' : 'bg-bg-tertiary'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                local[key] ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </label>
+      ))}
+    </div>
+  )
+}
 
 function TerminalFontEditor() {
   const { settings, getSetting, setSetting } = useSettingsStoreState()

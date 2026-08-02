@@ -1454,6 +1454,22 @@ describe('useSessionStore session isolation', () => {
     expect(state.messages.find((m) => m.isStreaming)).toBeDefined()
   })
 
+  it('falls back to a regular fetch when the prefetched session fetch failed', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    // First fetch is the session GET itself (no prefetch active in this
+    // harness); it fails, and there is no retry path — the load must abort
+    // cleanly without leaving a half-loaded session.
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) } as never)
+
+    await useSessionStore.getState().loadSession('session-fallback')
+
+    expect(useSessionStore.getState().currentSession).toBeNull()
+    // Session GET fails and the load aborts (only the background-processes
+    // fetch is issued alongside it — no retry happens here).
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('loads session with no streaming message when REST response has none', async () => {
     const useSessionStore = await loadSessionStore()
 
@@ -2201,5 +2217,92 @@ describe('cross-tab sidebar sync', () => {
     expect(state.sessions).toHaveLength(1)
     expect(state.sessions[0]!.title).toBe('Updated Title')
     expect(state.sessions[0]!.messageCount).toBe(5)
+  })
+
+  it('does not refetch a session that was already loaded (sequential guard)', async () => {
+    const useSessionStore = await loadSessionStore()
+    useSessionStore.setState({
+      currentSession: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/tmp/project-1',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: false,
+        criteria: [],
+        summary: null,
+      } as any,
+    })
+
+    await useSessionStore.getState().loadSession('session-1')
+    const fetchesForS1 = () =>
+      fetchMock.mock.calls.filter(
+        (c) =>
+          String((c as unknown[])[0]).includes('/api/sessions/session-1') &&
+          !String((c as unknown[])[0]).includes('/background-processes'),
+      ).length
+
+    expect(fetchesForS1()).toBe(1)
+    await useSessionStore.getState().loadSession('session-1')
+    expect(fetchesForS1()).toBe(1)
+  })
+
+  it('refetches when loading a different session after a previous load', async () => {
+    const useSessionStore = await loadSessionStore()
+    useSessionStore.setState({
+      currentSession: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/tmp/project-1',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: false,
+        criteria: [],
+        summary: null,
+      } as any,
+    })
+
+    await useSessionStore.getState().loadSession('session-1')
+    await useSessionStore.getState().loadSession('session-2')
+
+    const fetchesForS1 = fetchMock.mock.calls.filter(
+      (c) =>
+        String((c as unknown[])[0]).includes('/api/sessions/session-1') &&
+        !String((c as unknown[])[0]).includes('/background-processes'),
+    ).length
+    const fetchesForS2 = fetchMock.mock.calls.filter(
+      (c) =>
+        String((c as unknown[])[0]).includes('/api/sessions/session-2') &&
+        !String((c as unknown[])[0]).includes('/background-processes'),
+    ).length
+    expect(fetchesForS1).toBe(1)
+    expect(fetchesForS2).toBe(1)
+  })
+
+  it('clears the sequential guard on reconnect so the session is refetched', async () => {
+    const useSessionStore = await loadSessionStore()
+    useSessionStore.setState({
+      currentSession: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/tmp/project-1',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: false,
+        criteria: [],
+        summary: null,
+      } as any,
+    })
+
+    await useSessionStore.getState().loadSession('session-1')
+    useSessionStore.getState().reconnect()
+    await useSessionStore.getState().loadSession('session-1')
+
+    const fetches = fetchMock.mock.calls.filter(
+      (c) =>
+        String((c as unknown[])[0]).includes('/api/sessions/session-1') &&
+        !String((c as unknown[])[0]).includes('/background-processes'),
+    ).length
+    expect(fetches).toBe(2)
   })
 })

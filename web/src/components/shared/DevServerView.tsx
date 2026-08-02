@@ -1,4 +1,4 @@
-import { ScrollArea } from './ScrollArea'
+import { OptionalScrollArea } from './OptionalScrollArea'
 import { memo } from 'react'
 import { tryParseResult } from './tryParseResult'
 
@@ -41,7 +41,7 @@ function renderLogs(data: LogsData) {
   const lines = data.logs.split('\n')
   return (
     <div className="space-y-2">
-      <ScrollArea className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] break-words">
+      <OptionalScrollArea className="text-xs font-mono whitespace-pre-wrap bg-bg-primary p-2 rounded max-h-[60vh] break-words">
         {lines.map((line, i) => {
           const isStderr = line.startsWith('[stderr] ')
           return (
@@ -50,7 +50,7 @@ function renderLogs(data: LogsData) {
             </div>
           )
         })}
-      </ScrollArea>
+      </OptionalScrollArea>
       {data.hasMore && (
         <div className="text-[10px] text-text-muted">
           Showing {data.limit} of {data.total} lines

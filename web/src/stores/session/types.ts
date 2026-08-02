@@ -73,7 +73,7 @@ export interface SessionState {
   submitPassword: (password: string) => Promise<void>
   cancelPassword: () => void
   createSession: (projectId: string, title?: string) => Promise<Session | null>
-  loadSession: (sessionId: string) => Promise<void>
+  loadSession: (sessionId: string, force?: boolean) => Promise<void>
   listSessions: (projectId?: string, limit?: number) => Promise<void>
   deleteSession: (sessionId: string) => Promise<boolean>
   renameSession: (sessionId: string, title: string) => Promise<boolean>

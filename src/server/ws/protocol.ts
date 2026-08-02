@@ -129,7 +129,7 @@ export function createSessionStateMessage(
   return createServerMessage(
     'session.state',
     {
-      session,
+      session: toClientSession(session),
       messages: enrichedMessages,
       pendingConfirmations,
       ...(pendingQuestions ? { pendingQuestions } : {}),
@@ -407,6 +407,7 @@ export function createQueueStateMessage(messages: QueuedMessage[]): ServerMessag
 // ============================================================================
 
 import type { StoredEvent, TurnEvent } from '../events/types.js'
+import { toClientSession } from '../session/client-session.js'
 
 /**
  * Convert a StoredEvent from EventStore to a ServerMessage for WebSocket.

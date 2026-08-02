@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0))
 vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id))
@@ -140,5 +140,157 @@ describe('chat.tool_output streaming after message_updated', () => {
     const updatedMsg = useSessionStore.getState().messages.find((m) => m.id === 'msg-1')
     const output = updatedMsg?.toolCalls?.[0]?.streamingOutput?.map((c) => c.content).join('') ?? ''
     expect(output).toBe('first\nsecond\nthird\n')
+  })
+})
+
+describe('streaming flush throttling', () => {
+  async function loadStreamingBuffer() {
+    vi.resetModules()
+    return import('./streamingBuffer')
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('coalesces multiple schedule calls within the throttle window into a single flush', async () => {
+    const { scheduleStreamingFlush, setFlushFn, getBuffer } = await loadStreamingBuffer()
+    const received: string[] = []
+    setFlushFn(() => {
+      received.push(getBuffer().deltaContent)
+    })
+
+    const buf = getBuffer()
+    buf.messageId = 'm1'
+    buf.deltaContent = ''
+    scheduleStreamingFlush()
+    buf.deltaContent += 'a'
+    scheduleStreamingFlush()
+    buf.deltaContent += 'b'
+    scheduleStreamingFlush()
+
+    expect(received).toEqual([])
+    await vi.runAllTimersAsync()
+    expect(received).toEqual(['ab'])
+  })
+
+  it('enforces a minimum 16ms interval between flushes', async () => {
+    const { scheduleStreamingFlush, setFlushFn, getBuffer } = await loadStreamingBuffer()
+    const flushFn = vi.fn()
+    setFlushFn(flushFn)
+
+    const buf = getBuffer()
+    buf.messageId = 'm1'
+    buf.deltaContent = 'first'
+    scheduleStreamingFlush()
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(1)
+
+    buf.deltaContent = 'second'
+    scheduleStreamingFlush()
+    expect(flushFn).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(8)
+    expect(flushFn).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(flushFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('flushes pending content immediately and clears the buffer on cancel', async () => {
+    const { scheduleStreamingFlush, cancelStreamingFlush, setFlushFn, getBuffer } = await loadStreamingBuffer()
+    const flushFn = vi.fn()
+    setFlushFn(flushFn)
+
+    const buf = getBuffer()
+    buf.messageId = 'm1'
+    buf.deltaContent = 'partial'
+    scheduleStreamingFlush()
+    cancelStreamingFlush()
+
+    expect(flushFn).toHaveBeenCalledTimes(1)
+    expect(buf.messageId).toBeNull()
+    expect(buf.deltaContent).toBe('')
+    expect(buf.thinkingContent).toBe('')
+    expect(buf.toolOutput).toEqual([])
+
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the rAF fast path when enough time elapsed since the last flush', async () => {
+    const { scheduleStreamingFlush, setFlushFn, getBuffer } = await loadStreamingBuffer()
+    const flushFn = vi.fn()
+    setFlushFn(flushFn)
+
+    const buf = getBuffer()
+    buf.messageId = 'm1'
+    buf.deltaContent = 'first'
+    scheduleStreamingFlush()
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(1)
+
+    // More than the throttle window elapses before the next schedule
+    await vi.advanceTimersByTimeAsync(150)
+
+    buf.deltaContent = 'second'
+    scheduleStreamingFlush()
+    // The rAF stub fires on a 0ms timer — no 100ms throttle delay
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders the first delta of the next message immediately after cancel', async () => {
+    const { scheduleStreamingFlush, cancelStreamingFlush, setFlushFn, getBuffer } = await loadStreamingBuffer()
+    const flushFn = vi.fn()
+    setFlushFn(flushFn)
+
+    const buf = getBuffer()
+    buf.messageId = 'm1'
+    buf.deltaContent = 'first'
+    scheduleStreamingFlush()
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(1)
+
+    // Terminal event: commit remaining content
+    cancelStreamingFlush()
+    expect(flushFn).toHaveBeenCalledTimes(2)
+
+    // Next message starts right away — its first delta must not be throttled
+    buf.messageId = 'm2'
+    buf.deltaContent = 'next message'
+    scheduleStreamingFlush()
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(3)
+  })
+
+  it('cancels a pending rAF flush on cancel', async () => {
+    const cancelRafSpy = vi.spyOn(globalThis, 'cancelAnimationFrame')
+    const { scheduleStreamingFlush, cancelStreamingFlush, setFlushFn, getBuffer } = await loadStreamingBuffer()
+    const flushFn = vi.fn()
+    setFlushFn(flushFn)
+
+    const buf = getBuffer()
+    buf.messageId = 'm1'
+    buf.deltaContent = 'first'
+    scheduleStreamingFlush()
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(1)
+
+    // More than the throttle window elapses so the next schedule takes the rAF path
+    await vi.advanceTimersByTimeAsync(150)
+    cancelRafSpy.mockClear()
+
+    buf.deltaContent = 'second'
+    scheduleStreamingFlush()
+    cancelStreamingFlush()
+
+    expect(cancelRafSpy).toHaveBeenCalledTimes(1)
+    expect(flushFn).toHaveBeenCalledTimes(2)
+
+    await vi.runAllTimersAsync()
+    expect(flushFn).toHaveBeenCalledTimes(2)
   })
 })

@@ -72,7 +72,7 @@ export function BranchModal({ isOpen, onClose, sessionId }: BranchModalProps) {
           setBusy(false)
           return
         }
-        await refreshSession(sessionId)
+        await refreshSession(sessionId, true)
         onClose()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to switch branch')

@@ -5,15 +5,7 @@ import type { ModelConfig } from '@shared/types.js'
 type LlmStatus = 'connected' | 'disconnected' | 'unknown'
 
 type Backend =
-  | 'vllm'
-  | 'sglang'
-  | 'ollama'
-  | 'llamacpp'
-  | 'lmstudio'
-  | 'openai'
-  | 'anthropic'
-  | 'opencode-go'
-  | 'unknown'
+  'vllm' | 'sglang' | 'ollama' | 'llamacpp' | 'lmstudio' | 'openai' | 'anthropic' | 'opencode-go' | 'unknown'
 type ProviderStatus = 'connected' | 'disconnected' | 'unknown'
 
 interface Provider {
@@ -54,7 +46,8 @@ interface ConfigState {
   defaultModelSelection: string | null
   // Platform info from server (WSL detection etc.)
   platform: PlatformInfo | null
-  // Loading/error state
+  // Working directory reported by the server
+  workdir: string | null
   loading: boolean
   activating: boolean
   error: string | null
@@ -102,6 +95,8 @@ function getBackendDisplayName(backend: Backend): string {
 export { getBackendDisplayName }
 export type { Backend, LlmStatus, Provider, ProviderStatus }
 
+let configFetchPromise: Promise<void> | null = null
+
 export const useConfigStore = create<ConfigState>((set, get) => ({
   version: null,
   model: null,
@@ -113,56 +108,71 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   activeProviderId: null,
   defaultModelSelection: null,
   platform: null,
+  workdir: null,
   loading: false,
   activating: false,
   error: null,
   autoRefreshInterval: null,
 
   fetchConfig: async () => {
-    set({ loading: true, error: null })
-    try {
-      const response = await authFetch('/api/config')
-      if (!response.ok) {
-        throw new Error('Failed to fetch config')
-      }
-      const data = (await response.json()) as {
-        version: string
-        model: string
-        maxContext: number
-        llmUrl: string
-        llmStatus: LlmStatus
-        backend: Backend
-        providers: Provider[]
-        activeProviderId: string | null
-        defaultModelSelection: string | null
-        platform: unknown
-      }
-      const platform: PlatformInfo | null =
-        data.platform && typeof data.platform === 'object'
-          ? {
-              isWSL: !!(data.platform as Record<string, unknown>).isWSL,
-              wslDistro: String((data.platform as Record<string, unknown>).wslDistro ?? ''),
-            }
-          : null
-      set({
-        version: data.version,
-        model: data.model,
-        maxContext: data.maxContext,
-        llmUrl: data.llmUrl,
-        llmStatus: data.llmStatus,
-        backend: data.backend,
-        providers: data.providers ?? [],
-        activeProviderId: data.activeProviderId ?? null,
-        defaultModelSelection: data.defaultModelSelection ?? null,
-        platform,
-        loading: false,
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Unknown error',
-        loading: false,
-      })
+    // Deduplicate concurrent calls: while a fetch is in flight, all callers
+    // share the same promise instead of firing N identical requests.
+    if (configFetchPromise) {
+      return configFetchPromise
     }
+
+    set({ loading: true, error: null })
+    configFetchPromise = (async () => {
+      try {
+        const response = await authFetch('/api/config')
+        if (!response.ok) {
+          throw new Error('Failed to fetch config')
+        }
+        const data = (await response.json()) as {
+          version: string
+          model: string
+          maxContext: number
+          llmUrl: string
+          llmStatus: LlmStatus
+          backend: Backend
+          providers: Provider[]
+          activeProviderId: string | null
+          defaultModelSelection: string | null
+          platform: unknown
+          workdir?: string
+        }
+        const platform: PlatformInfo | null =
+          data.platform && typeof data.platform === 'object'
+            ? {
+                isWSL: !!(data.platform as Record<string, unknown>).isWSL,
+                wslDistro: String((data.platform as Record<string, unknown>).wslDistro ?? ''),
+              }
+            : null
+        set({
+          version: data.version,
+          model: data.model,
+          maxContext: data.maxContext,
+          llmUrl: data.llmUrl,
+          llmStatus: data.llmStatus,
+          backend: data.backend,
+          providers: data.providers ?? [],
+          activeProviderId: data.activeProviderId ?? null,
+          defaultModelSelection: data.defaultModelSelection ?? null,
+          platform,
+          workdir: data.workdir ?? null,
+          loading: false,
+        })
+      } catch (error) {
+        set({
+          error: error instanceof Error ? error.message : 'Unknown error',
+          loading: false,
+        })
+      } finally {
+        configFetchPromise = null
+      }
+    })()
+
+    return configFetchPromise
   },
 
   refreshModel: async () => {

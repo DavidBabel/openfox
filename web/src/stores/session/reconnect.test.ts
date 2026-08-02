@@ -156,4 +156,101 @@ describe('reconnect refreshes current session content', () => {
 
     expect(listProjectsSpy).toHaveBeenCalled()
   })
+
+  it('refetches the active session after an automatic reconnect (reconnecting status clears the guard)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const useSessionStore = await loadSessionStore()
+
+    fetchMock.mockImplementation(((url?: unknown) => {
+      const u = String(url ?? '')
+      if (u.includes('/api/sessions/session-active') && !u.includes('background-processes')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              session: {
+                id: 'session-active',
+                projectId: 'project-1',
+                workdir: '/tmp/project-1',
+                mode: 'planner',
+                phase: 'plan',
+                isRunning: false,
+                criteria: [],
+              },
+              messages: [],
+              hiddenCount: 0,
+            }),
+        })
+      }
+      if (u.includes('background-processes')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ processes: [] }) })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) })
+    }) as never)
+
+    useSessionStore.setState({
+      currentSession: {
+        id: 'session-active',
+        projectId: 'project-1',
+        workdir: '/tmp/project-1',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: false,
+        criteria: [],
+        summary: null,
+      } as any,
+    })
+
+    // First connect + load
+    await useSessionStore.getState().connect()
+    const cb = (wsStatusMock.mock.calls[0] as Array<(s: string) => void>)[0]!
+    ;(cb as (s: string) => void)('connected')
+    await vi.runAllTimersAsync()
+
+    // Automatic reconnect: reconnecting clears the sequential guard
+    ;(cb as (s: string) => void)('reconnecting')
+    ;(cb as (s: string) => void)('connected')
+    await vi.runAllTimersAsync()
+    vi.useRealTimers()
+
+    const sessionFetches = fetchMock.mock.calls.filter(
+      (c) =>
+        String((c as unknown[])[0]).includes('/api/sessions/session-active') &&
+        !String((c as unknown[])[0]).includes('/background-processes'),
+    ).length
+    expect(sessionFetches).toBe(2)
+  })
+
+  it('force reload bypasses the in-flight guard', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState({
+      currentSession: {
+        id: 'session-active',
+        projectId: 'project-1',
+        workdir: '/tmp/project-1',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: false,
+        criteria: [],
+        summary: null,
+      } as any,
+    })
+
+    // Start a normal load (no await), then force reload while it is in flight
+    const loadPromise = useSessionStore.getState().loadSession('session-active')
+    await useSessionStore.getState().loadSession('session-active', true)
+    await loadPromise
+    await vi.runAllTimersAsync()
+    vi.useRealTimers()
+
+    const sessionFetches = fetchMock.mock.calls.filter(
+      (c) =>
+        String((c as unknown[])[0]).includes('/api/sessions/session-active') &&
+        !String((c as unknown[])[0]).includes('/background-processes'),
+    ).length
+    expect(sessionFetches).toBe(2)
+  })
 })

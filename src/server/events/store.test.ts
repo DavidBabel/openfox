@@ -1618,4 +1618,94 @@ describe('EventStore - Event Cleanup', () => {
       expect(orphaned).not.toContain(sessionId)
     })
   })
+
+  describe('snapshot cache invalidation', () => {
+    const snapshotData = (mode: string, snapshotSeq: number) => ({
+      mode,
+      phase: 'plan' as const,
+      isRunning: false,
+      messages: [],
+      criteria: [],
+      metadataEntries: {},
+      contextState: {
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      },
+      currentContextWindowId: 'window-1',
+      todos: [],
+      readFiles: [],
+      snapshotSeq,
+      snapshotAt: Date.now(),
+    })
+
+    it('serves the cached snapshot until an append invalidates it', () => {
+      store.append('session-1', { type: 'turn.snapshot', data: snapshotData('planner', 1) })
+      const first = store.getLatestSnapshot('session-1')
+      expect(first!.data.mode).toBe('planner')
+
+      // Second read comes from cache — same object identity
+      expect(store.getLatestSnapshot('session-1')).toBe(first)
+
+      store.append('session-1', { type: 'turn.snapshot', data: snapshotData('builder', 2) })
+      const second = store.getLatestSnapshot('session-1')
+      expect(second).toBeDefined()
+      expect(second!.data.mode).toBe('builder')
+      expect(second).not.toBe(first)
+    })
+
+    it('does not bake the first caller limit into the cached prompts', () => {
+      const messages = Array.from({ length: 8 }, (_, i) => ({
+        id: `m${i}`,
+        role: 'user' as const,
+        content: `Prompt ${i}`,
+        timestamp: 1000 + i,
+      }))
+      store.append('session-1', {
+        type: 'turn.snapshot',
+        data: { ...snapshotData('planner', 1), messages },
+      })
+      // Extra user messages newer than the snapshot, coming from message.start
+      // events — these must not be clipped to the first caller's limit either.
+      for (let i = 8; i < 13; i++) {
+        store.append('session-1', {
+          type: 'message.start',
+          data: { messageId: `m${i}`, role: 'user', content: `Prompt ${i}` },
+        })
+      }
+
+      const small = store.getRecentUserPrompts('session-1', 3)
+      expect(small).toHaveLength(3)
+
+      // A larger limit than the first call must not be constrained by what the
+      // first call happened to cache.
+      const large = store.getRecentUserPrompts('session-1', 13)
+      expect(large).toHaveLength(13)
+    })
+
+    it('refreshes recent user prompts after an append', () => {
+      store.append('session-1', {
+        type: 'turn.snapshot',
+        data: {
+          ...snapshotData('planner', 1),
+          messages: [{ id: 'm1', role: 'user', content: 'First', timestamp: 1000 }],
+        },
+      })
+
+      const prompts = store.getRecentUserPrompts('session-1', 10)
+      expect(prompts.map((p) => p.id)).toEqual(['m1'])
+
+      store.append('session-1', {
+        type: 'message.start',
+        data: { messageId: 'm2', role: 'user', content: 'Second' },
+      })
+
+      const refreshed = store.getRecentUserPrompts('session-1', 10)
+      expect(refreshed.map((p) => p.id)).toContain('m2')
+      expect(refreshed).not.toEqual(prompts)
+    })
+  })
 })

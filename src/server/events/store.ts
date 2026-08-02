@@ -134,6 +134,26 @@ export class EventStore {
   private subscribers: Map<string, Set<Subscriber>> = new Map()
   private globalSubscribers: Map<number, GlobalSubscriber> = new Map()
   private globalSubscriberIdCounter = 0
+  // Parsed latest-snapshot cache per session. Snapshots can be tens of MB of
+  // JSON; re-parsing them on every session load (REST, WS, sidebar list) costs
+  // hundreds of ms. Invalidated on every write path (append, delete, cleanup).
+  // This is a pragmatic stopgap: the real fix is shrinking the 47MB snapshots
+  // themselves (compaction refactor, out of scope) — the cache hides the cost
+  // without removing it.
+  private snapshotCache: Map<string, { stored: StoredEvent; bytes: number }> = new Map()
+  private snapshotCacheBytes = 0
+  private static readonly SNAPSHOT_CACHE_MAX_ENTRIES = 16
+  private static readonly SNAPSHOT_CACHE_MAX_BYTES = 128 * 1024 * 1024
+  // Recent user prompts per session (sidebar list). Computed once from the
+  // snapshot + message.start events, then served from memory. Bounded — small
+  // arrays, but a long-lived server must not accumulate one per listed
+  // session; entries are also dropped when their session is written to.
+  private promptsCache: Map<string, Array<{ id: string; content: string; timestamp: string }>> = new Map()
+  private static readonly PROMPTS_CACHE_MAX_ENTRIES = 64
+  // Row cap for the message.start query feeding the prompts cache. Kept above
+  // any realistic caller limit so the cached result is not clipped to whatever
+  // limit the first caller happened to request.
+  private static readonly PROMPTS_QUERY_LIMIT = 100
 
   constructor(db: Database.Database) {
     this.db = db
@@ -211,6 +231,8 @@ export class EventStore {
       )
       .run(sessionId, seq, timestamp, event.type, payload)
 
+    this.invalidateSessionCache(sessionId)
+
     const stored: StoredEvent = {
       seq,
       timestamp,
@@ -258,6 +280,8 @@ export class EventStore {
 
     transaction()
 
+    this.invalidateSessionCache(sessionId)
+
     // Notify after transaction commits
     for (const stored of results) {
       this.notifySubscribers(sessionId, stored)
@@ -268,8 +292,7 @@ export class EventStore {
 
   private getNextSeq(sessionId: string): number {
     const row = this.db.prepare(`SELECT MAX(seq) as max_seq FROM events WHERE session_id = ?`).get(sessionId) as
-      | { max_seq: number | null }
-      | undefined
+      { max_seq: number | null } | undefined
 
     return (row?.max_seq ?? 0) + 1
   }
@@ -338,6 +361,7 @@ export class EventStore {
     this.db
       .prepare(`UPDATE events SET payload = ? WHERE session_id = ? AND seq = ?`)
       .run(JSON.stringify(data), sessionId, seq)
+    this.invalidateSessionCache(sessionId)
   }
 
   /**
@@ -345,8 +369,7 @@ export class EventStore {
    */
   getLatestSeq(sessionId: string): number | undefined {
     const row = this.db.prepare(`SELECT MAX(seq) as max_seq FROM events WHERE session_id = ?`).get(sessionId) as
-      | { max_seq: number | null }
-      | undefined
+      { max_seq: number | null } | undefined
 
     return row?.max_seq ?? undefined
   }
@@ -355,6 +378,11 @@ export class EventStore {
    * Get the latest snapshot event for a session
    */
   getLatestSnapshot(sessionId: string): StoredEvent<Extract<TurnEvent, { type: 'turn.snapshot' }>> | undefined {
+    const cached = this.snapshotCache.get(sessionId)
+    if (cached) {
+      return cached.stored as StoredEvent<Extract<TurnEvent, { type: 'turn.snapshot' }>>
+    }
+
     const row = this.db
       .prepare(
         `SELECT * FROM events 
@@ -365,7 +393,127 @@ export class EventStore {
 
     if (!row) return undefined
 
-    return this.rowToStoredEvent(row) as StoredEvent<Extract<TurnEvent, { type: 'turn.snapshot' }>>
+    const stored = this.rowToStoredEvent(row) as StoredEvent<Extract<TurnEvent, { type: 'turn.snapshot' }>>
+    this.cacheSnapshot(sessionId, stored, row.payload.length)
+    return stored
+  }
+
+  private cacheSnapshot(sessionId: string, stored: StoredEvent, bytes: number): void {
+    const existing = this.snapshotCache.get(sessionId)
+    if (existing) {
+      this.snapshotCacheBytes -= existing.bytes
+    }
+    this.snapshotCache.set(sessionId, { stored, bytes })
+    this.snapshotCacheBytes += bytes
+
+    while (
+      this.snapshotCache.size > EventStore.SNAPSHOT_CACHE_MAX_ENTRIES ||
+      this.snapshotCacheBytes > EventStore.SNAPSHOT_CACHE_MAX_BYTES
+    ) {
+      const oldestKey = this.snapshotCache.keys().next().value
+      if (oldestKey === undefined || oldestKey === sessionId) break
+      const oldest = this.snapshotCache.get(oldestKey)
+      if (oldest) {
+        this.snapshotCacheBytes -= oldest.bytes
+      }
+      this.snapshotCache.delete(oldestKey)
+    }
+  }
+
+  private invalidateSessionCache(sessionId: string): void {
+    const entry = this.snapshotCache.get(sessionId)
+    if (entry) {
+      this.snapshotCacheBytes -= entry.bytes
+      this.snapshotCache.delete(sessionId)
+    }
+    this.promptsCache.delete(sessionId)
+  }
+
+  private clearSnapshotCache(): void {
+    this.snapshotCache.clear()
+    this.snapshotCacheBytes = 0
+    this.promptsCache.clear()
+  }
+
+  /**
+   * Get the most recent real user prompts for a session, cached in memory.
+   * Extracts them from the latest snapshot (when present) plus recent
+   * message.start events. Parsing a multi-MB snapshot on every sidebar list
+   * call dominated the list endpoint, so the result is memoized per session.
+   */
+  getRecentUserPrompts(sessionId: string, limit: number): Array<{ id: string; content: string; timestamp: string }> {
+    const cached = this.promptsCache.get(sessionId)
+    if (cached) {
+      return cached.slice(0, limit)
+    }
+
+    const isRealUserMessage = (msg: {
+      role: string
+      isSystemGenerated?: boolean
+      messageKind?: string
+      subAgentType?: string
+    }) => msg.role === 'user' && !msg.isSystemGenerated && !msg.messageKind && !msg.subAgentType
+
+    const promptMap = new Map<string, { id: string; content: string; timestamp: string }>()
+
+    const snapshotEvent = this.getLatestSnapshot(sessionId)
+    if (snapshotEvent) {
+      const snapshot = snapshotEvent.data as {
+        messages: Array<{
+          id: string
+          role: string
+          content: string
+          timestamp: number
+          isSystemGenerated?: boolean
+          messageKind?: string
+          subAgentType?: string
+        }>
+      }
+      for (const msg of snapshot.messages) {
+        if (isRealUserMessage(msg)) {
+          promptMap.set(msg.id, {
+            id: msg.id,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp).toISOString(),
+          })
+        }
+      }
+    }
+
+    const rows = this.db
+      .prepare(
+        `
+        SELECT payload, timestamp
+        FROM events
+        WHERE session_id = ? AND event_type = 'message.start'
+          AND json_extract(payload, '$.role') = 'user'
+          AND json_extract(payload, '$.isSystemGenerated') IS NULL
+          AND json_extract(payload, '$.messageKind') IS NULL
+          AND json_extract(payload, '$.subAgentType') IS NULL
+        ORDER BY timestamp DESC
+        LIMIT ?
+      `,
+      )
+      .all(sessionId, EventStore.PROMPTS_QUERY_LIMIT) as { payload: string; timestamp: number }[]
+
+    for (const row of rows) {
+      const message = JSON.parse(row.payload) as { messageId: string; content: string }
+      promptMap.set(message.messageId, {
+        id: message.messageId,
+        content: message.content,
+        timestamp: new Date(row.timestamp).toISOString(),
+      })
+    }
+
+    const prompts = [...promptMap.values()].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    )
+    this.promptsCache.set(sessionId, prompts)
+    if (this.promptsCache.size > EventStore.PROMPTS_CACHE_MAX_ENTRIES) {
+      const oldestKey = this.promptsCache.keys().next().value
+      if (oldestKey !== undefined) this.promptsCache.delete(oldestKey)
+    }
+    return prompts.slice(0, limit)
   }
 
   /**
@@ -550,6 +698,7 @@ export class EventStore {
    */
   deleteSession(sessionId: string): void {
     this.db.prepare(`DELETE FROM events WHERE session_id = ?`).run(sessionId)
+    this.invalidateSessionCache(sessionId)
 
     // Close all subscribers for this session
     const sessionSubs = this.subscribers.get(sessionId)
@@ -572,6 +721,7 @@ export class EventStore {
    */
   deleteEventsUpToSeq(sessionId: string, upToSeq: number): number {
     const result = this.db.prepare(`DELETE FROM events WHERE session_id = ? AND seq <= ?`).run(sessionId, upToSeq)
+    this.invalidateSessionCache(sessionId)
 
     return result.changes as number
   }
@@ -587,6 +737,7 @@ export class EventStore {
    */
   deleteEventsAfterSeq(sessionId: string, fromSeq: number): number {
     const result = this.db.prepare(`DELETE FROM events WHERE session_id = ? AND seq > ?`).run(sessionId, fromSeq)
+    this.invalidateSessionCache(sessionId)
 
     return result.changes as number
   }
@@ -635,6 +786,8 @@ export class EventStore {
       )
       .run(sessionId, latestSnapshotSeq)
 
+    this.invalidateSessionCache(sessionId)
+
     return result.changes as number
   }
 
@@ -660,6 +813,8 @@ export class EventStore {
       `,
       )
       .run()
+
+    this.clearSnapshotCache()
 
     return { deletedSnapshots: deleteResult.changes as number }
   }

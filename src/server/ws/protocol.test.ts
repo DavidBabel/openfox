@@ -112,7 +112,7 @@ describe('ws/protocol', () => {
         id: 'corr-1',
         type: 'session.state',
         payload: {
-          session,
+          session: { ...session, messageCount: 0, messages: [] },
           messages: [
             {
               ...assistantMessage,
