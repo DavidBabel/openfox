@@ -213,6 +213,7 @@ describe('ensureWorkspace', () => {
       .mockReturnValueOnce(makeMockProc('') as any) // git clone --shared
       .mockReturnValueOnce(makeMockProc('') as any) // validateRef (git check-ref-format)
       .mockReturnValueOnce(makeMockProc('', 'fatal: not a git repository', 128) as any) // git checkout fails
+      .mockReturnValueOnce(makeMockProc('', 'fatal: invalid reference', 128) as any) // origin/<branch> missing
       .mockReturnValueOnce(makeMockProc('') as any) // git checkout -b from HEAD succeeds
     vi.mocked(mkdir).mockResolvedValue(undefined)
     vi.mocked(stat)
@@ -222,9 +223,32 @@ describe('ensureWorkspace', () => {
 
     const result = await ensureWorkspace(CWD, 'my-experiment', PROJECT_NAME, 'new-feature')
     expect(result.name).toBe('my-experiment')
+    expect(spawn).toHaveBeenCalledTimes(5)
+    const lastCall = vi.mocked(spawn).mock.calls[4]
+    expect(lastCall?.[1]).toEqual(['checkout', '-b', 'new-feature'])
+  })
+
+  it('carries a branch that exists only on the source repo into the fresh workspace', async () => {
+    // A --shared clone exposes the source repo's local branches as origin/*.
+    // When the requested branch is not checked out locally, the workspace must
+    // check it out from origin/<branch> (preserving its commits) instead of
+    // silently forking a fresh branch from the clone's default HEAD.
+    vi.mocked(spawn)
+      .mockReturnValueOnce(makeMockProc('') as any) // git clone --shared
+      .mockReturnValueOnce(makeMockProc('') as any) // validateRef (git check-ref-format)
+      .mockReturnValueOnce(makeMockProc('', 'fatal: not a git repository', 128) as any) // git checkout fails
+      .mockReturnValueOnce(makeMockProc('') as any) // git checkout -b <branch> origin/<branch> succeeds
+    vi.mocked(mkdir).mockResolvedValue(undefined)
+    vi.mocked(stat)
+      .mockResolvedValueOnce(null as any) // wsPath doesn't exist → triggers clone
+      .mockResolvedValueOnce({ isDirectory: () => true } as any) // post-clone check
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({}))
+
+    const result = await ensureWorkspace(CWD, 'my-experiment', PROJECT_NAME, 'pilote/495-fix')
+    expect(result.name).toBe('my-experiment')
     expect(spawn).toHaveBeenCalledTimes(4)
     const lastCall = vi.mocked(spawn).mock.calls[3]
-    expect(lastCall?.[1]).toEqual(['checkout', '-b', 'new-feature'])
+    expect(lastCall?.[1]).toEqual(['checkout', '-b', 'pilote/495-fix', 'origin/pilote/495-fix'])
   })
 
   it('reuses existing workspace directory', async () => {

@@ -82,6 +82,7 @@ vi.mock('../git/diff.js', () => ({
 }))
 
 import { executeWorkflow, userStepChoices } from './executor.js'
+import { runAgentTurn } from '../chat/orchestrator.js'
 
 describe('userStepChoices', () => {
   it('maps step_result transitions to choices and appends a Continue choice for always', () => {
@@ -191,12 +192,6 @@ describe('executeWorkflow mode changes', () => {
       resumeWorkflow: vi.fn(),
       getActiveWorkflowExecution: vi.fn(() => null),
       cancelWorkflow: vi.fn(),
-      assertExecutionGitContext: vi.fn(async () => ({
-        ok: true as const,
-        workdir: '/tmp/test',
-        expectedBranch: null,
-        actualBranch: null,
-      })),
     }
 
     options = {
@@ -226,6 +221,23 @@ describe('executeWorkflow mode changes', () => {
     await executeWorkflow(workflow, options)
 
     expect(setMode).toHaveBeenCalledWith('test-session', 'builder')
+  })
+
+  it('runs the workflow even when the recorded git branch differs from the actual branch (no git-context gate)', async () => {
+    // Regression guard for the removed #183 gate: even if a git-context
+    // assertion returned a mismatch, the workflow must proceed normally.
+    mockSessionManager.assertExecutionGitContext = vi.fn(async () => ({
+      ok: false as const,
+      reason: 'Git context mismatch',
+      workdir: '/tmp/test',
+      expectedBranch: 'feat-x',
+      actualBranch: 'main',
+    }))
+
+    await executeWorkflow(workflow, options)
+
+    expect(vi.mocked(runAgentTurn)).toHaveBeenCalled()
+    expect(mockSessionManager.completeWorkflow).toHaveBeenCalled()
   })
 
   it('calls setMode before running the agent turn', async () => {

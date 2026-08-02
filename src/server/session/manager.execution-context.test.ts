@@ -18,12 +18,28 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-const { mockGetGitBranch, mockGetWorkspacesDir, mockRunGit, mockGetCommitsBehind } = vi.hoisted(() => {
+const {
+  mockGetGitBranch,
+  mockGetWorkspacesDir,
+  mockRunGit,
+  mockGetCommitsBehind,
+  mockEnsureWorkspace,
+  mockWorkspaceExists,
+} = vi.hoisted(() => {
   const mockGetGitBranch = vi.fn(async (_cwd: string) => 'feat-x' as string | null)
   const mockGetWorkspacesDir = vi.fn(async (_projectName: string, _projectDir: string) => '/tmp/openfox-workspaces')
   const mockRunGit = vi.fn(async (_cwd: string, _args: string[]) => undefined as void)
   const mockGetCommitsBehind = vi.fn(async (_cwd: string, _branch: string) => 0 as number | null)
-  return { mockGetGitBranch, mockGetWorkspacesDir, mockRunGit, mockGetCommitsBehind }
+  const mockEnsureWorkspace = vi.fn(async () => undefined)
+  const mockWorkspaceExists = vi.fn(async () => true)
+  return {
+    mockGetGitBranch,
+    mockGetWorkspacesDir,
+    mockRunGit,
+    mockGetCommitsBehind,
+    mockEnsureWorkspace,
+    mockWorkspaceExists,
+  }
 })
 
 vi.mock('../lsp/index.js', () => ({
@@ -39,8 +55,8 @@ vi.mock('../git/workspace.js', async (importOriginal) => {
     getWorkspacesDir: mockGetWorkspacesDir as any,
     runGit: mockRunGit as any,
     getCommitsBehind: mockGetCommitsBehind as any,
-    ensureWorkspace: vi.fn(async () => undefined),
-    workspaceExists: vi.fn(async () => true),
+    ensureWorkspace: mockEnsureWorkspace as any,
+    workspaceExists: mockWorkspaceExists as any,
     validateRef: vi.fn(async () => undefined),
     resolveAndValidateSourceBranch: vi.fn(async () => 'origin/HEAD'),
   }
@@ -96,6 +112,10 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
     mockRunGit.mockResolvedValue(undefined)
     mockGetCommitsBehind.mockClear()
     mockGetCommitsBehind.mockResolvedValue(0)
+    mockEnsureWorkspace.mockReset()
+    mockEnsureWorkspace.mockResolvedValue(undefined)
+    mockWorkspaceExists.mockReset()
+    mockWorkspaceExists.mockResolvedValue(true)
   })
 
   afterEach(async () => {
@@ -177,76 +197,29 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
   })
 
   // ==========================================================================
-  // Issue #183 — assertExecutionGitContext fail-closed semantics
+  // Workspace branch inheritance — a fresh workspace must not silently drop
+  // the session's current branch onto the clone's default (main/develop).
   // ==========================================================================
 
-  describe('assertExecutionGitContext fail-closed semantics', () => {
-    it('blocks (fail-closed) when expected branch is set but actual branch is null (detached HEAD / unresolvable)', async () => {
-      // Session says feat-x, git cannot resolve a branch (e.g. detached HEAD,
-      // broken repository, .git missing inside the workdir). We refuse to
-      // run — the agent must not start on the wrong tree.
-      const session = manager.createSession(projectId, 'Ctx-fc-1', undefined, undefined, '/ws/openfox/feat-x')
+  describe('workspace branch inheritance', () => {
+    it('carries the session branch into a newly created workspace when no branch is given', async () => {
+      const session = manager.createSession(projectId, 'Ctx-inherit-1')
       await setSessionBranch(manager, session.id, 'feat-x')
-      mockGetGitBranch.mockResolvedValue(null)
+      mockWorkspaceExists.mockResolvedValue(false)
+      mockEnsureWorkspace.mockClear()
 
-      const result = await manager.assertExecutionGitContext(session.id)
+      await manager.switchWorkspace(session.id, 'brand-new-ws')
 
-      expect(result.ok).toBe(false)
-      if (result.ok === false) {
-        expect(result.expectedBranch).toBe('feat-x')
-        expect(result.actualBranch).toBeNull()
-        expect(result.workdir).toBe('/ws/openfox/feat-x')
-        expect(result.reason).toContain('/ws/openfox/feat-x')
-        expect(result.reason).toContain('feat-x')
-        expect(result.reason).toMatch(/unavailable|unknown|cannot|no branch/i)
-        expect(result.reason).toMatch(/no agent|no checkout|no file/i)
-      }
+      expect(mockEnsureWorkspace).toHaveBeenCalledWith(workdir, 'brand-new-ws', 'OpenFox', 'feat-x', undefined)
     })
 
-    it('allows (non-git or unbound) when expected branch is null and actual branch is null', async () => {
-      const session = manager.createSession(projectId, 'Ctx-fc-2')
-      mockGetGitBranch.mockResolvedValue(null)
+    it('does not force a branch checkout into an existing workspace when no branch is given', async () => {
+      const session = manager.createSession(projectId, 'Ctx-inherit-2', undefined, undefined, '/ws/openfox/feat-x')
+      mockEnsureWorkspace.mockClear()
 
-      const result = await manager.assertExecutionGitContext(session.id)
+      await manager.switchWorkspace(session.id, 'feat-x')
 
-      expect(result.ok).toBe(true)
-    })
-
-    it('allows (no expectation) when expected branch is null but actual branch is defined', async () => {
-      const session = manager.createSession(projectId, 'Ctx-fc-3')
-      mockGetGitBranch.mockResolvedValue('main')
-
-      const result = await manager.assertExecutionGitContext(session.id)
-
-      expect(result.ok).toBe(true)
-      if (result.ok) {
-        expect(result.actualBranch).toBe('main')
-        expect(result.expectedBranch).toBeNull()
-      }
-    })
-
-    it('allows when expected and actual branch match', async () => {
-      const session = manager.createSession(projectId, 'Ctx-fc-4', undefined, undefined, '/ws/openfox/feat-x')
-      await setSessionBranch(manager, session.id, 'feat-x')
-      mockGetGitBranch.mockResolvedValue('feat-x')
-
-      const result = await manager.assertExecutionGitContext(session.id)
-
-      expect(result.ok).toBe(true)
-    })
-
-    it('blocks when expected and actual branch differ', async () => {
-      const session = manager.createSession(projectId, 'Ctx-fc-5', undefined, undefined, '/ws/openfox/feat-x')
-      await setSessionBranch(manager, session.id, 'feat-x')
-      mockGetGitBranch.mockResolvedValue('main')
-
-      const result = await manager.assertExecutionGitContext(session.id)
-
-      expect(result.ok).toBe(false)
-      if (result.ok === false) {
-        expect(result.expectedBranch).toBe('feat-x')
-        expect(result.actualBranch).toBe('main')
-      }
+      expect(mockEnsureWorkspace).not.toHaveBeenCalled()
     })
   })
 })

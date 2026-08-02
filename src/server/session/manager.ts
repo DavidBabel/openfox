@@ -49,6 +49,7 @@ import {
   runGit,
   workspaceExists,
   getWorkspacesDir,
+  checkoutBranchFromSharedSource,
   deleteWorkspace as deleteWorkspaceDir,
   validateWorkspaceName,
 } from '../git/workspace.js'
@@ -201,85 +202,6 @@ export class SessionManager {
   getEffectiveWorkdir(sessionId: string): string {
     const session = this.requireSession(sessionId)
     return session.workspace ?? session.workdir
-  }
-
-  /**
-   * Return (effectiveWorkdir, actualBranch) for a session.
-   */
-  async getActualBranchPair(sessionId: string): Promise<{ workdir: string; branch: string | null }> {
-    const effectiveWorkdir = this.getEffectiveWorkdir(sessionId)
-    const branch = await getGitBranch(effectiveWorkdir)
-    return { workdir: effectiveWorkdir, branch }
-  }
-
-  /**
-   * Verify the session's effective workdir is on the branch the session was
-   * bound to. Used as an early gate before any agent step of a workflow
-   * execution, so we never run against the wrong tree when the session branch
-   * and the actual git branch have diverged (#183).
-   *
-   * Decision matrix (fail-closed):
-   *   - expectedBranch null                 → ok, regardless of actualBranch.
-   *   - expectedBranch set, actualBranch set, equal    → ok.
-   *   - expectedBranch set, actualBranch set, differ   → BLOCKED.
-   *   - expectedBranch set, actualBranch null          → BLOCKED (we cannot
-   *     verify the workdir is on the right branch — detached HEAD, broken
-   *     repository, missing .git, etc.).
-   *
-   * Returning `{ ok: true }` for a session that has a branch expectation but
-   * no resolvable actual branch would be fail-open and is forbidden.
-   */
-  async assertExecutionGitContext(sessionId: string): Promise<
-    | { ok: true; workdir: string; actualBranch: string | null; expectedBranch: string | null }
-    | {
-        ok: false
-        reason: string
-        workdir: string
-        expectedBranch: string | null
-        actualBranch: string | null
-      }
-  > {
-    const session = this.requireSession(sessionId)
-    const expectedBranch = session.branch ?? null
-    const { workdir, branch: actualBranch } = await this.getActualBranchPair(sessionId)
-
-    // No expectation → always allowed (covers non-git projects and unbound sessions).
-    if (!expectedBranch) {
-      return { ok: true, workdir, actualBranch, expectedBranch }
-    }
-
-    // Expectation set + matching actual branch → allowed.
-    if (actualBranch && expectedBranch === actualBranch) {
-      return { ok: true, workdir, actualBranch, expectedBranch }
-    }
-
-    // Expectation set + actual branch unresolved → fail closed.
-    if (!actualBranch) {
-      return {
-        ok: false,
-        reason:
-          `Cannot verify Git context for workdir '${workdir}': expected branch '${expectedBranch}' ` +
-          `but the actual branch is unavailable (detached HEAD, missing .git, or unreadable repository). ` +
-          `Refusing to write — no agent was run, no checkout was performed. ` +
-          `Use the workspace tool to switch to branch '${expectedBranch}' (or repair the workdir) and retry.`,
-        workdir,
-        expectedBranch,
-        actualBranch: null,
-      }
-    }
-
-    // Expectation set + actual branch differs → fail closed.
-    return {
-      ok: false,
-      reason:
-        `Git context mismatch before Dev & Verify: session branch is '${expectedBranch}' ` +
-        `but workdir '${workdir}' is actually on '${actualBranch}'. ` +
-        `Refusing to write — no agent was run, no checkout was performed. ` +
-        `Use the workspace tool to switch to branch '${expectedBranch}' (or update the session branch) and retry.`,
-      workdir,
-      expectedBranch,
-      actualBranch,
-    }
   }
 
   // ============================================================================
@@ -1480,8 +1402,7 @@ export class SessionManager {
               const validated = await resolveAndValidateSourceBranch(wsPath, sourceBranch, projectDir)
               await runGit(wsPath, ['checkout', '-b', branch, validated])
             } else {
-              // Create branch from current HEAD
-              await runGit(wsPath, ['checkout', '-b', branch])
+              await checkoutBranchFromSharedSource(wsPath, branch)
             }
           } catch (innerErr) {
             throw new Error(
@@ -1562,7 +1483,11 @@ export class SessionManager {
         const createLockPromise = (async () => {
           const exists = await workspaceExists(project.name, target, project.workdir)
           if (!exists) {
-            await ensureWorkspace(project.workdir, target, project.name, branch, sourceBranch)
+            // Inherit the session's current branch so a fresh workspace does
+            // not silently drop it onto the clone's default (main/develop).
+            const inheritedBranch =
+              branch ?? (await getGitBranch(this.getEffectiveWorkdir(sessionId))) ?? session.branch ?? undefined
+            await ensureWorkspace(project.workdir, target, project.name, inheritedBranch, sourceBranch)
           } else if (branch) {
             await this.applyBranchIfNeeded(project.workdir, project.name, target, branch, sourceBranch)
           }

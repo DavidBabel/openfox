@@ -209,6 +209,22 @@ export function createBranch(cwd: string, name: string, sourceBranch?: string): 
   return runGit(cwd, args)
 }
 
+/**
+ * Check out a branch that is not present locally in a --shared clone.
+ * Shared clones expose the source repo's local branches as origin/* — prefer
+ * carrying the real branch (with its commits) over silently forking a fresh
+ * one from the current HEAD.
+ */
+export async function checkoutBranchFromSharedSource(wsPath: string, branch: string): Promise<void> {
+  const created = await runGit(wsPath, ['checkout', '-b', branch, `origin/${branch}`]).then(
+    () => true,
+    () => false,
+  )
+  if (!created) {
+    await runGit(wsPath, ['checkout', '-b', branch])
+  }
+}
+
 export interface WorkspaceInfo {
   path: string
   name: string
@@ -287,8 +303,7 @@ export async function ensureWorkspace(
           const sb = await resolveAndValidateSourceBranch(wsPath, sourceBranch, projectDir)
           await runGit(wsPath, ['checkout', '-b', branch, sb])
         } else {
-          // Create branch from current HEAD
-          await runGit(wsPath, ['checkout', '-b', branch])
+          await checkoutBranchFromSharedSource(wsPath, branch)
         }
       } catch (innerErr) {
         throw new Error(

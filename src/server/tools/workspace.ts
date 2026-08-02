@@ -18,7 +18,7 @@ export const workspaceTool = createTool<WorkspaceArgs>(
       description:
         'Manage workspaces for the current session. A workspace is a cloned copy of the project.\n\n' +
         'Use "switch" to move between workspaces. Target "original" for the project root, or a workspace name.\n' +
-        'If the workspace does not exist yet, it is created automatically.\n\n' +
+        "If the workspace does not exist yet, it is created automatically, inheriting the session's current branch.\n\n" +
         'You can also change the branch of the current workspace by calling switch with the current\n' +
         'workspace name and a branch parameter. The branch will be checked out without recreating\n' +
         'the workspace and without losing uncommitted changes.\n\n' +
