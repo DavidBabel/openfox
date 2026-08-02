@@ -1400,8 +1400,12 @@ describe('path-security', () => {
       expect(extractGitNoVerify('git push --no-verify origin main')).toBe(true)
     })
 
-    it('detects -n shorthand in git rebase', () => {
-      expect(extractGitNoVerify('git rebase -n HEAD~3')).toBe(true)
+    it('does not treat -n as --no-verify in git rebase (means --no-stat)', () => {
+      expect(extractGitNoVerify('git rebase -n HEAD~3')).toBe(false)
+    })
+
+    it('detects explicit --no-verify in git rebase', () => {
+      expect(extractGitNoVerify('git rebase --no-verify HEAD~3')).toBe(true)
     })
 
     it('does not detect --no-verify in non-git commands', () => {
@@ -1419,6 +1423,28 @@ describe('path-security', () => {
 
     it('detects -n flag in env-prefixed git commands', () => {
       expect(extractGitNoVerify("ENV=true git commit -n 'lol'")).toBe(true)
+    })
+
+    it('detects -n shorthand in git commit and git am', () => {
+      expect(extractGitNoVerify('git commit -n -m "skip hooks"')).toBe(true)
+      expect(extractGitNoVerify('git am -n *.patch')).toBe(true)
+    })
+
+    it('does not treat -n as --no-verify for subcommands where it means something else', () => {
+      expect(extractGitNoVerify('git grep -n "maxVisibleItems" 2d51cb87 -- web/src | head')).toBe(false)
+      expect(extractGitNoVerify('git log -n 5')).toBe(false)
+      expect(extractGitNoVerify('git show -n 3 --stat')).toBe(false)
+      expect(extractGitNoVerify('git push -n origin main')).toBe(false)
+      expect(extractGitNoVerify('git merge -n feature')).toBe(false)
+      expect(extractGitNoVerify('git fetch -n origin')).toBe(false)
+    })
+
+    it('does not trigger on inspection chains mixing pipes and git subcommands', () => {
+      expect(
+        extractGitNoVerify(
+          'echo "=== maxVisibleItems / virtualization new? ==="; git show 2d51cb87 --stat | grep -iE "virtualiz|display|chatfeed|messagelist|feed" ; git grep -n "maxVisibleItems" 2d51cb87 -- web/src | head; echo; echo "=== new setting keys in config.ts ==="; git show 2d51cb87 -- web/src/stores/config.ts | grep -E "^\\+" | grep -iE "setting|key:|name|nativeScrollbar|collapseLarge|deferHighlight|highlight|scrollbar" | head -20',
+        ),
+      ).toBe(false)
     })
   })
 
@@ -1510,6 +1536,26 @@ describe('path-security', () => {
 
       await new Promise<void>((resolve) => setTimeout(resolve, 50))
       expect(hasPendingPathConfirmation('call-normal')).toBe(false)
+      expect(onEvent).not.toHaveBeenCalled()
+      await expect(promise).resolves.toBeUndefined()
+    })
+
+    it('does not trigger confirmation for -n on non-hook subcommands', async () => {
+      const onEvent = vi.fn()
+
+      const promise = requestPathAccess(
+        [WORKDIR],
+        WORKDIR,
+        'session-grepen',
+        'call-grepen',
+        'run_command',
+        onEvent,
+        'dangerous',
+        'git grep -n "maxVisibleItems" 2d51cb87 -- web/src | head',
+      )
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 50))
+      expect(hasPendingPathConfirmation('call-grepen')).toBe(false)
       expect(onEvent).not.toHaveBeenCalled()
       await expect(promise).resolves.toBeUndefined()
     })

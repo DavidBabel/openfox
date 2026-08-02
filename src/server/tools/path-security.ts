@@ -534,6 +534,9 @@ export function extractDangerousPatterns(command: string): string[] {
   return dangerous
 }
 
+/** Git subcommands where `-n` is the documented shorthand for `--no-verify`. */
+const GIT_N_NO_VERIFY_SUBCOMMANDS = new Set(['commit', 'am'])
+
 export function extractGitNoVerify(command: string): boolean {
   const subCommands = command.split(/\s*(?:&&|\|\||\||;)\s*/)
   for (const sub of subCommands) {
@@ -542,9 +545,13 @@ export function extractGitNoVerify(command: string): boolean {
     const subCmd = parts[gitIndex + 1]
     if (gitIndex >= 0 && subCmd && !subCmd.startsWith('-')) {
       const gitArgs = parts.slice(gitIndex + 2)
-      if (gitArgs.some((a) => a === '--no-verify' || a === '-n')) {
-        return true
-      }
+      // Explicit --no-verify always counts: it bypasses hooks on any
+      // supporting subcommand (commit, am, rebase, merge, push, ...).
+      if (gitArgs.includes('--no-verify')) return true
+      // `-n` is only `--no-verify` for commit/am. Elsewhere git assigns it a
+      // harmless meaning (--dry-run, --no-stat, line numbers, commit-count
+      // limits, --no-tags, ...), so flagging it is a false positive.
+      if (GIT_N_NO_VERIFY_SUBCOMMANDS.has(subCmd) && gitArgs.includes('-n')) return true
     }
   }
   return false
