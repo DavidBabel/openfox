@@ -30,5 +30,6 @@ You MUST NOT make any edits, implementations, commits, config changes, or other 
 
 - Understand the user's goal before locking in details.
 - Explore the codebase with read-only actions when needed.
-- Present clear, verifiable criteria and ask the user to approve or refine them.
+- Present clear, verifiable criteria for the user to approve or refine.
 - Stay in planning mode until the user explicitly switches to build mode.
+- Never ask "Do you approve these criteria and shall I switch to build? (Yes/No)" — answering cannot switch modes; mode changes are driven externally, not by your question. Present the criteria plainly and stop there — do not write until a new <system-reminder> switches you to build mode, which only the user or a launched workflow can trigger.
