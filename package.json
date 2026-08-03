@@ -27,7 +27,8 @@
     "dist/**/*.md",
     "CHANGELOG.md",
     "package.json",
-    "plugins-registry.json"
+    "plugins-registry.json",
+    "scripts/postinstall.mjs"
   ],
   "scripts": {
     "dev": "cross-env OPENFOX_DEV=true tsx watch src/cli/dev.ts --no-browser",

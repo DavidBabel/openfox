@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.112 - 2026-08-03
+
+### Bug Fixes
+
+- **Updates install again** — the postinstall script is now bundled with the release, so `openfox update` no longer fails halfway with a missing file
+
 ## 2.0.111 - 2026-08-03
 
 ### Enhancements
