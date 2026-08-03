@@ -1893,6 +1893,10 @@ describe('extractAbsolutePathsFromCommand under Git Bash (win32)', () => {
 })
 
 describe('extractDangerousPatterns — Windows equivalents', () => {
+  beforeEach(() => {
+    mockPlatform('win32')
+  })
+
   it('flags recursive directory removal', () => {
     expect(extractDangerousPatterns('rd /s /q C:\\projet').length).toBeGreaterThan(0)
   })
@@ -1963,6 +1967,14 @@ describe('extractDangerousPatterns — Windows equivalents', () => {
 
   it('still flags `rm -rf ~/data` (Unix non-regression)', () => {
     expect(extractDangerousPatterns('rm -rf ~/data').length).toBeGreaterThan(0)
+  })
+})
+
+describe('extractDangerousPatterns — Unix scope', () => {
+  it('does not flag Windows commands on Unix', () => {
+    expect(extractDangerousPatterns('rd /s /q C:\\projet')).toEqual([])
+    expect(extractDangerousPatterns('format D:')).toEqual([])
+    expect(extractDangerousPatterns('Remove-Item -Recurse -Force C:\\x')).toEqual([])
   })
 })
 

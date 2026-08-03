@@ -234,7 +234,11 @@ const isWindows = () => process.platform === 'win32'
  */
 function usesPosixPaths(): boolean {
   if (process.platform !== 'win32') return true
-  return /^(?:ba|z|)sh(?:\.exe)?$/i.test(basename(getPlatformShell().command))
+  // Host basename() is POSIX on Unix: a Windows shell path like
+  // `C:\Program Files\Git\bin\bash.exe` has no `/` to split on, so the whole
+  // string survives as one segment and the regex never matches. Parse the
+  // shell's own (Windows) separator instead.
+  return /^(?:ba|z|)sh(?:\.exe)?$/i.test(win32.basename(getPlatformShell().command))
 }
 
 /**
@@ -560,10 +564,15 @@ const DANGEROUS_PATTERNS = [
   /mkfs\s/,
   /dd\s+if=/,
   /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;/,
-  // Windows equivalents (cmd.exe / PowerShell are case-insensitive).
-  // Switches are matched before the operand only: cmd also accepts them after
-  // it ("del *.log /s"), but scanning past the operand makes every command
-  // mentioning "del" or "format" a candidate, so that form is knowingly missed.
+]
+
+// Windows equivalents (cmd.exe / PowerShell are case-insensitive). Kept apart
+// from DANGEROUS_PATTERNS so they only run on Windows: on Unix they would flag
+// innocent searches for Windows syntax (e.g. `grep -r "format d:" docs`).
+// Switches are matched before the operand only: cmd also accepts them after
+// it ("del *.log /s"), but scanning past the operand makes every command
+// mentioning "del" or "format" a candidate, so that form is knowingly missed.
+const WINDOWS_DANGEROUS_PATTERNS = [
   /\b(?:rd|rmdir)\s+(?:\/[a-z]\s+)*\/s\b/i, // rd /s /q <dir>
   /\bdel\s+(?:\/[a-z]\s+)*\/s\b/i, // del /f /s /q <pattern>
   // The operand is a bare drive ("D:", "D:\"), never a file path — that is what
@@ -577,8 +586,9 @@ const DANGEROUS_PATTERNS = [
 ]
 
 export function extractDangerousPatterns(command: string): string[] {
+  const patterns = isWindows() ? [...DANGEROUS_PATTERNS, ...WINDOWS_DANGEROUS_PATTERNS] : DANGEROUS_PATTERNS
   const dangerous: string[] = []
-  for (const pattern of DANGEROUS_PATTERNS) {
+  for (const pattern of patterns) {
     if (pattern.test(command)) {
       dangerous.push(pattern.source)
     }
