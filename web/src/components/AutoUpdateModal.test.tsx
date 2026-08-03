@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 
+// React 19 requires this flag before act() can be used (repo convention).
+;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const mockAuthFetch = vi.fn()
 vi.mock('../lib/api', () => ({
   authFetch: (...args: unknown[]) => mockAuthFetch(...args),
@@ -61,17 +64,55 @@ function mockCheckAlways(current: string): void {
   })
 }
 
+function mockCheckService(isService: boolean): void {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ current: '2.0.110', latest: '2.0.111', isUpdateAvailable: true, isService }),
+  })
+}
+
+// Deferred variant of the update POST so tests can toggle the checkbox while
+// the update is still downloading, then resolve it.
+function mockUpdateDeferred(isService = true, version = '2.0.111'): { resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<unknown>((res) => {
+    resolve = () => res({ ok: true, json: () => Promise.resolve({ success: true, version, isService }) })
+  })
+  mockAuthFetch.mockImplementationOnce(() => promise)
+  return { resolve }
+}
+
 type ModalProps = {
   isOpen: boolean
   onClose: () => void
   versionInfo?: { current: string; latest: string } | null
 }
 
-function renderModal(props: Partial<ModalProps> = {}) {
+// Track created roots so afterEach can unmount them, stopping the progress-dots
+// interval and any in-flight async work from leaking outside act().
+const mountedRoots: Array<ReturnType<typeof createRoot>> = []
+
+// Drain the microtask queue so promise chains inside the component (the
+// open-time /check fetch, deferred update POSTs) settle deterministically
+// inside act(). Bounded — generous enough that a mount path with a few more
+// awaits still converges — and timer-mode agnostic (microtasks always run).
+async function drainMicrotasks(): Promise<void> {
+  for (let i = 0; i < 25; i++) {
+    await Promise.resolve()
+  }
+}
+
+function renderModal(
+  props: Partial<ModalProps> = {},
+): Promise<{ container: HTMLElement; root: ReturnType<typeof createRoot> }> {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
-  act(() => {
+  mountedRoots.push(root)
+  // Rendering is async so the open-time /check fetch (which drives the
+  // service-mode checkbox) settles inside act(), under both real and fake
+  // timers.
+  return act(async () => {
     root.render(
       <AutoUpdateModal
         isOpen={props.isOpen ?? true}
@@ -79,8 +120,9 @@ function renderModal(props: Partial<ModalProps> = {}) {
         versionInfo={props.versionInfo ?? VERSION_INFO}
       />,
     )
+    await drainMicrotasks()
+    return { container, root }
   })
-  return { container, root }
 }
 
 function findButton(label: string): HTMLButtonElement {
@@ -95,6 +137,18 @@ function clickButton(_container: HTMLElement, label: string): void {
   const btn = findButton(label)
   act(() => {
     btn.click()
+  })
+}
+
+function findCheckbox(): HTMLInputElement | null {
+  return document.querySelector('input[type="checkbox"]')
+}
+
+function clickCheckbox(): void {
+  const cb = findCheckbox()
+  if (!cb) throw new Error('Checkbox not found')
+  act(() => {
+    cb.click()
   })
 }
 
@@ -114,15 +168,19 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  for (const root of mountedRoots.splice(0)) {
+    act(() => root.unmount())
+  }
   vi.useRealTimers()
   document.body.innerHTML = ''
 })
 
 describe('AutoUpdateModal — restart-after-update flow', () => {
   it('service mode: update succeeds without auto-restart and shows Restart OpenFox now + Later', async () => {
+    mockCheckService(true)
     mockUpdateSuccess(true)
     const onClose = vi.fn()
-    const { container } = renderModal({ onClose })
+    const { container } = await renderModal({ onClose })
 
     clickButton(container, 'Update OpenFox')
     await act(async () => {
@@ -136,9 +194,10 @@ describe('AutoUpdateModal — restart-after-update flow', () => {
   })
 
   it('non-service mode: no restart button, manual instruction + Close preserved', async () => {
+    mockCheckService(false)
     mockUpdateSuccess(false)
     const onClose = vi.fn()
-    const { container } = renderModal({ onClose })
+    const { container } = await renderModal({ onClose })
 
     clickButton(container, 'Update OpenFox')
     await act(async () => {
@@ -162,7 +221,7 @@ describe('AutoUpdateModal — restart-after-update flow', () => {
     mockCheckCurrent('2.0.111', '2.0.111')
 
     const reloadMock = (window.location as unknown as { reload: () => void }).reload
-    const { container } = renderModal()
+    const { container } = await renderModal()
 
     clickButton(container, 'Update OpenFox')
     await act(async () => {
@@ -195,7 +254,7 @@ describe('AutoUpdateModal — restart-after-update flow', () => {
     mockCheckAlways('2.0.110')
 
     const reloadMock = (window.location as unknown as { reload: () => void }).reload
-    const { container } = renderModal()
+    const { container } = await renderModal()
 
     clickButton(container, 'Update OpenFox')
     await act(async () => {
@@ -219,7 +278,7 @@ describe('AutoUpdateModal — restart-after-update flow', () => {
     mockCheckAlways('2.0.110')
 
     const reloadMock = (window.location as unknown as { reload: () => void }).reload
-    const { container, root } = renderModal({ onClose: vi.fn() })
+    const { container, root } = await renderModal({ onClose: vi.fn() })
 
     clickButton(container, 'Update OpenFox')
     await act(async () => {
@@ -252,7 +311,7 @@ describe('AutoUpdateModal — restart-after-update flow', () => {
     mockRestartSuccess()
     mockCheckAlways('2.0.110')
 
-    const { container, root } = renderModal()
+    const { container, root } = await renderModal()
 
     clickButton(container, 'Update OpenFox')
     await act(async () => {
@@ -277,5 +336,137 @@ describe('AutoUpdateModal — restart-after-update flow', () => {
     expect(mockFetch.mock.calls.length).toBe(callsBeforeUnmount)
 
     vi.useRealTimers()
+  })
+
+  it('service mode: renders the auto-restart checkbox, default unchecked', async () => {
+    mockCheckService(true)
+    await renderModal()
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    const cb = findCheckbox()
+    expect(cb).toBeTruthy()
+    expect(cb!.checked).toBe(false)
+    expect(bodyText()).toContain('Auto-restart once update is done')
+  })
+
+  it('non-service mode: renders no auto-restart checkbox', async () => {
+    mockCheckService(false)
+    await renderModal()
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(findCheckbox()).toBeNull()
+    expect(bodyText()).not.toContain('Auto-restart once update is done')
+  })
+
+  it('checked before update: auto-restarts after the update finishes, no click needed, and marks the update applied before reload', async () => {
+    vi.useFakeTimers()
+    mockCheckService(true)
+    mockUpdateSuccess(true)
+    mockRestartSuccess()
+    mockCheckCurrent('2.0.110')
+    mockCheckRejected()
+    mockCheckCurrent('2.0.111', '2.0.111')
+
+    const reloadMock = (window.location as unknown as { reload: () => void }).reload
+    const { container } = await renderModal()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    clickCheckbox()
+    clickButton(container, 'Update OpenFox')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    // Went straight to restarting — no "Restart OpenFox now" click required.
+    expect(bodyText()).toContain('Restarting')
+    expect(bodyText()).not.toContain('Restart OpenFox now')
+    expect(mockAuthFetch.mock.calls.map((c) => c[0])).toContain('/api/auto-update/restart')
+
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000)
+      })
+    }
+
+    expect(reloadMock).toHaveBeenCalledTimes(1)
+    // Truthful announcement: the applied-version flags are set only at reload.
+    expect(localStorage.getItem('update_pending')).toBe('true')
+    expect(localStorage.getItem('openfox_updated_to')).toBe('2.0.111')
+
+    vi.useRealTimers()
+  })
+
+  it('checkbox stays visible while updating and a mid-update toggle is honored (live read)', async () => {
+    vi.useFakeTimers()
+    mockCheckService(true)
+    const deferred = mockUpdateDeferred()
+    mockRestartSuccess()
+    mockCheckCurrent('2.0.110')
+    mockCheckRejected()
+    mockCheckCurrent('2.0.111', '2.0.111')
+
+    const reloadMock = (window.location as unknown as { reload: () => void }).reload
+    const { container } = await renderModal()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    clickButton(container, 'Update OpenFox')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    // The download is in flight; the checkbox must still be there and live.
+    expect(bodyText()).toContain('Updating')
+    expect(findCheckbox()).toBeTruthy()
+
+    clickCheckbox()
+    await act(async () => {
+      deferred.resolve()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(mockAuthFetch.mock.calls.map((c) => c[0])).toContain('/api/auto-update/restart')
+    expect(bodyText()).toContain('Restarting')
+
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000)
+      })
+    }
+
+    expect(reloadMock).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem('openfox_updated_to')).toBe('2.0.111')
+
+    vi.useRealTimers()
+  })
+
+  it('choosing Later leaves the update unmarked (no false success banner)', async () => {
+    mockCheckService(true)
+    mockUpdateSuccess(true)
+    const { container } = await renderModal({ onClose: vi.fn() })
+
+    clickButton(container, 'Update OpenFox')
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(bodyText()).toContain('Restart OpenFox now')
+    clickButton(container, 'Later')
+
+    expect(localStorage.getItem('update_pending')).toBeNull()
+    expect(localStorage.getItem('openfox_updated_to')).toBeNull()
   })
 })
