@@ -23,6 +23,8 @@ import {
   getSession as dbGetSession,
   listSessions as dbListSessions,
   listSessionsByProject as dbListSessionsByProject,
+  listSessionsLimited as dbListSessionsLimited,
+  listHomeSessions as dbListHomeSessions,
   deleteSession as dbDeleteSession,
   updateSessionMetadata,
   updateSessionProvider,
@@ -382,6 +384,14 @@ export class SessionManager {
   }
 
   /**
+   * Lightweight homepage list: the N most recently updated sessions per
+   * project, summaries only (no prompt extraction, no snapshot parsing).
+   */
+  listHomeSessions(sessionsPerProject = 5): SessionSummary[] {
+    return dbListHomeSessions(sessionsPerProject)
+  }
+
+  /**
    * List sessions for a project with pagination.
    */
   listSessionsByProject(projectId: string, limit = 20, offset = 0): { sessions: SessionSummary[]; hasMore: boolean } {
@@ -390,6 +400,15 @@ export class SessionManager {
       return { sessions: [], hasMore: false }
     }
     return dbListSessionsByProject(projectId, limit, offset)
+  }
+
+  /**
+   * Most recently updated sessions across all projects, bounded with
+   * pagination. Used by the legacy global list refresh when a limit is
+   * explicitly requested (the homepage itself uses listHomeSessions).
+   */
+  listSessionsLimited(limit = 20, offset = 0): { sessions: SessionSummary[]; hasMore: boolean } {
+    return dbListSessionsLimited(limit, offset)
   }
 
   /**

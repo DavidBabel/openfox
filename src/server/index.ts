@@ -650,14 +650,23 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { getPendingConfirmationsBySession } = await import('./tools/path-security.js')
 
     const projectId = req.query['projectId'] as string | undefined
-    const limit = Math.min(parseInt(req.query['limit'] as string) || 20, 100)
+    const rawLimit = req.query['limit'] as string | undefined
     const offset = parseInt(req.query['offset'] as string) || 0
 
     let sessions: ReturnType<typeof sessionManager.listSessions>
     let hasMore = false
 
     if (projectId) {
+      const limit = Math.min(parseInt(rawLimit || '20') || 20, 100)
       const result = sessionManager.listSessionsByProject(projectId, limit, offset)
+      sessions = result.sessions
+      hasMore = result.hasMore
+    } else if (rawLimit !== undefined) {
+      // An explicit ?limit=N bounds the global list (recent-first, with
+      // prompts). No limit param means "everything" — that is the on-demand
+      // full corpus powering search, loaded only when the user searches.
+      const limit = Math.min(parseInt(rawLimit || '20') || 20, 100)
+      const result = sessionManager.listSessionsLimited(limit, offset)
       sessions = result.sessions
       hasMore = result.hasMore
     } else {
@@ -689,6 +698,16 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     }
 
     res.json({ sessions: sessionsWithPrompts, hasMore, pendingConfirmationsBySession })
+  })
+
+  /**
+   * Lightweight homepage list. Returns only the N most recently updated
+   * sessions per project (summaries only — no recentUserPrompts, no pending
+   * confirmations), so a fresh load never parses session snapshots.
+   * Registered before /api/sessions/:id so 'home' is not treated as an id.
+   */
+  app.get('/api/sessions/home', (_req, res) => {
+    res.json({ sessions: sessionManager.listHomeSessions() })
   })
 
   app.post('/api/sessions', async (req, res) => {

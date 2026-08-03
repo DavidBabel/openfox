@@ -230,18 +230,24 @@ export function handleServerMessage(
         sessions: state.sessions.some((s) => s.id === payload.session.id)
           ? state.sessions.map((s) => (s.id === payload.session.id ? { ...s, ...payload.session } : s))
           : [payload.session, ...state.sessions],
+        // the search corpus is stale now — refetch on the next search
+        searchSessions: null,
       }))
       break
     }
 
     case 'session.deleted': {
       const payload = message.payload as { sessionId: string }
-      set((state) => ({ unreadSessionIds: removeUnreadSessionId(state.unreadSessionIds, payload.sessionId) }))
+      set((state) => ({
+        unreadSessionIds: removeUnreadSessionId(state.unreadSessionIds, payload.sessionId),
+        searchSessions: null,
+      }))
       get().listSessions()
       break
     }
 
     case 'session.deletedAll': {
+      set({ searchSessions: null })
       get().listSessions()
       break
     }

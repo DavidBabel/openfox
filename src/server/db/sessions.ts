@@ -323,6 +323,64 @@ export function listSessionsByProject(
   limit = 20,
   offset = 0,
 ): { sessions: SessionSummary[]; hasMore: boolean } {
+  return listSessionsPaged(projectId, limit, offset)
+}
+
+/**
+ * The most recently updated sessions across ALL projects, bounded (used by the
+ * legacy global list refresh — the homepage itself uses listHomeSessions).
+ */
+export function listSessionsLimited(limit = 20, offset = 0): { sessions: SessionSummary[]; hasMore: boolean } {
+  return listSessionsPaged(null, limit, offset)
+}
+
+function listSessionsPaged(
+  projectId: string | null,
+  limit: number,
+  offset: number,
+): { sessions: SessionSummary[]; hasMore: boolean } {
+  const db = getDatabase()
+  const where = projectId ? 'WHERE s.project_id = ?' : ''
+
+  const rows = db
+    .prepare(
+      `
+    SELECT
+      s.id,
+      s.project_id,
+      s.workdir,
+      s.workspace,
+      s.branch,
+      s.mode,
+      s.workflow_phase,
+      s.is_running,
+      s.created_at,
+      s.updated_at,
+      s.title,
+      s.provider_id,
+      s.provider_model,
+      s.message_count
+    FROM sessions s
+    ${where}
+    ORDER BY s.updated_at DESC
+    LIMIT ? OFFSET ?
+  `,
+    )
+    .all(...(projectId ? [projectId] : []), limit + 1, offset) as SessionSummaryRow[]
+
+  const hasMore = rows.length > limit
+  const sessions = rows.slice(0, limit).map(mapSessionSummaryRow)
+
+  return { sessions, hasMore }
+}
+
+/**
+ * The lightweight homepage list: the N most recently updated sessions per
+ * project, summaries only. Deliberately does NOT load recent user prompts —
+ * that requires parsing each session's snapshot, which is the slow path the
+ * homepage must avoid. Returns a flat list ordered by last activity.
+ */
+export function listHomeSessions(sessionsPerProject = 5): SessionSummary[] {
   const db = getDatabase()
 
   const rows = db
@@ -344,17 +402,20 @@ export function listSessionsByProject(
       s.provider_model,
       s.message_count
     FROM sessions s
-    WHERE s.project_id = ?
     ORDER BY s.updated_at DESC
-    LIMIT ? OFFSET ?
   `,
     )
-    .all(projectId, limit + 1, offset) as SessionSummaryRow[]
+    .all() as SessionSummaryRow[]
 
-  const hasMore = rows.length > limit
-  const sessions = rows.slice(0, limit).map(mapSessionSummaryRow)
-
-  return { sessions, hasMore }
+  const seen = new Map<string, number>()
+  const result: SessionSummary[] = []
+  for (const row of rows) {
+    const count = seen.get(row.project_id) ?? 0
+    if (count >= sessionsPerProject) continue
+    seen.set(row.project_id, count + 1)
+    result.push(mapSessionSummaryRow(row))
+  }
+  return result
 }
 
 export function updateSessionWorkdir(

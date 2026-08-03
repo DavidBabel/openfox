@@ -39,6 +39,7 @@ export interface SessionState {
   showPasswordModal: boolean
   passwordModalRetry: boolean
   sessions: SessionSummary[]
+  searchSessions: SessionSummary[] | null
   currentSession: Session | null
   unreadSessionIds: string[]
   messages: Message[]
@@ -75,6 +76,8 @@ export interface SessionState {
   createSession: (projectId: string, title?: string) => Promise<Session | null>
   loadSession: (sessionId: string, force?: boolean) => Promise<void>
   listSessions: (projectId?: string, limit?: number) => Promise<void>
+  listHomeSessions: () => Promise<void>
+  ensureFullSessionList: () => Promise<void>
   deleteSession: (sessionId: string) => Promise<boolean>
   renameSession: (sessionId: string, title: string) => Promise<boolean>
   deleteAllSessions: (projectId: string) => Promise<boolean>

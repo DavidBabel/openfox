@@ -41,6 +41,7 @@
     "test:unit": "vitest run --reporter=dot --silent=passed-only",
     "test:e2e": "vitest run --reporter=dot --silent=passed-only --config e2e/vitest.config.ts",
     "test:playwright": "playwright test --config=e2e-playwright/playwright.config.ts",
+    "optimize:snapshots": "tsx scripts/optimize-snapshots.ts",
     "test:playwright:ui": "playwright test --config=e2e-playwright/playwright.config.ts --ui",
     "test:playwright:headed": "playwright test --config=e2e-playwright/playwright.config.ts --headed",
     "test:cov": "vitest run --reporter=dot --silent=passed-only --coverage && vitest run --reporter=dot --silent=passed-only --config e2e/vitest.config.ts --coverage",
