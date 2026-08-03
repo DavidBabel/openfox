@@ -320,4 +320,30 @@ describe('AskUserCard', () => {
     fireEvent.keyDown(textarea, { key: 'Escape' })
     expect(answerQuestion).toHaveBeenCalledWith('call-1', '', true)
   })
+
+  it('renders duplicate-value options without duplicate React key warnings', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      useSessionStore.setState({
+        pendingQuestions: [
+          {
+            callId: 'call-1',
+            question: 'Pick:',
+            type: 'choice',
+            options: [
+              { value: 'dup', label: 'First' },
+              { value: 'dup', label: 'Second' },
+            ],
+          },
+        ],
+      })
+      const tc = makeToolCall({ arguments: { question: 'Pick:' } })
+      const container = render(<AskUserCard toolCall={tc} />)
+      expect(container.textContent).toContain('First')
+      expect(container.textContent).toContain('Second')
+      expect(errorSpy).not.toHaveBeenCalled()
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
 })

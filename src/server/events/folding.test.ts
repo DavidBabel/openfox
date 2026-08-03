@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { StoredEvent, SnapshotMessage } from './types.js'
 import type { MessageStats } from '../../shared/types.js'
+import type { ChoiceOption } from '../../shared/protocol.js'
 import {
   buildContextMessagesFromEventHistory,
   buildContextMessagesFromStoredEvents,
@@ -2843,5 +2844,92 @@ describe('appendSnapshotMessageContext builds LLM context from result.output onl
     expect(toolMessages).toHaveLength(1)
     expect(toolMessages[0]!.content).toBe('the canonical result')
     expect(JSON.stringify(context)).not.toContain('secret raw stream')
+  })
+})
+
+describe('foldSessionState — chat.ask_user pendingUserInput option normalization', () => {
+  const windowId = 'window-1'
+
+  it('normalizes legacy string[] options to canonical ChoiceOption[] on fold', () => {
+    const events: StoredEvent[] = [
+      {
+        ...baseEvent,
+        type: 'chat.ask_user',
+        data: {
+          callId: 'call-1',
+          question: 'Pick:',
+          type: 'choice',
+          options: ['A', 'B', 'C'] as unknown as ChoiceOption[],
+        },
+      },
+    ]
+    const state = foldSessionState(events, windowId, 200000)
+    expect(state.pendingUserInput).toEqual({
+      callId: 'call-1',
+      question: 'Pick:',
+      type: 'choice',
+      options: [
+        { value: 'A', label: 'A' },
+        { value: 'B', label: 'B' },
+        { value: 'C', label: 'C' },
+      ],
+    })
+  })
+
+  it('normalizes legacy {label, description} options to canonical ChoiceOption[] on fold', () => {
+    const events: StoredEvent[] = [
+      {
+        ...baseEvent,
+        type: 'chat.ask_user',
+        data: {
+          callId: 'call-1',
+          question: 'Pick:',
+          type: 'choice',
+          options: [
+            { label: 'Oui', description: 'Accepter' },
+            { label: 'Non', description: 'Refuser' },
+          ] as unknown as ChoiceOption[],
+        },
+      },
+    ]
+    const state = foldSessionState(events, windowId, 200000)
+    expect(state.pendingUserInput?.options).toEqual([
+      { value: 'Oui', label: 'Oui', description: 'Accepter' },
+      { value: 'Non', label: 'Non', description: 'Refuser' },
+    ])
+  })
+
+  it('keeps canonical {value, label, description} options verbatim on fold', () => {
+    const events: StoredEvent[] = [
+      {
+        ...baseEvent,
+        type: 'chat.ask_user',
+        data: {
+          callId: 'call-1',
+          question: 'Pick:',
+          type: 'choice',
+          options: [{ value: 'yes-v', label: 'Oui', description: 'Accepter' }],
+        },
+      },
+    ]
+    const state = foldSessionState(events, windowId, 200000)
+    expect(state.pendingUserInput?.options).toEqual([{ value: 'yes-v', label: 'Oui', description: 'Accepter' }])
+  })
+
+  it('leaves non-choice question types untouched', () => {
+    const events: StoredEvent[] = [
+      {
+        ...baseEvent,
+        type: 'chat.ask_user',
+        data: { callId: 'call-1', question: 'Type your answer:', type: 'text', options: undefined },
+      },
+    ]
+    const state = foldSessionState(events, windowId, 200000)
+    expect(state.pendingUserInput).toEqual({
+      callId: 'call-1',
+      question: 'Type your answer:',
+      type: 'text',
+      options: undefined,
+    })
   })
 })

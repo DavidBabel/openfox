@@ -22,6 +22,7 @@ import {
   foldTurnEventsToSnapshotMessagesFromInitial,
   applyTurnEventsToSnapshotMessages,
 } from './fold-messages.js'
+import { normalizeAskOptions } from '../tools/ask.js'
 
 function getTimestamp(event: EventLike): number {
   return event.timestamp ?? Date.now()
@@ -318,7 +319,12 @@ export function foldSessionState(
           type?: 'text' | 'confirm' | 'choice'
           options?: import('../../shared/protocol.js').ChoiceOption[]
         }
-        pendingUserInput = { callId: data.callId, question: data.question, type: data.type, options: data.options }
+        pendingUserInput = {
+          callId: data.callId,
+          question: data.question,
+          type: data.type,
+          options: normalizeAskOptions(data.options),
+        }
         break
       }
       case 'task.completed': {

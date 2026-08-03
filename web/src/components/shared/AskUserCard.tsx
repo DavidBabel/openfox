@@ -164,9 +164,9 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
             ) : type === 'choice' && choiceOptions !== null && choiceOptions.length > 0 ? (
               <>
                 <div className="flex flex-col gap-1.5">
-                  {choiceOptions.map((opt) => (
+                  {choiceOptions.map((opt, index) => (
                     <button
-                      key={opt.value}
+                      key={index}
                       onClick={() => handleOptionSelect(opt.value)}
                       className={`${btnBase} text-left w-full bg-bg-tertiary hover:bg-accent-primary/20 text-text-primary border border-border hover:border-accent-primary/50`}
                     >

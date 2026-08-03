@@ -359,10 +359,13 @@ describe('Ask User Tool', () => {
       expect((askUserEvent.payload as { type: string }).type).toBe('choice')
       const options = (askUserEvent.payload as { options: ChoiceOption[] }).options
       expect(options).toEqual([
-        { value: 'Option A', label: 'Option A', description: undefined },
-        { value: 'Option B', label: 'Option B', description: undefined },
-        { value: 'Option C', label: 'Option C', description: undefined },
+        { value: 'Option A', label: 'Option A' },
+        { value: 'Option B', label: 'Option B' },
+        { value: 'Option C', label: 'Option C' },
       ])
+      for (const opt of options) {
+        expect('description' in opt).toBe(false)
+      }
 
       const callId = (askUserEvent.payload as { callId: string }).callId
       await client.send('ask.answer', { callId, answer: 'Option A' })
