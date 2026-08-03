@@ -1,6 +1,7 @@
 import type { ToolResult } from '../../shared/types.js'
 import type { Tool, ToolContext } from './types.js'
 import type { PendingQuestionPayload, ChoiceOption } from '../../shared/protocol.js'
+import { normalizeAskOptions } from '../../shared/ask-options.js'
 import { createDeferred } from '../utils/async.js'
 
 // Store pending questions by call ID
@@ -16,67 +17,6 @@ const pendingQuestions = new Map<
     options: ChoiceOption[] | undefined
   }
 >()
-
-/**
- * Coerce whatever the LLM / legacy storage handed us into the canonical
- * `ChoiceOption[]` shape. Non-lossy: `description` is preserved when present.
- *
- * Accepted input shapes (none of them leak raw through):
- *   - `undefined` / `null`                                 → `undefined`
- *   - `string[]`                                           → `{value:s,label:s}` per entry
- *   - `Array<{label, description?}>`                       → `{value:label,label,description}`
- *   - `Array<{value, label, description?}>`                → preserve all three fields
- *   - Anything else (numbers, booleans, malformed objects) → silently dropped
- *
- * This is the SINGLE upstream normalization point. Downstream consumers
- * (chat.ask_user event, fold-state replay, session.state.pendingQuestions,
- * REST /api/sessions/:id) all trust the canonical `ChoiceOption[]` shape from
- * here. The web client `AskUserCard` ALSO accepts `string[]` and
- * `{label,description}[]` for backwards-compatibility with sessions/events
- * persisted by pre-fix builds — see `web/src/components/shared/AskUserCard.tsx`.
- *
- * Returns `undefined` when nothing usable remains (callers fall through to
- * free-text input).
- */
-export function normalizeAskOptions(raw: unknown): ChoiceOption[] | undefined {
-  if (raw == null) return undefined
-  if (!Array.isArray(raw)) return undefined
-
-  const out: ChoiceOption[] = []
-  for (const item of raw) {
-    if (typeof item === 'string') {
-      const trimmed = item.trim()
-      if (trimmed.length > 0) {
-        out.push({ value: trimmed, label: trimmed })
-      }
-      continue
-    }
-    if (item != null && typeof item === 'object') {
-      const obj = item as Record<string, unknown>
-      const labelRaw = obj['label']
-      const valueRaw = obj['value']
-      // A non-empty string label is the minimum requirement for a usable option.
-      if (typeof labelRaw === 'string' && labelRaw.trim().length > 0) {
-        const label = labelRaw.trim()
-        // Prefer an explicit `value` (LLM may emit it); otherwise fall back to label.
-        const value =
-          typeof valueRaw === 'string' && valueRaw.length > 0 ? valueRaw : label
-        const descRaw = obj['description']
-        const opt: ChoiceOption = {
-          value,
-          label,
-        }
-        if (typeof descRaw === 'string' && descRaw.length > 0) {
-          opt.description = descRaw
-        }
-        out.push(opt)
-      }
-      // Malformed objects (no usable string label) are silently dropped.
-    }
-    // Other primitives (numbers, booleans, null, undefined) are dropped.
-  }
-  return out.length > 0 ? out : undefined
-}
 
 export const askUserTool: Tool = {
   name: 'ask_user',

@@ -408,7 +408,7 @@ export function createQueueStateMessage(messages: QueuedMessage[]): ServerMessag
 
 import type { StoredEvent, TurnEvent } from '../events/types.js'
 import { toClientSession } from '../session/client-session.js'
-import { normalizeAskOptions } from '../tools/ask.js'
+import { normalizeAskOptions } from '../../shared/ask-options.js'
 
 /**
  * Convert a StoredEvent from EventStore to a ServerMessage for WebSocket.

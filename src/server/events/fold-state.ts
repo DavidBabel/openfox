@@ -22,7 +22,7 @@ import {
   foldTurnEventsToSnapshotMessagesFromInitial,
   applyTurnEventsToSnapshotMessages,
 } from './fold-messages.js'
-import { normalizeAskOptions } from '../tools/ask.js'
+import { normalizeAskOptions } from '../../shared/ask-options.js'
 
 function getTimestamp(event: EventLike): number {
   return event.timestamp ?? Date.now()

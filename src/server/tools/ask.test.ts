@@ -7,7 +7,6 @@ import {
   hasPendingQuestion,
   provideAnswer,
   getPendingQuestionsForSession,
-  normalizeAskOptions,
 } from './ask.js'
 
 describe('ask_user tool', () => {
@@ -354,82 +353,5 @@ describe('ask_user tool', () => {
 
     provideAnswer('call-list-1', 'React')
     expect(getPendingQuestionsForSession('session-list').length).toBe(0)
-  })
-})
-
-describe('normalizeAskOptions', () => {
-  it('returns undefined for null/undefined input', () => {
-    expect(normalizeAskOptions(undefined)).toBeUndefined()
-    expect(normalizeAskOptions(null)).toBeUndefined()
-  })
-
-  it('returns undefined for non-array input (string, number, plain object)', () => {
-    // None of these are valid for the protocol contract — we always
-    // produce `undefined`, never an object, to avoid crashing the renderer.
-    expect(normalizeAskOptions('A, B')).toBeUndefined()
-    expect(normalizeAskOptions(42)).toBeUndefined()
-    expect(normalizeAskOptions({ label: 'A' })).toBeUndefined()
-  })
-
-  it('trims string entries and drops empty ones', () => {
-    expect(normalizeAskOptions([' A ', '', 'B', '   '])).toEqual([
-      { value: 'A', label: 'A' },
-      { value: 'B', label: 'B' },
-    ])
-  })
-
-  it('preserves {label, description} as canonical {value, label, description}', () => {
-    expect(
-      normalizeAskOptions([
-        { label: 'Continuer', description: 'Reprendre le flux principal' },
-        { label: 'Annuler', description: 'Stopper ici' },
-      ]),
-    ).toEqual([
-      { value: 'Continuer', label: 'Continuer', description: 'Reprendre le flux principal' },
-      { value: 'Annuler', label: 'Annuler', description: 'Stopper ici' },
-    ])
-  })
-
-  it('preserves {value, label, description} verbatim', () => {
-    expect(
-      normalizeAskOptions([
-        { value: 'yes-v', label: 'Oui', description: 'Yes' },
-        { value: 'no-v', label: 'Non', description: 'No' },
-      ]),
-    ).toEqual([
-      { value: 'yes-v', label: 'Oui', description: 'Yes' },
-      { value: 'no-v', label: 'Non', description: 'No' },
-    ])
-  })
-
-  it('drops malformed entries silently and never leaks raw objects', () => {
-    const result = normalizeAskOptions([
-      null,
-      undefined,
-      42,
-      true,
-      { label: 'OK' },
-      { label: '' },
-      { description: 'no label here' },
-      { label: 123 }, // non-string label → dropped
-      'legacy-string-entry',
-    ] as unknown as unknown[])
-    expect(result).toEqual([
-      { value: 'OK', label: 'OK' },
-      { value: 'legacy-string-entry', label: 'legacy-string-entry' },
-    ])
-    // Every emitted entry must be a structured object — never a raw string
-    // or array (would crash React when rendered as a child).
-    for (const item of result ?? []) {
-      expect(typeof item).toBe('object')
-      expect(item).not.toBeNull()
-      expect(typeof (item as { value: unknown }).value).toBe('string')
-    }
-  })
-
-  it('returns undefined when every entry is malformed', () => {
-    expect(
-      normalizeAskOptions([null, undefined, 42, { label: '' }, { foo: 'bar' }] as unknown as unknown[]),
-    ).toBeUndefined()
   })
 })

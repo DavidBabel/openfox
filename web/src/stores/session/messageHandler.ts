@@ -646,7 +646,7 @@ export function handleServerMessage(
       }
       // Server normalizes to ChoiceOption[] at the ask_user boundary and
       // persists/relays that exact shape — see ChatAskUserPayload in
-      // shared/protocol.ts and normalizeAskOptions in src/server/tools/ask.ts.
+      // shared/protocol.ts and normalizeAskOptions in src/shared/ask-options.ts.
       // This handler trusts the wire contract and forwards the options as-is
       // into PendingQuestion so reload parity is preserved end-to-end.
       const payload = message.payload as ChatAskUserPayload

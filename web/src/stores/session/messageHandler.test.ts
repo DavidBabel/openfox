@@ -396,7 +396,7 @@ describe('workflow.execution_changed handler', () => {
 // chat.ask_user handler — lossless ChoiceOption[] propagation
 // ---------------------------------------------------------------------------
 // The server normalizes ask_user options to ChoiceOption[] at the boundary
-// (see src/server/tools/ask.ts normalizeAskOptions) and the WS replay path
+// (see src/shared/ask-options.ts normalizeAskOptions) and the WS replay path
 // keeps that contract (see src/server/ws/protocol.ts storedEventToServerMessage).
 // The web handler must therefore trust the wire contract and forward the
 // payload as-is into PendingQuestion, never accidentally narrowing it back
@@ -466,7 +466,10 @@ describe('chat.ask_user handler', () => {
         callId: 'call-1',
         question: 'Pick:',
         type: 'choice',
-        options: [{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }],
+        options: [
+          { value: 'A', label: 'A' },
+          { value: 'B', label: 'B' },
+        ],
       },
     } as any)
 
