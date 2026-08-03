@@ -11,6 +11,7 @@ import { useSessionStore } from '../../stores/session'
 import { useAgentsStore, getAgentColor } from '../../stores/agents'
 import { BranchIcon, CopyIcon, InfoIcon, WarningSmallIcon } from '../shared/icons'
 import { forkSession } from '../../lib/api.js'
+import { deriveToolCallStatus } from '../../lib/toolStatus'
 import { useLocation } from 'wouter'
 import { formatTime } from '../../lib/format-stats'
 import { copyToClipboard } from '../../lib/clipboard.js'
@@ -227,9 +228,10 @@ export const AssistantMessage = memo(function AssistantMessage({
                 return <TodoListDisplay key={i} todos={todos} />
               }
 
-              // Determine status - check for interrupted marker in output
-              const isInterrupted = result?.output?.includes('[interrupted by user]')
-              const status = result ? (isInterrupted ? 'interrupted' : result.success ? 'success' : 'error') : 'pending'
+              // Determine status from the result — a successful read whose
+              // content merely mentions the "[interrupted by user]" marker
+              // text is NOT an interrupted run (see deriveToolCallStatus).
+              const status = deriveToolCallStatus(result)
 
               // Default: standard tool call display
               return (
