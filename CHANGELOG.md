@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.0.111 - 2026-08-03
+
+### Enhancements
+
+- **OAuth login for MCP servers** — servers that require OAuth authorization now connect through a browser-based login flow instead of failing
+- **Manual model entry in the provider setup** — if a provider exposes no model list, type the model name directly instead of hitting a dead-end "No models found"
+- **You choose when to restart after an update** — updates download first and restart on your OK; service installs can opt into automatic restart
+- **Homepage loads faster** — the session list shows the five most recent per project up front and fills in the rest lazily
+- **Leaner session storage** — finished tool-call streaming buffers are dropped from snapshots and stale backups auto-prune after 10 days
+
+### Bug Fixes
+
+- **Tool calls no longer misread as interrupted** — an output that merely contains the interrupt marker text now shows as successful
+- **Multi-statement shell commands keep their tails** — output is no longer cut at the first line for compound commands
+- **Windows paths shorten to names again** — workspace and file names show their basename instead of the full path
+- **Auto-compaction honors configured thresholds** — the internal cap is raised from 85%, so thresholds up to 95% work as set
+- **Windows path-safety gaps closed** — dangerous commands outside the workdir are confirmed again in edge cases, including under Git Bash
+- **Choice options survive reloads** — structured choices stay stable across page refreshes
+
 ## 2.0.110 - 2026-08-02
 
 ### Bug Fixes
