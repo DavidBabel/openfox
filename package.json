@@ -62,10 +62,11 @@
     "check": "npm run typecheck && npm run lint && npm run format && npm run duplicate",
     "patch": "cross-env HUSKY=0 npm version patch",
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
-    "prepublishOnly": "npm run build && npm run test:publish:e2e",
+    "prepublishOnly": "npm run build && npm run verify:pack && npm run test:publish:e2e",
     "prepare": "husky",
     "postinstall": "node scripts/postinstall.mjs",
-    "test:publish:e2e": "tsx scripts/run-publish-e2e.ts"
+    "test:publish:e2e": "tsx scripts/run-publish-e2e.ts",
+    "verify:pack": "tsx scripts/verify-pack.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
