@@ -197,7 +197,7 @@ export const AssistantMessage = memo(function AssistantMessage({
 
             case 'text':
               return (
-                <div key={i} className="prose prose-sm prose-invert max-w-none">
+                <div key={i} className="prose prose-sm prose-invert max-w-none feed-item">
                   <Markdown content={element.content} isStreaming={message.isStreaming} />
                 </div>
               )
@@ -270,7 +270,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               const formatSpeed = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n.toFixed(1))
 
               return (
-                <div key={i} className="flex items-center justify-center gap-1.5 text-[10px] text-text-muted mt-3">
+                <div key={i} className="flex items-center justify-center gap-1.5 text-[10px] text-text-muted">
                   <span className="flex-1 h-px bg-border" />
                   <span className="text-text-secondary">{shortModel}</span>
                   <span className="text-text-muted">·</span>
