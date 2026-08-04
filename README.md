@@ -77,6 +77,7 @@ openfox provider remove   # Remove provider
 
 - **Plan → Builder Workflow**: Interactive task breakdown followed by autonomous implementation
 - **Contract-Driven Execution**: Acceptance criteria serve as immutable contract
+- **Workflows**: Declarative multi-step pipelines (agent turns, sub-agents, shell commands, user gates) with conditional transitions. File format and authoring reference: [docs/WORKFLOWS.md](docs/WORKFLOWS.md)
 - **Iterative Verification**: Agent loops until all criteria pass
 - **LSP Integration**: Immediate feedback on code validity
 - **Real-Time Metrics**: Prefill time, generation speed, context usage
