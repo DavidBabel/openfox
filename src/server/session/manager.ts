@@ -987,21 +987,25 @@ export class SessionManager {
   /**
    * Set current context size (for token tracking).
    * Emits a context.state event with the real promptTokens from the LLM.
+   * Stores promptTokens + completionTokens so the tracked size reflects the
+   * true context occupancy — the last call's output is re-fed into the next
+   * request as an assistant message, so it must count toward the budget.
    * maxTokens comes from providerManager.getCurrentModelContext() - the currently selected model's limit.
    */
-  setCurrentContextSize(sessionId: string, promptTokens: number, subAgentId?: string): void {
+  setCurrentContextSize(sessionId: string, promptTokens: number, completionTokens = 0, subAgentId?: string): void {
     const state = getSessionState(sessionId, this.providerManager.getCurrentModelContext())
     const maxTokens = this.providerManager.getCurrentModelContext()
+    const currentTokens = promptTokens + completionTokens
     const compactionCount = state?.contextState.compactionCount ?? 0
     const dynamicContextChanged = this.getDynamicContextChanged(sessionId)
 
     emitContextState(
       sessionId,
-      promptTokens,
+      currentTokens,
       maxTokens,
       compactionCount,
-      isInDangerZone(promptTokens, maxTokens),
-      canCompact(promptTokens, maxTokens),
+      isInDangerZone(currentTokens, maxTokens),
+      canCompact(currentTokens, maxTokens),
       subAgentId,
       dynamicContextChanged,
     )
