@@ -4,7 +4,7 @@ import { ScrollArea } from '../shared/ScrollArea'
 import type { ScrollbarGestureKind } from '../shared/ScrollArea'
 import { useViewport } from '../../hooks/useViewport'
 import { useSessionStore, useIsRunning } from '../../stores/session'
-import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
+import { useAllWorkflows } from '../../stores/workflows'
 import { SCOPE_LABELS } from '../../lib/workflow-scope'
 import { useDisplaySettings } from '../../stores/settings'
 import { ChatFeedItems } from './ChatFeedItems'
@@ -51,7 +51,7 @@ export const MessageList = memo(function MessageList({
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
-  const workflows = useWorkflowsStore(selectAllWorkflows)
+  const workflows = useAllWorkflows()
 
   const hasNewCriteria = criteria.some((c) => c.status === 'pending')
   const isDone = sessionPhase === 'done'

@@ -175,6 +175,11 @@ vi.mock('../../stores/workflows', () => ({
     ...state.userItems,
     ...state.projectItems,
   ],
+  useAllWorkflows: () => [
+    ...mockWorkflowState.defaults,
+    ...mockWorkflowState.userItems,
+    ...mockWorkflowState.projectItems,
+  ],
 }))
 
 vi.mock('../../hooks/useScrolledSend', () => ({

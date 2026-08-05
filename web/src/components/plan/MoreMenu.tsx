@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { MoreIcon, AttachIcon } from '../shared/icons'
 import { useCommandsStore } from '../../stores/commands'
 import { CommandsModal } from '../settings/CommandsModal'
-import { useWorkflowsStore, type WorkflowInfo, selectAllWorkflows } from '../../stores/workflows'
+import { useWorkflowsStore, type WorkflowInfo, useAllWorkflows } from '../../stores/workflows'
 import { WorkflowsModal } from '../settings/WorkflowsModal'
 import { dedupById } from '../../lib/modal-utils'
 import { SCOPE_LABELS } from '../../lib/workflow-scope'
@@ -68,7 +68,7 @@ export function MoreMenu({
   const commands = dedupById(dedupById(commandDefaults, commandUserItems), commandProjectItems)
   // Workflows: keep every scope visible so same-id workflows in different scopes
   // are distinguishable instead of silently collapsed.
-  const workflows = useWorkflowsStore(selectAllWorkflows)
+  const workflows = useAllWorkflows()
 
   useEffect(() => {
     if (isOpen) {

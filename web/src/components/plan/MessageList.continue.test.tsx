@@ -85,6 +85,7 @@ vi.mock('../../stores/workflows', () => ({
     ...state.userItems,
     ...state.projectItems,
   ],
+  useAllWorkflows: () => [{ id: 'default', name: 'Build & Verify', color: '#3b82f6' }],
 }))
 
 vi.mock('../../stores/settings', () => ({

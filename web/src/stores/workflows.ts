@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import { authFetch } from '../lib/api'
 import { saveEntity, duplicateEntity } from './utils'
 import type { WorkflowParameter, WorkflowScope } from '@shared/types.js'
@@ -111,6 +112,14 @@ export const selectAllWorkflows = (state: WorkflowsState): WorkflowInfo[] => [
   ...state.userItems,
   ...state.projectItems,
 ]
+
+/**
+ * Hook-safe version of {@link selectAllWorkflows}: selectAllWorkflows builds a
+ * fresh array on every call, which zustand's useStore (Object.is) treats as a
+ * state change and re-renders forever. useShallow keeps the snapshot stable
+ * between actual changes.
+ */
+export const useAllWorkflows = () => useWorkflowsStore(useShallow(selectAllWorkflows))
 
 export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   defaults: [],

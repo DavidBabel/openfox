@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { TaskCompletedPayload } from '@shared/protocol.js'
-import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
+import { useAllWorkflows } from '../../stores/workflows'
 import { resolveEffectiveWorkflow } from '../../lib/workflow-scope'
 import { hexToRgba } from '../../lib/colors'
 import { TaskCheckIcon } from '../shared/icons'
@@ -17,7 +17,7 @@ function formatTokens(n: number): string {
 }
 
 export const TaskCompletedCard = memo(function TaskCompletedCard({ data }: TaskCompletedCardProps) {
-  const workflows = useWorkflowsStore(selectAllWorkflows)
+  const workflows = useAllWorkflows()
   const color =
     (data.workflowId ? resolveEffectiveWorkflow(workflows, data.workflowId)?.color : undefined) ??
     data.workflowColor ??

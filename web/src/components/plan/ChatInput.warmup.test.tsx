@@ -37,6 +37,7 @@ vi.mock('../../stores/workflows', () => ({
     ...state.userItems,
     ...state.projectItems,
   ],
+  useAllWorkflows: () => [],
 }))
 
 vi.mock('../../stores/commands', () => ({
