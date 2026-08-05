@@ -18,12 +18,7 @@
 //     readable without DB migration (covered by the AskUserCard guard)
 
 import { describe, expect, it } from 'vitest'
-import {
-  AskUserInterrupt,
-  askUserTool,
-  provideAnswer,
-  getPendingQuestionsForSession,
-} from './ask.js'
+import { AskUserInterrupt, askUserTool, provideAnswer, getPendingQuestionsForSession } from './ask.js'
 import type { ChoiceOption } from '../../shared/protocol.js'
 
 describe('ask_user tool — non-lossy structured options', () => {

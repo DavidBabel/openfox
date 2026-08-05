@@ -80,6 +80,7 @@ export interface SessionState {
   ensureFullSessionList: () => Promise<void>
   deleteSession: (sessionId: string) => Promise<boolean>
   renameSession: (sessionId: string, title: string) => Promise<boolean>
+  toggleFavorite: (sessionId: string, isFavorite: boolean) => Promise<boolean>
   deleteAllSessions: (projectId: string) => Promise<boolean>
   loadMoreSessions: (projectId: string) => Promise<void>
   clearSession: () => void

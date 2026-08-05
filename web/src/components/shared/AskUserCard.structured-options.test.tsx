@@ -61,18 +61,14 @@ describe('AskUserCard — structured ChoiceOption[] reload parity', () => {
 
   it('click submits `value`, not label', () => {
     const answerQuestion = vi.fn()
-    const options: ChoiceOption[] = [
-      { value: 'yes-v', label: 'Oui', description: 'Accepter' },
-    ]
+    const options: ChoiceOption[] = [{ value: 'yes-v', label: 'Oui', description: 'Accepter' }]
     useSessionStore.setState({
       pendingQuestions: [{ callId: 'call-1', question: 'Pick:', type: 'choice', options }],
       answerQuestion,
     })
     const tc = makeToolCall({ arguments: { question: 'Pick:' } })
     const container = render(<AskUserCard toolCall={tc} />)
-    const button = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Oui'),
-    )
+    const button = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Oui'))
     expect(button).toBeDefined()
     fireEvent.click(button!)
     expect(answerQuestion).toHaveBeenCalledTimes(1)
@@ -128,9 +124,7 @@ describe('AskUserCard — structured ChoiceOption[] reload parity', () => {
     // Models the live path where the tool call arguments already include the
     // canonical shape and the pendingQuestion store is populated from
     // session.state.
-    const options: ChoiceOption[] = [
-      { value: 'yes-v', label: 'Oui', description: 'Accepter' },
-    ]
+    const options: ChoiceOption[] = [{ value: 'yes-v', label: 'Oui', description: 'Accepter' }]
     useSessionStore.setState({
       pendingQuestions: [{ callId: 'call-1', question: 'Pick:', type: 'choice', options }],
     })

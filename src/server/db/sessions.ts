@@ -303,6 +303,7 @@ export function listSessions(): SessionSummary[] {
       s.mode,
       s.workflow_phase,
       s.is_running,
+      s.is_favorite,
       s.created_at,
       s.updated_at,
       s.title,
@@ -310,7 +311,7 @@ export function listSessions(): SessionSummary[] {
       s.provider_model,
       s.message_count
     FROM sessions s
-    ORDER BY s.updated_at DESC
+    ORDER BY s.is_favorite DESC, s.updated_at DESC
   `,
     )
     .all() as SessionSummaryRow[]
@@ -354,6 +355,7 @@ function listSessionsPaged(
       s.mode,
       s.workflow_phase,
       s.is_running,
+      s.is_favorite,
       s.created_at,
       s.updated_at,
       s.title,
@@ -362,7 +364,7 @@ function listSessionsPaged(
       s.message_count
     FROM sessions s
     ${where}
-    ORDER BY s.updated_at DESC
+    ORDER BY s.is_favorite DESC, s.updated_at DESC
     LIMIT ? OFFSET ?
   `,
     )
@@ -395,6 +397,7 @@ export function listHomeSessions(sessionsPerProject = 5): SessionSummary[] {
       s.mode,
       s.workflow_phase,
       s.is_running,
+      s.is_favorite,
       s.created_at,
       s.updated_at,
       s.title,
@@ -481,7 +484,13 @@ function mapSessionSummaryRow(row: SessionSummaryRow): SessionSummary {
     criteriaCount: 0,
     criteriaCompleted: 0,
     messageCount: row.message_count,
+    isFavorite: Boolean(row.is_favorite),
   }
+}
+
+export function toggleFavorite(id: string, isFavorite: boolean): void {
+  const db = getDatabase()
+  db.prepare(`UPDATE sessions SET is_favorite = ? WHERE id = ?`).run(isFavorite ? 1 : 0, id)
 }
 
 // ============================================================================
@@ -522,6 +531,7 @@ interface SessionSummaryRow {
   mode: string
   workflow_phase: string
   is_running: number
+  is_favorite: number
   created_at: string
   updated_at: string
   title: string | null

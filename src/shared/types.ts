@@ -132,6 +132,7 @@ export interface SessionSummary {
   mode: SessionMode
   phase: SessionPhase // Current workflow phase
   isRunning: boolean
+  isFavorite: boolean // Whether the session is favorited for pinning
   providerId?: string | null // Per-session provider override
   providerModel?: string | null // Per-session model override
   createdAt: string

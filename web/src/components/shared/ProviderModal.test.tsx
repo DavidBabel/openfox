@@ -335,8 +335,7 @@ describe('ProviderModal - thinkingLevel persistence', () => {
 
     const availableRows = Array.from(container.querySelectorAll('[role="checkbox"]'))
     const catalogRow = availableRows.find((row) => row.textContent?.includes('Catalog model')) as
-      | HTMLElement
-      | undefined
+      HTMLElement | undefined
     expect(catalogRow).toBeTruthy()
     catalogRow?.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -502,8 +501,7 @@ describe('ProviderModal - thinkingLevel persistence', () => {
 
     const buttonByText = (text: string) =>
       Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === text) as
-        | HTMLButtonElement
-        | undefined
+        HTMLButtonElement | undefined
 
     buttonByText('Account Provider')?.click()
     await new Promise((resolve) => setTimeout(resolve, 0))

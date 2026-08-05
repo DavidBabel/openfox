@@ -117,8 +117,14 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   }
   const toggleExpand = (name: string) => {
     setExpandedServers((prev) => {
-      if (prev.has(name)) { const n = new Set(prev); n.delete(name); return n }
-      const n = new Set(prev); n.add(name); return n
+      if (prev.has(name)) {
+        const n = new Set(prev)
+        n.delete(name)
+        return n
+      }
+      const n = new Set(prev)
+      n.add(name)
+      return n
     })
   }
 
@@ -442,7 +448,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
               Override MCP server availability for this project. These overrides apply to new conversations in this
               project and can be further overridden per conversation from the chat MCP selector.
             </p>
-                        <div className="space-y-2">
+            <div className="space-y-2">
               {mcpServers.map((server) => {
                 const effectiveDisabled = isServerDisabled(server.name)
                 return (
@@ -455,8 +461,8 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
                     onServerToggle={() => toggleServer(server.name)}
                     tools={server.tools.map((t) => ({ ...t, enabled: !isToolDisabled(server.name, t.name) }))}
                     onToolToggle={(toolName) => toggleTool(server.name, toolName)}
-                    statusDot={mcpStatusDot(effectiveDisabled ? "disabled" : server.status)}
-                    statusColor={mcpStatusColor(effectiveDisabled ? "disabled" : server.status)}
+                    statusDot={mcpStatusDot(effectiveDisabled ? 'disabled' : server.status)}
+                    statusColor={mcpStatusColor(effectiveDisabled ? 'disabled' : server.status)}
                   />
                 )
               })}

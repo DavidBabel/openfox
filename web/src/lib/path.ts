@@ -19,10 +19,7 @@ export function pathBreadcrumbs(path: string): Breadcrumb[] {
     .filter(Boolean)
     .map((part, i, arr) => ({
       name: part,
-      path:
-        sep === '/'
-          ? '/' + arr.slice(0, i + 1).join('/')
-          : arr.slice(0, i + 1).join('\\') + (i === 0 ? '\\' : ''),
+      path: sep === '/' ? '/' + arr.slice(0, i + 1).join('/') : arr.slice(0, i + 1).join('\\') + (i === 0 ? '\\' : ''),
     }))
 }
 
