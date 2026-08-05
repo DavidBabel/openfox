@@ -125,6 +125,7 @@ describe('loadDefaultSkills', () => {
     const defaults = await loadDefaultSkills()
     expect(defaults.length).toBeGreaterThanOrEqual(1)
     expect(defaults.some((s) => s.metadata.id === 'browser')).toBe(true)
+    expect(defaults.some((s) => s.metadata.id === 'workflows')).toBe(true)
   })
 })
 
@@ -487,9 +488,11 @@ describe('CRUD', () => {
   })
 
   it('should not delete built-in default skills', async () => {
-    const result = await deleteSkill(tempDir, 'browser')
-    expect(result.success).toBe(false)
-    expect(result.reason).toBe('Cannot delete built-in defaults')
+    for (const id of ['browser', 'workflows']) {
+      const result = await deleteSkill(tempDir, id)
+      expect(result.success).toBe(false)
+      expect(result.reason).toBe('Cannot delete built-in defaults')
+    }
   })
 
   it('should return false when deleting non-existent skill', async () => {
@@ -555,5 +558,6 @@ describe('getDefaultSkillIds', () => {
     const ids = await getDefaultSkillIds()
     expect(ids.length).toBeGreaterThan(0)
     expect(ids).toContain('browser')
+    expect(ids).toContain('workflows')
   })
 })

@@ -1,0 +1,4 @@
+{
+  "threshold": 0,
+  "ignore": ["**/*.test.ts", "src/server/skills/defaults/**"]
+}

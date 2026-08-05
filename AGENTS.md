@@ -208,7 +208,7 @@ Every file in `.openfox/` must be **committable** and **meaningful in the projec
 
 **Rationale:** Clean repo, no leaked personal config, reliable source of truth for CI and collaborators.
 
-**Workflows:** When asked to create or edit a workflow, follow [docs/WORKFLOWS.md](docs/WORKFLOWS.md) — the authoritative reference for workflow file format, storage locations (project `.openfox/workflows/` vs global `{configDir}/workflows/`), the full JSON schema, step types, transition conditions, and template variables. Project workflows belong in `.openfox/workflows/` and are committable.
+**Workflows:** When asked to create or edit a workflow, load the built-in `workflows` skill via `load_skill("workflows")` — it is the authoritative reference for workflow file format, storage locations (project `.openfox/workflows/` vs global `{configDir}/workflows/`), the full JSON schema, step types, transition conditions, and template variables ([docs/WORKFLOWS.md](docs/WORKFLOWS.md) is a pointer to it). Project workflows belong in `.openfox/workflows/` and are committable.
 
 ## TDD Workflow
 

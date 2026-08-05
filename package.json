@@ -56,7 +56,7 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --check \"src/**/*.ts\"",
     "format:fix": "prettier --write \"src/**/*.ts\"",
-    "duplicate:server": "jscpd src/server/ --ignore \"**/*.test.ts\" --threshold 0",
+    "duplicate:server": "jscpd src/server/ --config .jscpd-server.json",
     "duplicate:web": "jscpd web/src/ --config .jscpd-web.json --threshold 0",
     "duplicate": "npm run duplicate:server && npm run duplicate:web",
     "check": "npm run typecheck && npm run lint && npm run format && npm run duplicate",
