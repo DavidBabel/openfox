@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ChevronDownIcon, FolderIcon, SearchIcon } from './icons'
 import { Spinner } from './Spinner'
 import { authFetch } from '../../lib/api'
 import { pathBreadcrumbs } from '../../lib/path'
+import { shouldAutofocus } from '../../lib/device'
 import { Input } from './Input'
 
 interface DirectoryEntry {
@@ -94,7 +95,7 @@ export function DirectoryBrowser({ onSelect, onClose, initialPath }: DirectoryBr
       }
     } else if (e.key === 'Escape') {
       setSearchQuery('')
-      inputRef.current?.focus()
+      if (shouldAutofocus()) inputRef.current?.focus()
     }
   }
 
@@ -149,7 +150,7 @@ export function DirectoryBrowser({ onSelect, onClose, initialPath }: DirectoryBr
                 <SearchIcon />
               </span>
               <Input
-                autoFocus
+                autoFocus={shouldAutofocus()}
                 ref={inputRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

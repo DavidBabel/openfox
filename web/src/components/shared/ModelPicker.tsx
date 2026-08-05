@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDownIcon, SearchIcon } from './icons'
 import { useModelSearch, ModelEntryRow } from '../settings/model-list'
 import type { Provider } from '../../stores/config'
+import { shouldAutofocus } from '../../lib/device'
 
 export interface ModelPickerProps {
   providers: Provider[]
@@ -92,7 +93,7 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
   useEffect(() => {
     if (isOpen) {
       updateDropdownPosition()
-      inputRef.current?.focus()
+      if (shouldAutofocus()) inputRef.current?.focus()
     } else {
       setSearchQuery('')
       setHighlightedIndex(-1)

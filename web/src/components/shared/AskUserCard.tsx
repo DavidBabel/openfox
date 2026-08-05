@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { ToolCall } from '@shared/types.js'
 import { normalizeAskOptions } from '@shared/ask-options.js'
 import { useSessionStore, type PendingQuestion } from '../../stores/session'
+import { shouldAutofocus } from '../../lib/device'
 
 interface AskUserCardProps {
   toolCall: ToolCall
@@ -33,7 +34,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
   const isSkipped = resultText === '[user skipped]'
 
   useEffect(() => {
-    if (isPending && inputRef.current) {
+    if (isPending && shouldAutofocus() && inputRef.current) {
       inputRef.current.focus()
     }
   }, [isPending])
@@ -156,7 +157,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
                   onKeyDown={handleKeyDown}
                   placeholder="Type your answer here... (Enter to submit, Shift+Enter for new line)"
                   className="w-full min-h-[80px] px-3 py-2 bg-bg-tertiary border border-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent-primary/50 resize-y"
-                  autoFocus
+                  autoFocus={shouldAutofocus()}
                 />
                 <div className="flex justify-end gap-2">
                   <button

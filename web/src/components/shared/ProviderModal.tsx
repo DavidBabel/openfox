@@ -6,6 +6,7 @@ import type { ModelConfig as SharedModelConfig } from '@shared/types.js'
 import { ChevronDownIcon, SettingsIcon } from './icons'
 import { QueryParamsInput } from './QueryParamsInput'
 import { formatTokens } from '../../lib/format-stats'
+import { shouldAutofocus } from '../../lib/device'
 
 const COMMON_PORTS = [8080, 11434, 8000, 1234]
 
@@ -494,7 +495,9 @@ export function ProviderModal({
   useEffect(() => {
     if (formStep === 1 && isOpen) {
       // Small delay to ensure the input is mounted
-      requestAnimationFrame(() => urlInputRef.current?.focus())
+      requestAnimationFrame(() => {
+        if (shouldAutofocus()) urlInputRef.current?.focus()
+      })
     }
   }, [formStep, isOpen])
 

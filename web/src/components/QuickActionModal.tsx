@@ -14,6 +14,7 @@ import { useAgentsStore } from '../stores/agents'
 import { useSessionStore } from '../stores/session'
 import { dedupById, fuzzyMatch, handleModalNavigation } from '../lib/modal-utils'
 import type { WorkflowScope } from '@shared/types.js'
+import { shouldAutofocus } from '../lib/device'
 
 interface QuickActionModalProps {
   isOpen: boolean
@@ -83,7 +84,9 @@ export function QuickActionModal({
       fetchAgents()
       setSearch('')
       setSelectedIndex(0)
-      const timer = setTimeout(() => searchRef.current?.focus(), 50)
+      const timer = setTimeout(() => {
+        if (shouldAutofocus()) searchRef.current?.focus()
+      }, 50)
       return () => clearTimeout(timer)
     }
   }, [isOpen, fetchCommands, fetchWorkflows, fetchAgents])

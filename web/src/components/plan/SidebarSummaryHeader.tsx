@@ -11,6 +11,7 @@ import { MetadataSectionHeader } from '../shared/MetadataEntries'
 import { MetadataStatusIcon, statusOrder } from '../shared/MetadataStatusIcon'
 import { CriteriaEditor } from './CriteriaEditor'
 import { pathBasename } from '../../lib/path'
+import { shouldAutofocus } from '../../lib/device'
 import { DevServerFooter } from './DevServerFooter'
 import { DevServerConfigModal } from './DevServerConfigModal'
 import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
@@ -73,7 +74,7 @@ const Popover = forwardRef<PopoverHandle, { trigger: React.ReactNode; children: 
 
   useEffect(() => {
     if (!open) {
-      previousFocusRef.current?.focus()
+      if (shouldAutofocus()) previousFocusRef.current?.focus()
       previousFocusRef.current = null
       return
     }

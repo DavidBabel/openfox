@@ -7,6 +7,7 @@ import { useWorkflowsStore, type WorkflowInfo, selectAllWorkflows } from '../../
 import { WorkflowsModal } from '../settings/WorkflowsModal'
 import { dedupById } from '../../lib/modal-utils'
 import { SCOPE_LABELS } from '../../lib/workflow-scope'
+import { shouldAutofocus } from '../../lib/device'
 import { EditButton } from '../shared/IconButton'
 import { Portal } from '../shared/Portal'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -80,7 +81,9 @@ export function MoreMenu({
     if (isOpen) {
       setSearch('')
       setSelectedIndex(0)
-      requestAnimationFrame(() => searchRef.current?.focus())
+      requestAnimationFrame(() => {
+        if (shouldAutofocus()) searchRef.current?.focus()
+      })
     }
   }, [isOpen, tab])
 

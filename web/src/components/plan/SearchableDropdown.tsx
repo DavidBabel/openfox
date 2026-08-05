@@ -1,6 +1,7 @@
 import { ScrollArea } from '../shared/ScrollArea'
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { ChevronDownIcon } from '../shared/icons'
+import { shouldAutofocus } from '../../lib/device'
 
 interface UseSearchableMenuOptions<T> {
   items: T[]
@@ -40,7 +41,9 @@ export function useSearchableMenu<T>({
     if (isOpen) {
       setSearch('')
       setSelectedIndex(0)
-      requestAnimationFrame(() => searchRef.current?.focus())
+      requestAnimationFrame(() => {
+        if (shouldAutofocus()) searchRef.current?.focus()
+      })
     }
   }, [isOpen])
 

@@ -5,6 +5,7 @@ import { Modal } from './shared/SelfContainedModal'
 import { Button } from './shared/Button'
 import { Input } from './shared/Input'
 import { authFetch } from '../lib/api'
+import { shouldAutofocus } from '../lib/device'
 import { validateProjectName } from './shared/validation'
 import { PlusMdIcon } from './shared/icons'
 import { PermissionDeniedModal } from './PermissionDeniedModal'
@@ -40,7 +41,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       setPermissionDeniedPath(null)
       // Focus the input after modal renders
       setTimeout(() => {
-        inputRef.current?.focus()
+        if (shouldAutofocus()) inputRef.current?.focus()
       }, 100)
     }
   }, [isOpen])

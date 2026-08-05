@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import type { WorkflowParameter } from '@shared/types.js'
+import { shouldAutofocus } from '../../lib/device'
 
 interface WorkflowParamModalProps {
   workflowName: string
@@ -47,7 +48,7 @@ export function WorkflowParamModal({
               onChange={(e) => setValues((prev) => ({ ...prev, [p.id]: e.target.value }))}
               placeholder={p.label || p.id}
               className="mt-1 w-full px-3 py-1.5 bg-bg-tertiary border border-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent-primary"
-              autoFocus={p.position === 0 || p === sorted[0]}
+              autoFocus={(p.position === 0 || p === sorted[0]) && shouldAutofocus()}
             />
           </label>
         ))}

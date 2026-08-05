@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Modal } from './shared/SelfContainedModal'
 import { Button } from './shared/Button'
 import { Input } from './shared/Input'
+import { shouldAutofocus } from '../lib/device'
 
 interface PasswordModalProps {
   isOpen: boolean
@@ -17,7 +18,9 @@ export function PasswordModal({ isOpen, isRetry, onSubmit, onCancel }: PasswordM
   useEffect(() => {
     if (isOpen) {
       setPassword('')
-      setTimeout(() => inputRef.current?.focus(), 100)
+      setTimeout(() => {
+        if (shouldAutofocus()) inputRef.current?.focus()
+      }, 100)
     }
   }, [isOpen])
 
@@ -43,7 +46,7 @@ export function PasswordModal({ isOpen, isRetry, onSubmit, onCancel }: PasswordM
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Enter password"
-          autoFocus
+          autoFocus={shouldAutofocus()}
         />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onCancel}>

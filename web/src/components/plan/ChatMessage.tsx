@@ -12,6 +12,7 @@ import { CheckIcon, CopyIcon, EditSmallIcon, ReloadIcon, XCloseIcon, BranchIcon 
 import { replayMessage, forkSession } from '../../lib/api.js'
 import { useSessionStore } from '../../stores/session.js'
 import { copyToClipboard } from '../../lib/clipboard.js'
+import { shouldAutofocus } from '../../lib/device'
 import { useLocation } from 'wouter'
 import { useContextMenu } from '../../hooks/useContextMenu'
 
@@ -194,7 +195,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
                 if (e.key === 'Escape') handleEditCancel()
               }}
               disabled={pending}
-              autoFocus
+              autoFocus={shouldAutofocus()}
             />
             {error && <p className="text-xs text-accent-error">{error}</p>}
             <div className="flex justify-end gap-1">

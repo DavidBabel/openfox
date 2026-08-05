@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { MetadataEntry } from '@shared/types.js'
 import { authFetch } from '../../lib/api'
+import { shouldAutofocus } from '../../lib/device'
 import { Modal } from './Modal'
 import { MetadataStatusIcon, decodeHtmlEntities } from './MetadataStatusIcon'
 import { PlusIcon, XCloseIcon } from './icons'
@@ -64,12 +65,12 @@ export function MetadataModal({
   useEffect(() => {
     if (editingId) {
       autoResize()
-      editInputRef.current?.focus()
+      if (shouldAutofocus()) editInputRef.current?.focus()
     }
   }, [editingId, autoResize])
 
   useEffect(() => {
-    if (adding) addInputRef.current?.focus()
+    if (adding && shouldAutofocus()) addInputRef.current?.focus()
   }, [adding])
 
   const syncToServer = useCallback(
@@ -98,11 +99,14 @@ export function MetadataModal({
     setEditDescription(desc)
   }, [])
 
-  const commitEdit = useCallback((id: string, desc: string, current: MetadataEntry[]) => {
-    const trimmed = (desc.trim() || current.find((e) => e.id === id)?.description) ?? ''
-    const next = current.map((e) => (e.id === id ? { ...e, description: trimmed } : e))
-    syncToServer(next)
-  }, [syncToServer])
+  const commitEdit = useCallback(
+    (id: string, desc: string, current: MetadataEntry[]) => {
+      const trimmed = (desc.trim() || current.find((e) => e.id === id)?.description) ?? ''
+      const next = current.map((e) => (e.id === id ? { ...e, description: trimmed } : e))
+      syncToServer(next)
+    },
+    [syncToServer],
+  )
 
   const handleSaveEdit = useCallback(() => {
     if (!editingId) return
@@ -164,8 +168,7 @@ export function MetadataModal({
               className="text-sm text-text-primary text-left hover:text-accent-primary transition-colors w-full cursor-pointer"
               title="Click to edit"
             >
-              <span className="text-text-muted">[{entry.id}]</span>{' '}
-              <span>{decodeHtmlEntities(entry.description)}</span>
+              <span className="text-text-muted">[{entry.id}]</span> <span>{decodeHtmlEntities(entry.description)}</span>
             </button>
           )
           const editor = isEditing ? (
@@ -181,7 +184,9 @@ export function MetadataModal({
               className="w-full bg-bg-tertiary text-text-primary text-sm px-2 py-1 rounded border border-border focus:outline-none focus:border-accent-primary resize-none"
               rows={1}
             />
-          ) : label
+          ) : (
+            label
+          )
           return (
             <li
               key={entry.id}
@@ -200,7 +205,9 @@ export function MetadataModal({
                 className="flex-shrink-0 text-text-muted hover:text-accent-error transition-colors cursor-pointer mt-0.5 ml-auto"
                 title="Delete entry"
               >
-                <span className="flex"><XCloseIcon className="w-4 h-4" /></span>
+                <span className="flex">
+                  <XCloseIcon className="w-4 h-4" />
+                </span>
               </button>
             </li>
           )

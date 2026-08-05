@@ -5,6 +5,7 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { SearchIcon, XCloseIcon, UserIcon, ThinkingIcon, AgentIcon } from '../shared/icons'
 import { fuzzyMatch, handleModalNavigation } from '../../lib/modal-utils'
+import { shouldAutofocus } from '../../lib/device'
 import type { DisplayItem } from './groupMessages'
 
 const STORAGE_KEY = 'openfox-message-search-filters'
@@ -190,7 +191,9 @@ export function MessageSearchModal({ isOpen, onClose, displayItems, onNavigate }
     if (isOpen) {
       setSearch('')
       setSelectedIndex(0)
-      const timer = setTimeout(() => searchRef.current?.focus(), 50)
+      const timer = setTimeout(() => {
+        if (shouldAutofocus()) searchRef.current?.focus()
+      }, 50)
       return () => clearTimeout(timer)
     }
   }, [isOpen])

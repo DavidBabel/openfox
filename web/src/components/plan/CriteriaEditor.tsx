@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import type { MetadataEntry } from '@shared/types.js'
 import { authFetch } from '../../lib/api'
+import { shouldAutofocus } from '../../lib/device'
 import { PlusIcon, XCloseIcon, TrashIcon, InfoIcon } from '../shared/icons'
 import { Modal } from '../shared/Modal'
 import { MetadataStatusIcon, decodeHtmlEntities } from '../shared/MetadataStatusIcon'
@@ -70,11 +71,11 @@ export function CriteriaEditor({ entries, sessionId }: CriteriaEditorProps) {
   }, [entries])
 
   useEffect(() => {
-    if (adding) addInputRef.current?.focus()
+    if (adding && shouldAutofocus()) addInputRef.current?.focus()
   }, [adding])
 
   useEffect(() => {
-    if (editingId) editInputRef.current?.focus()
+    if (editingId && shouldAutofocus()) editInputRef.current?.focus()
   }, [editingId])
 
   const syncToServer = useCallback(
@@ -102,7 +103,7 @@ export function CriteriaEditor({ entries, sessionId }: CriteriaEditorProps) {
 
       syncToServer([...criteria, ...added])
       setNewDescription('')
-      addInputRef.current?.focus()
+      if (shouldAutofocus()) addInputRef.current?.focus()
     },
     [criteria, syncToServer],
   )

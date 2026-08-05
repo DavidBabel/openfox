@@ -9,6 +9,7 @@ import { authFetch } from '../../lib/api'
 import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon } from '../shared/icons'
 import { useKeybindings, useBinding } from '../../hooks/useKeybindings'
 import { focusChatTextarea } from '../../lib/focusChatTextarea'
+import { shouldAutofocus } from '../../lib/device'
 import { useModelSearch, ModelEntryRow, type ModelWithConfig } from './model-list'
 
 type ProviderLabelProps = {
@@ -157,7 +158,7 @@ export function ProviderSelector() {
   // Focus the search input when dropdown opens
   useEffect(() => {
     if (isOpen) {
-      inputRef.current?.focus()
+      if (shouldAutofocus()) inputRef.current?.focus()
     }
   }, [isOpen])
 

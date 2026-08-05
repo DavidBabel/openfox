@@ -6,6 +6,7 @@ import { useSessionStore } from '../../stores/session/store'
 import { TerminalPane } from './TerminalPane'
 import { PlusSquareIcon, XCloseIcon } from '../shared/icons'
 import { focusChatTextarea } from '../../lib/focusChatTextarea'
+import { shouldAutofocus } from '../../lib/device'
 
 interface TerminalDrawerProps {
   isOpen: boolean
@@ -62,7 +63,7 @@ export function TerminalDrawer({ isOpen, onClose }: TerminalDrawerProps) {
     if (isOpen) {
       justOpenedRef.current = true
       setTimeout(() => {
-        terminalRef.current?.focus()
+        if (shouldAutofocus()) terminalRef.current?.focus()
         setTimeout(() => {
           justOpenedRef.current = false
         }, 200)
@@ -150,7 +151,7 @@ export function TerminalDrawer({ isOpen, onClose }: TerminalDrawerProps) {
                   sessionId={session.id}
                   onClose={() => killSession(session.id)}
                   onEscape={handleClose}
-                  autoFocus={sessions.length === 1}
+                  autoFocus={sessions.length === 1 && shouldAutofocus()}
                 />
               ))}
             </div>

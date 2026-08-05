@@ -10,6 +10,7 @@ import { formatRelativeDate } from '../lib/format-date'
 import { SearchIcon, XCloseIcon, FolderIcon, TrashIcon } from './shared/icons'
 import { Spinner } from './shared/Spinner'
 import { fuzzyMatch, highlightMatches } from '../lib/modal-utils'
+import { shouldAutofocus } from '../lib/device'
 import type { SessionSummary } from '@shared/types.js'
 
 export function HomePage() {
@@ -178,7 +179,7 @@ export function HomePage() {
   const handleClearSearch = () => {
     setSearchQuery('')
     setDebouncedQuery('')
-    searchRef.current?.focus()
+    if (shouldAutofocus()) searchRef.current?.focus()
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {

@@ -18,6 +18,7 @@ import { WorkflowBar } from './WorkflowBar'
 import { processFile } from '../../lib/file-processing.js'
 import { mimeTypeToExtension, isSupportedMimeType } from '../../lib/attachment-utils.js'
 import { CHAT_TEXTAREA_ID } from '../../lib/focusChatTextarea'
+import { shouldAutofocus } from '../../lib/device'
 import { useScrolledSend } from '../../hooks/useScrolledSend'
 import { MoreMenu } from './MoreMenu'
 import { QueuedMessages } from './QueuedMessages'
@@ -151,7 +152,7 @@ export function ChatInput({
     if (restoredInput !== null) {
       setInput(restoredInput)
       clearRestoredInput()
-      textareaRef.current?.focus()
+      if (shouldAutofocus()) textareaRef.current?.focus()
     }
   }, [restoredInput, setInput, clearRestoredInput])
 
@@ -176,7 +177,7 @@ export function ChatInput({
   }, [sessionId, setInput])
 
   useEffect(() => {
-    textareaRef.current?.focus()
+    if (shouldAutofocus()) textareaRef.current?.focus()
     resizeTextarea()
   }, [sessionId, resizeTextarea])
 

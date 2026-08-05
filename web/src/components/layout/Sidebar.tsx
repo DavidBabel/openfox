@@ -14,6 +14,7 @@ import { ModalFooter } from '../shared/ModalFooter'
 import { EllipsisIcon, SpinIcon, StopIcon, SearchIcon, XCloseIcon, StarIcon, StarFilledIcon } from '../shared/icons'
 import { groupSessionsByDate, formatDateHeader, formatTime } from '../../lib/format-date.js'
 import { fuzzyMatch, highlightMatches } from '../../lib/modal-utils.js'
+import { shouldAutofocus } from '../../lib/device'
 import { useBinding, useKeybindings } from '../../hooks/useKeybindings.js'
 import { useResizable } from '../../hooks/useResizable'
 import { ResizeHandle } from '../shared/ResizeHandle'
@@ -70,7 +71,7 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
       wasAutoOpenedRef.current = true
       onClose?.()
     }
-    searchRef.current?.focus()
+    if (shouldAutofocus()) searchRef.current?.focus()
   })
 
   const loadMoreRef = useRef<HTMLDivElement>(null)
@@ -198,7 +199,7 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
 
   const handleClearSearch = () => {
     setSearchQuery('')
-    searchRef.current?.focus()
+    if (shouldAutofocus()) searchRef.current?.focus()
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
@@ -362,7 +363,7 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
                 }}
                 onFocus={(e) => e.target.select()}
                 className="w-full px-3 py-2 text-sm text-text-primary bg-bg-tertiary border border-border rounded focus:outline-none focus:ring-1 focus:ring-accent-primary"
-                autoFocus
+                autoFocus={shouldAutofocus()}
               />
             </Modal>
 
