@@ -6,9 +6,10 @@ vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   mkdir: vi.fn(),
+  rm: vi.fn(),
 }))
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 
 const WORKDIR = '/tmp/project'
 
@@ -57,12 +58,22 @@ describe('saveWorkspaceConfig', () => {
     )
   })
 
-  it('saves config without setup', async () => {
-    vi.mocked(mkdir).mockResolvedValue(undefined)
-    vi.mocked(writeFile).mockResolvedValue(undefined)
+  it('removes workspace.json when config has no setup', async () => {
+    vi.mocked(rm).mockResolvedValue(undefined)
 
     await saveWorkspaceConfig(WORKDIR, {})
 
-    expect(writeFile).toHaveBeenCalledWith(expect.any(String), JSON.stringify({}, null, 2) + '\n', 'utf-8')
+    expect(rm).toHaveBeenCalledWith(expect.stringContaining(join('.openfox', 'workspace.json')), { force: true })
+    expect(writeFile).not.toHaveBeenCalled()
+    expect(mkdir).not.toHaveBeenCalled()
+  })
+
+  it('removes the file when setup is an empty array', async () => {
+    vi.mocked(rm).mockResolvedValue(undefined)
+
+    await saveWorkspaceConfig(WORKDIR, { setup: [] })
+
+    expect(rm).toHaveBeenCalledWith(expect.stringContaining(join('.openfox', 'workspace.json')), { force: true })
+    expect(writeFile).not.toHaveBeenCalled()
   })
 })

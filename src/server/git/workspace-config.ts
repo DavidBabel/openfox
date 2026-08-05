@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import type { WorkspaceConfig } from '../../shared/workspace.js'
 import { getProjectByWorkdir, updateProject } from '../db/projects.js'
@@ -36,9 +36,13 @@ export async function loadWorkspaceConfig(workdir: string): Promise<WorkspaceCon
 }
 
 export async function saveWorkspaceConfig(workdir: string, config: WorkspaceConfig): Promise<void> {
+  const configPath = getConfigPath(workdir)
+  if (!config.setup || config.setup.length === 0) {
+    await rm(configPath, { force: true })
+    return
+  }
   const resolved = resolve(workdir)
   const dirPath = join(resolved, '.openfox')
   await mkdir(dirPath, { recursive: true })
-  const configPath = getConfigPath(workdir)
   await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
 }

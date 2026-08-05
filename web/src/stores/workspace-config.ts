@@ -2,8 +2,8 @@ import { create } from 'zustand'
 import type { WorkspaceConfig } from '@shared/workspace.js'
 import { authFetch } from '../lib/api'
 
-/** API response shape — includes rootDir and mcpOverrides from DB alongside file-based config */
-interface WorkspaceConfigResponse extends WorkspaceConfig {
+/** Combined workspace config shape: file-based `setup` plus DB-backed `rootDir`/`mcpOverrides`. Used for both the API response and the save payload. */
+export interface WorkspaceConfigResponse extends WorkspaceConfig {
   rootDir?: string
   mcpOverrides?: Record<string, { disabled?: boolean; disabledTools?: string[] }>
 }

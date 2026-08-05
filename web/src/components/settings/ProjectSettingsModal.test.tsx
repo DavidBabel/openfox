@@ -144,7 +144,7 @@ describe('ProjectSettingsModal', () => {
     )
   })
 
-  it('sends empty rootDir when field is cleared', async () => {
+  it('sends only changed workspace fields when saving', async () => {
     const user = userEvent.setup()
 
     render(<ProjectSettingsModal isOpen={true} onClose={vi.fn()} project={defaultProject} />)
@@ -155,7 +155,41 @@ describe('ProjectSettingsModal', () => {
     const saveBtn = screen.getByTestId('save-btn')
     await user.click(saveBtn)
 
-    expect(mockSaveConfig).toHaveBeenCalledWith(defaultProject.workdir, expect.objectContaining({ rootDir: '' }))
+    expect(mockSaveConfig).toHaveBeenCalledWith(
+      defaultProject.workdir,
+      expect.objectContaining({ setup: ['npm install'] }),
+    )
+  })
+
+  it('sends an empty setup array when the setup command is cleared', async () => {
+    mockStoreState.config = { setup: ['npm install'] }
+
+    const user = userEvent.setup()
+
+    render(<ProjectSettingsModal isOpen={true} onClose={vi.fn()} project={defaultProject} />)
+
+    const setupInput = screen.getByPlaceholderText('npm install --prefer-offline')
+    await user.clear(setupInput)
+
+    const saveBtn = screen.getByTestId('save-btn')
+    await user.click(saveBtn)
+
+    expect(mockSaveConfig).toHaveBeenCalledWith(defaultProject.workdir, expect.objectContaining({ setup: [] }))
+  })
+
+  it('does not call saveConfig when only project instructions change', async () => {
+    const user = userEvent.setup()
+
+    render(<ProjectSettingsModal isOpen={true} onClose={vi.fn()} project={defaultProject} />)
+
+    const instructions = screen.getByPlaceholderText('Enter project-specific instructions...')
+    await user.type(instructions, 'focus on the networking stack')
+
+    const saveBtn = screen.getByTestId('save-btn')
+    await user.click(saveBtn)
+
+    expect(mockSaveConfig).not.toHaveBeenCalled()
+    expect(mockUpdateProject).toHaveBeenCalled()
   })
 })
 

@@ -4,7 +4,7 @@ import { Modal } from '../shared/SelfContainedModal'
 import { McpServerCard } from './McpServerCard'
 import { ModalFooter } from '../shared/ModalFooter'
 import { useProjectStore } from '../../stores/project'
-import { useWorkspaceConfigStore } from '../../stores/workspace-config'
+import { useWorkspaceConfigStore, type WorkspaceConfigResponse } from '../../stores/workspace-config'
 import { useMcpStore } from '../../stores/mcp'
 import { mcpStatusColor, mcpStatusDot } from '../../lib/mcp-utils'
 import { wsClient } from '../../lib/ws'
@@ -154,17 +154,19 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       customInstructions: customInstructions || null,
       dangerLevel: dangerLevelValue,
     })
-    const setup = setupCmd.trim()
-      ? setupCmd
-          .split('&&')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : []
-    await saveWsConfig(project.workdir, {
-      ...(setup.length > 0 ? { setup } : {}),
-      rootDir: rootDir.trim(),
-      ...(Object.keys(mcpOverrides).length > 0 ? { mcpOverrides } : { mcpOverrides: undefined }),
-    })
+    if (setupDirty || rootDirDirty || mcpDirty) {
+      const setup = setupCmd.trim()
+        ? setupCmd
+            .split('&&')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : []
+      const wsConfigPayload: WorkspaceConfigResponse = {}
+      if (setupDirty) wsConfigPayload.setup = setup
+      if (rootDirDirty) wsConfigPayload.rootDir = rootDir.trim()
+      if (Object.keys(mcpOverrides).length > 0) wsConfigPayload.mcpOverrides = mcpOverrides
+      await saveWsConfig(project.workdir, wsConfigPayload)
+    }
     setInstructionsDirty(false)
     setDangerLevelDirty(false)
     setSetupDirty(false)
@@ -178,6 +180,9 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     setupCmd,
     rootDir,
     mcpOverrides,
+    setupDirty,
+    rootDirDirty,
+    mcpDirty,
     updateProject,
     saveWsConfig,
     project.workdir,

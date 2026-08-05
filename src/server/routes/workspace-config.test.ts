@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import express from 'express'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile, stat, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createWorkspaceConfigRoutes } from './workspace-config.js'
@@ -519,6 +519,65 @@ describe('POST /api/workspace/config (existing endpoint)', () => {
     expect(body.config.rootDir).toBeUndefined()
     expect(body.config.setup).toEqual(['npm install'])
   })
+
+  it('does not create workspace.json when saving only rootDir', async () => {
+    const rootDir = join(testDir, 'target')
+    await mkdir(rootDir, { recursive: true })
+
+    const res = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rootDir }),
+    })
+
+    expect(res.status).toBe(200)
+    await expect(stat(join(testDir, '.openfox', 'workspace.json'))).rejects.toThrow()
+  })
+
+  it('does not create workspace.json when saving empty setup and rootDir', async () => {
+    const res = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rootDir: '', setup: [] }),
+    })
+
+    expect(res.status).toBe(200)
+    await expect(stat(join(testDir, '.openfox', 'workspace.json'))).rejects.toThrow()
+  })
+
+  it('creates workspace.json when setup is provided', async () => {
+    const res = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setup: ['npm install --prefer-offline'] }),
+    })
+
+    expect(res.status).toBe(200)
+    const configPath = join(testDir, '.openfox', 'workspace.json')
+    const st = await stat(configPath)
+    expect(st.isFile()).toBe(true)
+    const raw = await readFile(configPath, 'utf-8')
+    expect(JSON.parse(raw)).toEqual({ setup: ['npm install --prefer-offline'] })
+  })
+
+  it('removes stale workspace.json when setup is cleared', async () => {
+    const seed = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setup: ['npm install'] }),
+    })
+    expect(seed.status).toBe(200)
+    await expect(stat(join(testDir, '.openfox', 'workspace.json'))).resolves.toBeDefined()
+
+    const res = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setup: [] }),
+    })
+
+    expect(res.status).toBe(200)
+    await expect(stat(join(testDir, '.openfox', 'workspace.json'))).rejects.toThrow()
+  })
 })
 
 describe('POST /api/workspace/config with MCP overrides', () => {
@@ -669,5 +728,18 @@ describe('POST /api/workspace/config with MCP overrides', () => {
     }
 
     expect(session1.updated_at).toBe(FROZEN_TIME)
+  })
+
+  it('does not create workspace.json when saving only mcpOverrides', async () => {
+    const res = await fetch(`${baseUrl}/api/workspace/config?workdir=${encodeURIComponent(testDir)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mcpOverrides: { 'server-1': { disabled: true } },
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    await expect(stat(join(testDir, '.openfox', 'workspace.json'))).rejects.toThrow()
   })
 })
