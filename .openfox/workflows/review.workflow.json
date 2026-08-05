@@ -118,7 +118,7 @@
       "type": "agent",
       "phase": "build",
       "agentId": "builder",
-      "prompt": "Start the dev server using the `dev_server` tool so the user can manually test the changes. Once it's running, present a handoff summary:\n\n> **PR #{{pr_number}} is ready at http://localhost:<port>.**\n>\n> **Metrics:** Tests X → Y (+Z), Typecheck ✅, Lint ✅\n>\n> **What I fixed:**\n> - _bullet list of specific changes_\n> - _why each matters_\n> - _if no fixes were needed, say so explicitly instead of an empty list_\n>\n> **What to test:**\n> - _specific things to try from the user's perspective_\n> - _edge cases_\n\nDo NOT ask the user if they want the dev server started — just start it and present the summary. Call step_done() when done.",
+      "prompt": "Start the dev server using the `dev_server` tool so the user can manually test the changes. Once it's running, present a handoff summary:\n\n> **PR #{{pr_number}} is ready at http://localhost:<port>.**\n>\n> **What I fixed:**\n> - _bullet list of specific changes_\n> - _why each matters_\n> - _if no fixes were needed, say so explicitly instead of an empty list_\n>\n> **What to test:**\n> - _specific things to try from the user's perspective_\n> - _edge cases_\n\nDo NOT ask the user if they want the dev server started — just start it and present the summary. Call step_done() when done.",
       "transitions": [
         {
           "when": {
@@ -213,6 +213,22 @@
       "phase": "build",
       "agentId": "builder",
       "prompt": "Remove temporary artifacts and delete the workspace:\n\n1. Remove remote tag if it exists: `git push origin --delete refs/tags/review-fixes-{{pr_number}} 2>/dev/null; true`\n2. Remove local tag if it exists: `git tag -d review-fixes-{{pr_number}} 2>/dev/null; true`\n3. `workspace delete review-pr-{{pr_number}}`\n4. Call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "pr_feedback"
+        }
+      ]
+    },
+    {
+      "id": "pr_feedback",
+      "name": "Leave Feedback on PR",
+      "type": "agent",
+      "phase": "verification",
+      "agentId": "builder",
+      "prompt": "Leave closing feedback on PR #{{pr_number}} once the user has approved it:\n\n1. Determine the next release version: read the current version from package.json and use the next patch bump (e.g. 2.0.112 -> v2.0.113). If you can't determine it confidently, ask the user.\n2. Draft the PR comment following this template:\n\n> Merged, will be released in vX.Y.Z\n>\n> AI-summary\n>\n> ---\n>\n> <concise bullet-point summary of what the PR modified>\n\n3. Present the full draft in chat and ask the user to approve or modify it.\n4. Do NOT post the comment until the user explicitly approves the final text.\n5. Once approved, post it: write the text to a temp file and run `gh pr comment {{pr_number}} --body-file <tempfile>`, then remove the temp file.\n\nCall step_done() when you have presented the draft.",
       "transitions": [
         {
           "when": {
