@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { useWorkflowsStore } from '../../stores/workflows'
+import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
+import { resolveEffectiveWorkflow } from '../../lib/workflow-scope'
 import { PlayIcon } from '../shared/icons'
 import { hexToRgba } from '../../lib/colors'
 
@@ -10,10 +11,8 @@ interface WorkflowStartedData {
 }
 
 export const WorkflowStartedCard = memo(function WorkflowStartedCard({ data }: { data: WorkflowStartedData }) {
-  const workflowDefaults = useWorkflowsStore((state) => state.defaults)
-  const workflowUserItems = useWorkflowsStore((state) => state.userItems)
-  const workflows = [...workflowDefaults, ...workflowUserItems]
-  const color = workflows.find((w) => w.id === data.workflowId)?.color ?? data.workflowColor ?? '#6b7280'
+  const workflows = useWorkflowsStore(selectAllWorkflows)
+  const color = resolveEffectiveWorkflow(workflows, data.workflowId)?.color ?? data.workflowColor ?? '#6b7280'
 
   return (
     <div

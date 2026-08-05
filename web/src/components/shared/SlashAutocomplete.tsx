@@ -1,15 +1,14 @@
 import { ScrollArea } from './ScrollArea'
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react'
 import { getSlashAtCursor } from '../../lib/getSlashAtCursor'
+import { SCOPE_LABELS } from '../../lib/workflow-scope'
 import type { WorkflowInfo } from '../../lib/parse-slash-command'
 import type { CommandInfo } from '../../lib/parse-slash-command'
+import type { WorkflowScope } from '@shared/types.js'
 
-export interface SlashSuggestion {
-  type: 'workflow' | 'command'
-  id: string
-  name: string
-  paramCount: number
-}
+export type SlashSuggestion =
+  | { type: 'workflow'; id: string; name: string; scope: WorkflowScope; paramCount: number }
+  | { type: 'command'; id: string; name: string; paramCount: number }
 
 interface SlashAutocompleteProps {
   text: string
@@ -52,6 +51,7 @@ const SlashAutocomplete = forwardRef<SlashAutocompleteHandle, SlashAutocompleteP
         type: 'workflow' as const,
         id: w.id,
         name: w.name,
+        scope: w.scope,
         paramCount: (w.parameters ?? []).length,
       }))
     const cmd: SlashSuggestion[] = commands
@@ -122,7 +122,7 @@ const SlashAutocomplete = forwardRef<SlashAutocompleteHandle, SlashAutocompleteP
         <div>
           {suggestions.map((item, index) => (
             <button
-              key={`${item.type}-${item.id}`}
+              key={`${item.type}-${item.id}-${item.type === 'workflow' ? item.scope : ''}`}
               ref={(el) => {
                 itemsRef.current[index] = el
               }}
@@ -143,6 +143,11 @@ const SlashAutocomplete = forwardRef<SlashAutocompleteHandle, SlashAutocompleteP
                 /{item.id}
               </span>
               <span className="truncate flex-1">{item.name}</span>
+              {item.type === 'workflow' && (
+                <span className="text-[10px] text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded whitespace-nowrap">
+                  {SCOPE_LABELS[item.scope]}
+                </span>
+              )}
               {item.paramCount > 0 && (
                 <span className="text-[10px] text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded">
                   {item.paramCount} param{item.paramCount > 1 ? 's' : ''}

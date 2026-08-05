@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { useSessionStore, useIsRunning } from '../../stores/session'
-import { useWorkflowsStore } from '../../stores/workflows'
+import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
 import { useCommandsStore } from '../../stores/commands'
 import { authFetch } from '../../lib/api'
 import { parseSlashCommand, extractTemplateParams } from '../../lib/parse-slash-command'
+import { resolveWorkflowForLaunch } from '../../lib/workflow-scope'
+import { dedupById } from '../../lib/modal-utils'
+import type { WorkflowLaunchScope } from '@shared/types.js'
 import type { Attachment } from '@shared/types.js'
 import type { PromptHistoryItem } from '../../hooks/usePromptHistory'
 import { AttachmentPreview } from '../shared/AttachmentPreview.js'
@@ -55,8 +58,8 @@ interface ChatInputProps {
   onOpenMessageSearch: () => void
   onOpenCommandsModal: () => void
   onOpenWorkflowsModal: () => void
-  onSelectWorkflow: (workflowId: string) => void
-  onSelectWorkflowWithSubGroup: (workflowId: string, subGroup: string) => void
+  onSelectWorkflow: (workflowId: string, scope?: WorkflowLaunchScope) => void
+  onSelectWorkflowWithSubGroup: (workflowId: string, subGroup: string, scope?: WorkflowLaunchScope) => void
   onSendCommand: (content: string, agentMode?: string, textareaContent?: string, attachments?: Attachment[]) => void
   clearInput: () => void
 }
@@ -109,6 +112,9 @@ export function ChatInput({
   const workflowsFetchedRef = useRef(false)
   const sendingRef = useRef(false)
   const [activeSlashParams, setActiveSlashParams] = useState<string[]>([])
+  // Records the scope chosen via the slash autocomplete so the launch resolves
+  // the exact definition the user picked (only honored when the id still matches).
+  const selectedSlashScopeRef = useRef<{ id: string; scope: WorkflowLaunchScope } | null>(null)
 
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
 
@@ -355,14 +361,17 @@ export function ChatInput({
     // Detect slash commands: /workflow-id arg1 arg2 or /command-name arg1 arg2
     const trimmed = input.trim()
     if (trimmed.startsWith('/')) {
-      const allWorkflows = useWorkflowsStore.getState()
-      const workflows = [...allWorkflows.defaults, ...allWorkflows.userItems, ...allWorkflows.projectItems]
+      const workflows = selectAllWorkflows(useWorkflowsStore.getState())
       const allCommands = useCommandsStore.getState()
-      const commands = [...allCommands.defaults, ...allCommands.userItems, ...allCommands.projectItems]
+      const commands = dedupById(dedupById(allCommands.defaults, allCommands.userItems), allCommands.projectItems)
       const slashResult = parseSlashCommand(input, workflows, commands)
       if (slashResult?.workflowId) {
-        // Validate required params
-        const wf = workflows.find((w) => w.id === slashResult.workflowId)
+        const pending = selectedSlashScopeRef.current
+        const scope: WorkflowLaunchScope = pending && pending.id === slashResult.workflowId ? pending.scope : 'auto'
+        selectedSlashScopeRef.current = null
+        // Resolve the exact definition that will be launched so param validation
+        // (and inline hints) match server execution — not just the precedence winner.
+        const wf = resolveWorkflowForLaunch(workflows, slashResult.workflowId, scope)
         const missingRequired = (wf?.parameters ?? []).filter((p) => p.required && !(p.id in slashResult.params))
         if (missingRequired.length > 0) {
           const names = missingRequired.map((p) => p.label || p.id).join(', ')
@@ -370,7 +379,7 @@ export function ChatInput({
           sendingRef.current = false
           return
         }
-        launchWorkflow(undefined, undefined, slashResult.workflowId, undefined, slashResult.params)
+        launchWorkflow(undefined, undefined, slashResult.workflowId, undefined, slashResult.params, scope)
         clearInput()
         sendingRef.current = false
         return
@@ -442,16 +451,15 @@ export function ChatInput({
       }
       // Set inline param hints
       if (suggestion.type === 'workflow') {
-        const wf = [
-          ...useWorkflowsStore.getState().defaults,
-          ...useWorkflowsStore.getState().userItems,
-          ...useWorkflowsStore.getState().projectItems,
-        ].find((w) => w.id === suggestion.id)
+        selectedSlashScopeRef.current = { id: suggestion.id, scope: suggestion.scope }
+        const wf = selectAllWorkflows(useWorkflowsStore.getState()).find(
+          (w) => w.id === suggestion.id && w.scope === suggestion.scope,
+        )
         setActiveSlashParams((wf?.parameters ?? []).map((p) => p.id))
       } else {
         // Use paramNames from the command list (server-computed from prompt)
         const allCmds = useCommandsStore.getState()
-        const cmd = [...allCmds.defaults, ...allCmds.userItems, ...allCmds.projectItems].find(
+        const cmd = dedupById(dedupById(allCmds.defaults, allCmds.userItems), allCmds.projectItems).find(
           (c) => c.id === suggestion.id,
         )
         setActiveSlashParams(cmd?.paramNames ?? [])
@@ -466,6 +474,17 @@ export function ChatInput({
       setInput(value)
       if (showHistory) closeHistory()
       cursorPosRef.current = e.target.selectionStart
+
+      // Drop a stale slash-scope selection when the typed slash target no longer
+      // matches it (edited, cleared, or rewritten to a different id).
+      const pending = selectedSlashScopeRef.current
+      if (pending) {
+        const match = value.match(/^\/(\S+)/)
+        const currentId = match ? match[1] : undefined
+        if (!currentId || currentId !== pending.id) {
+          selectedSlashScopeRef.current = null
+        }
+      }
 
       // Clear inline param hints when slash pattern is broken or input is empty
       if (activeSlashParams.length > 0 && (!value.startsWith('/') || !value.includes(' '))) {
@@ -593,13 +612,10 @@ export function ChatInput({
               ref={slashAutocompleteRef}
               text={input}
               cursorPos={cursorPosRef.current}
-              workflows={(() => {
-                const s = useWorkflowsStore.getState()
-                return [...s.defaults, ...s.userItems, ...s.projectItems]
-              })()}
+              workflows={(() => selectAllWorkflows(useWorkflowsStore.getState()))()}
               commands={(() => {
                 const s = useCommandsStore.getState()
-                return [...s.defaults, ...s.userItems, ...s.projectItems]
+                return dedupById(dedupById(s.defaults, s.userItems), s.projectItems)
               })()}
               onSelect={handleSelectSlash}
             />

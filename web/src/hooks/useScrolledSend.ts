@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useSessionStore } from '../stores/session'
-import type { Attachment } from '@shared/types.js'
+import type { Attachment, WorkflowLaunchScope } from '@shared/types.js'
 
 export function useScrolledSend(setAutoScroll: (active: boolean) => void) {
   const storeSendMessage = useSessionStore((state) => state.sendMessage)
@@ -21,9 +21,10 @@ export function useScrolledSend(setAutoScroll: (active: boolean) => void) {
       workflowId?: string,
       subGroup?: string,
       params?: Record<string, string>,
+      scope: WorkflowLaunchScope = 'auto',
     ) => {
       setAutoScroll(true)
-      storeLaunchWorkflow(content, attachments, workflowId, subGroup, params)
+      storeLaunchWorkflow(content, attachments, workflowId, subGroup, params, scope)
     },
     [setAutoScroll, storeLaunchWorkflow],
   )

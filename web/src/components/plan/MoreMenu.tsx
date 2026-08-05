@@ -3,18 +3,19 @@ import { useEffect, useState, useRef } from 'react'
 import { MoreIcon, AttachIcon } from '../shared/icons'
 import { useCommandsStore } from '../../stores/commands'
 import { CommandsModal } from '../settings/CommandsModal'
-import { useWorkflowsStore, type WorkflowInfo } from '../../stores/workflows'
+import { useWorkflowsStore, type WorkflowInfo, selectAllWorkflows } from '../../stores/workflows'
 import { WorkflowsModal } from '../settings/WorkflowsModal'
 import { dedupById } from '../../lib/modal-utils'
+import { SCOPE_LABELS } from '../../lib/workflow-scope'
 import { EditButton } from '../shared/IconButton'
 import { Portal } from '../shared/Portal'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import type { Attachment } from '@shared/types.js'
+import type { Attachment, WorkflowScope } from '@shared/types.js'
 
 interface MoreMenuProps {
   onSendCommand: (content: string, agentMode?: string, textareaContent?: string, attachments?: Attachment[]) => void
-  onSelectWorkflow: (workflowId: string) => void
-  onSelectWorkflowWithSubGroup: (workflowId: string, subGroup: string) => void
+  onSelectWorkflow: (workflowId: string, scope?: WorkflowScope) => void
+  onSelectWorkflowWithSubGroup: (workflowId: string, subGroup: string, scope?: WorkflowScope) => void
   onOpenCommandsManager: () => void
   onOpenWorkflowsManager: () => void
   onAttach: () => void
@@ -61,13 +62,12 @@ export function MoreMenu({
   const commandProjectItems = useCommandsStore((state) => state.projectItems)
   const fetchCommands = useCommandsStore((state) => state.fetchCommands)
 
-  const workflowDefaults = useWorkflowsStore((state) => state.defaults)
-  const workflowUserItems = useWorkflowsStore((state) => state.userItems)
-  const workflowProjectItems = useWorkflowsStore((state) => state.projectItems)
   const fetchWorkflows = useWorkflowsStore((state) => state.fetchWorkflows)
 
   const commands = dedupById(dedupById(commandDefaults, commandUserItems), commandProjectItems)
-  const workflows = dedupById(dedupById(workflowDefaults, workflowUserItems), workflowProjectItems)
+  // Workflows: keep every scope visible so same-id workflows in different scopes
+  // are distinguishable instead of silently collapsed.
+  const workflows = useWorkflowsStore(selectAllWorkflows)
 
   useEffect(() => {
     if (isOpen) {
@@ -139,8 +139,8 @@ export function MoreMenu({
     setIsOpen(false)
   }
 
-  const handleSelectWorkflowLocal = (workflowId: string) => {
-    onSelectWorkflow(workflowId)
+  const handleSelectWorkflowLocal = (workflowId: string, scope?: WorkflowScope) => {
+    onSelectWorkflow(workflowId, scope)
     setIsOpen(false)
   }
 
@@ -261,18 +261,21 @@ export function MoreMenu({
                   const color = workflow.color ?? '#3b82f6'
                   return (
                     <div
-                      key={workflow.id}
+                      key={`${workflow.id}-${workflow.scope}`}
                       className={`flex items-center gap-2 px-3 py-2 rounded transition-colors group ${
                         index === selectedIndex ? 'bg-accent-primary/20' : 'hover:bg-bg-tertiary'
                       }`}
                     >
                       <button
                         type="button"
-                        onClick={() => handleSelectWorkflowLocal(workflow.id)}
+                        onClick={() => handleSelectWorkflowLocal(workflow.id, workflow.scope)}
                         className="flex-1 text-left flex items-center gap-2"
                       >
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                         <span className="text-sm text-text-primary font-medium flex-1">{workflow.name}</span>
+                        <span className="text-[10px] text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded whitespace-nowrap">
+                          {SCOPE_LABELS[workflow.scope]}
+                        </span>
                         {condMet !== null && (
                           <span
                             className="w-1.5 h-1.5 rounded-full flex-shrink-0"
@@ -287,7 +290,7 @@ export function MoreMenu({
                             subGroups={workflow.subGroups}
                             onSelect={(subGroup) => {
                               setIsOpen(false)
-                              onSelectWorkflowWithSubGroup(workflow.id, subGroup)
+                              onSelectWorkflowWithSubGroup(workflow.id, subGroup, workflow.scope)
                             }}
                           />
                         )}

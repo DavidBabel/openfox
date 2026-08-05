@@ -19,6 +19,7 @@ import {
   getDefaultWorkflowIds,
   saveWorkflowToProject,
   deleteProjectWorkflow,
+  normalizeWorkflowScope,
 } from './registry.js'
 import type { WorkflowDefinition } from './types.js'
 
@@ -409,5 +410,24 @@ describe('CRUD project workflows', () => {
 
     const loaded = await loadProjectWorkflows(tempDir)
     expect(loaded).toHaveLength(0)
+  })
+})
+
+describe('normalizeWorkflowScope', () => {
+  it('accepts each concrete scope', () => {
+    expect(normalizeWorkflowScope('builtin')).toBe('builtin')
+    expect(normalizeWorkflowScope('user')).toBe('user')
+    expect(normalizeWorkflowScope('project')).toBe('project')
+  })
+
+  it('accepts auto', () => {
+    expect(normalizeWorkflowScope('auto')).toBe('auto')
+  })
+
+  it('defaults unknown values to auto', () => {
+    expect(normalizeWorkflowScope('system')).toBe('auto')
+    expect(normalizeWorkflowScope(42)).toBe('auto')
+    expect(normalizeWorkflowScope(undefined)).toBe('auto')
+    expect(normalizeWorkflowScope(null)).toBe('auto')
   })
 })

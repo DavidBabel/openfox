@@ -71,6 +71,11 @@ vi.mock('../../stores/workflows', () => ({
         : { defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() },
     { getState: vi.fn() },
   ),
+  selectAllWorkflows: (state: { defaults: unknown[]; userItems: unknown[]; projectItems: unknown[] }) => [
+    ...state.defaults,
+    ...state.userItems,
+    ...state.projectItems,
+  ],
 }))
 
 vi.mock('../../stores/settings', () => ({

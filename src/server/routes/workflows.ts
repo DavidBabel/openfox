@@ -34,6 +34,7 @@ export function createWorkflowRoutes(configDir: string, config: Config, projectD
     exists: workflowExists,
     isDefault: isDefaultWorkflow,
     getDefaultIds: getDefaultWorkflowIds,
+    annotateScope: true,
     validateCreate: (body) => {
       const steps = body['steps']
       if (!Array.isArray(steps) || steps.length === 0) return 'Missing required fields: metadata.id, steps'

@@ -7,6 +7,7 @@ import type {
   Message,
   ContextState,
   Attachment,
+  WorkflowLaunchScope,
 } from '@shared/types.js'
 import type { ServerMessage, QueuedMessage, ChoiceOption } from '@shared/protocol.js'
 import type { ConnectionStatus } from '../../lib/ws'
@@ -97,6 +98,7 @@ export interface SessionState {
     workflowId?: string,
     subGroup?: string,
     params?: Record<string, string>,
+    scope?: WorkflowLaunchScope,
   ) => void
   continueWorkflow: (choiceId?: string) => void
   exitWorkflow: () => void

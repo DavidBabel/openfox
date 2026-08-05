@@ -758,6 +758,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       workflowId?: string,
       subGroup?: string,
       params?: Record<string, string>,
+      scope?: import('@shared/types.js').WorkflowLaunchScope,
     ) => {
       const payload: Record<string, unknown> = {}
       if (content?.trim()) payload.content = content
@@ -765,6 +766,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       if (workflowId) payload.workflowId = workflowId
       if (subGroup) payload.subGroup = subGroup
       if (params) payload.params = params
+      payload.scope = scope ?? 'auto'
       wsClient.send('runner.launch', payload)
     },
 

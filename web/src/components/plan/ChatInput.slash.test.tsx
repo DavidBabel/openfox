@@ -14,12 +14,13 @@ describe('parseSlashCommand', () => {
     {
       id: 'pr-review',
       name: 'PR Review',
+      scope: 'builtin',
       parameters: [
         { id: 'pr_number', label: 'PR Number', position: 0, required: true },
         { id: 'pr_title', label: 'PR Title', position: 1, required: false },
       ],
     },
-    { id: 'simple', name: 'Simple' },
+    { id: 'simple', name: 'Simple', scope: 'builtin' },
   ]
 
   it('parses /pr-review 157 into workflow and params', () => {
@@ -98,7 +99,7 @@ describe('parseSlashCommand with commands', () => {
   })
 
   it('workflow takes priority over command with same ID', () => {
-    const wf: WorkflowInfo[] = [{ id: 'review', name: 'Review WF' }]
+    const wf: WorkflowInfo[] = [{ id: 'review', name: 'Review WF', scope: 'builtin' }]
     const cmds: CommandInfo[] = [{ id: 'review', name: 'Review CMD' }]
     const result = parseSlashCommand('/review arg', wf, cmds)
     expect(result).toEqual({ workflowId: 'review', params: { '0': 'arg' } })
@@ -112,17 +113,23 @@ describe('parseSlashCommand with commands', () => {
 const mockSendMessage = vi.fn()
 const mockLaunchWorkflow = vi.fn()
 
-const mockWorkflowState = {
+const mockWorkflowState: {
+  defaults: WorkflowInfo[]
+  userItems: WorkflowInfo[]
+  projectItems: WorkflowInfo[]
+  fetchWorkflows: ReturnType<typeof vi.fn>
+} = {
   defaults: [
     {
       id: 'pr-review',
       name: 'PR Review',
+      scope: 'builtin',
       parameters: [
         { id: 'pr_number', label: 'PR Number', position: 0, required: true },
         { id: 'pr_title', label: 'PR Title', position: 1, required: false },
       ],
     },
-    { id: 'simple', name: 'Simple' },
+    { id: 'simple', name: 'Simple', scope: 'builtin' },
   ],
   userItems: [],
   projectItems: [],
@@ -163,6 +170,11 @@ vi.mock('../../stores/workflows', () => ({
     (selector?: (state: unknown) => unknown) => (selector ? selector(mockWorkflowState) : mockWorkflowState),
     { getState: () => mockWorkflowState },
   ),
+  selectAllWorkflows: (state: { defaults: unknown[]; userItems: unknown[]; projectItems: unknown[] }) => [
+    ...state.defaults,
+    ...state.userItems,
+    ...state.projectItems,
+  ],
 }))
 
 vi.mock('../../hooks/useScrolledSend', () => ({
@@ -237,10 +249,17 @@ describe('ChatInput slash command integration', () => {
     const sendButton = screen.getByTestId('chat-send-button')
     fireEvent.click(sendButton)
 
-    expect(mockLaunchWorkflow).toHaveBeenCalledWith(undefined, undefined, 'pr-review', undefined, {
-      pr_number: '42',
-      pr_title: 'fix-bug',
-    })
+    expect(mockLaunchWorkflow).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      'pr-review',
+      undefined,
+      {
+        pr_number: '42',
+        pr_title: 'fix-bug',
+      },
+      'auto',
+    )
     expect(mockSendMessage).not.toHaveBeenCalled()
   })
 
@@ -305,9 +324,46 @@ describe('ChatInput slash command integration', () => {
     const textarea = screen.getByTestId('chat-input-textarea')
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
 
-    expect(mockLaunchWorkflow).toHaveBeenCalledWith(undefined, undefined, 'simple', undefined, {
-      '0': 'foo',
-    })
+    expect(mockLaunchWorkflow).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      'simple',
+      undefined,
+      {
+        '0': 'foo',
+      },
+      'auto',
+    )
     expect(mockSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('validates typed slash params against the effective (project) definition', () => {
+    // Same id in multiple scopes: project wins for unselected input.
+    mockWorkflowState.defaults = [{ id: 'pr-review', name: 'PR Review', scope: 'builtin' }]
+    mockWorkflowState.userItems = [
+      {
+        id: 'pr-review',
+        name: 'PR Review',
+        scope: 'user',
+        parameters: [{ id: 'legacy_param', label: 'Legacy', position: 0, required: true }],
+      },
+    ]
+    mockWorkflowState.projectItems = [
+      {
+        id: 'pr-review',
+        name: 'PR Review',
+        scope: 'project',
+        parameters: [{ id: 'pr_number', label: 'PR Number', position: 0, required: true }],
+      },
+    ]
+    const setErrorMessage = vi.fn()
+    renderChatInput({ input: '/pr-review', setErrorMessage })
+
+    const sendButton = screen.getByTestId('chat-send-button')
+    fireEvent.click(sendButton)
+
+    // The project definition's required param is enforced, not the user one's.
+    expect(setErrorMessage).toHaveBeenCalledWith(expect.stringContaining('PR Number'))
+    expect(mockLaunchWorkflow).not.toHaveBeenCalled()
   })
 })

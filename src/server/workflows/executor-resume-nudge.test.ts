@@ -107,6 +107,7 @@ function createWorkflow(overrides?: Partial<WorkflowDefinition>): WorkflowDefini
 
 function createMockOptions(extra?: Partial<OrchestratorOptions>): OrchestratorOptions {
   return {
+    scope: 'auto',
     sessionManager: {
       requireSession: vi.fn(() => ({
         workdir: '/tmp/test',

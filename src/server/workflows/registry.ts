@@ -12,6 +12,7 @@ import { join, dirname } from 'node:path'
 import { constants } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { WorkflowDefinition } from './types.js'
+import type { WorkflowLaunchScope, WorkflowScope } from '../../shared/types.js'
 import { logger } from '../utils/logger.js'
 import { saveItemToDir, jsonSerializer, deleteItemFromDir } from '../shared/item-loader.js'
 
@@ -19,6 +20,16 @@ const __bundleDir = dirname(fileURLToPath(import.meta.url))
 const DEFAULTS_DIR = join(__bundleDir, 'defaults')
 const DEFAULTS_DIR_ALT = join(__bundleDir, 'workflow-defaults')
 const WORKFLOW_EXTENSION = '.workflow.json'
+
+export const WORKFLOW_SCOPES: readonly WorkflowScope[] = ['builtin', 'user', 'project']
+
+/** Validate a wire-provided scope value; anything unrecognized falls back to 'auto' (server precedence). */
+export function normalizeWorkflowScope(value: unknown): WorkflowLaunchScope {
+  return typeof value === 'string' &&
+    (value === 'builtin' || value === 'user' || value === 'project' || value === 'auto')
+    ? value
+    : 'auto'
+}
 
 function getWorkflowsDir(configDir: string): string {
   return join(configDir, 'workflows')

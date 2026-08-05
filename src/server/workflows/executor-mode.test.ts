@@ -198,6 +198,7 @@ describe('executeWorkflow mode changes', () => {
       sessionManager: mockSessionManager,
       sessionId: 'test-session',
       llmClient: { getModel: () => 'test-model' } as any,
+      scope: 'auto',
     }
 
     workflow = {

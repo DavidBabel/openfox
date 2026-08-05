@@ -4,14 +4,15 @@ import { ScrollArea } from '../shared/ScrollArea'
 import type { ScrollbarGestureKind } from '../shared/ScrollArea'
 import { useViewport } from '../../hooks/useViewport'
 import { useSessionStore, useIsRunning } from '../../stores/session'
-import { useWorkflowsStore } from '../../stores/workflows'
+import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
+import { SCOPE_LABELS } from '../../lib/workflow-scope'
 import { useDisplaySettings } from '../../stores/settings'
 import { ChatFeedItems } from './ChatFeedItems'
 import { CloseButton } from '../shared/CloseButton'
 import { ChevronUpIcon } from '../shared/icons'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import type { DisplayItem } from './groupMessages.js'
-import type { MetadataEntry } from '@shared/types.js'
+import type { MetadataEntry, WorkflowScope } from '@shared/types.js'
 
 const EMPTY_CRITERIA: MetadataEntry[] = []
 
@@ -19,7 +20,12 @@ interface MessageListProps {
   displayItems: DisplayItem[]
   scrollContainerRef: React.RefObject<OverlayScrollbarsComponentRef<'div'> | null>
   highlightedMessageId: string | null
-  onLaunchWorkflow: (workflowId: string, subGroup?: string, params?: Record<string, string>) => void
+  onLaunchWorkflow: (
+    workflowId: string,
+    subGroup?: string,
+    params?: Record<string, string>,
+    scope?: WorkflowScope,
+  ) => void
   onScrollToTop?: () => void
   hiddenCount?: number
   onScrollbarGesture?: (kind: ScrollbarGestureKind, gapToEndPx: number | null) => void
@@ -45,10 +51,7 @@ export const MessageList = memo(function MessageList({
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
-  const workflowDefaults = useWorkflowsStore((state) => state.defaults)
-  const workflowUserItems = useWorkflowsStore((state) => state.userItems)
-  const workflowProjectItems = useWorkflowsStore((state) => state.projectItems)
-  const workflows = [...workflowDefaults, ...workflowUserItems, ...workflowProjectItems]
+  const workflows = useWorkflowsStore(selectAllWorkflows)
 
   const hasNewCriteria = criteria.some((c) => c.status === 'pending')
   const isDone = sessionPhase === 'done'
@@ -209,14 +212,15 @@ export const MessageList = memo(function MessageList({
                 const border = `rgba(${r},${g},${b},0.25)`
                 return (
                   <WorkflowButton
-                    key={w.id}
+                    key={`${w.id}-${w.scope}`}
                     workflowName={w.name}
+                    scope={w.scope}
                     color={c}
                     bg={bg}
                     bgHover={bgHover}
                     border={border}
                     subGroups={w.subGroups}
-                    onLaunch={(subGroup?: string) => onLaunchWorkflow(w.id, subGroup)}
+                    onLaunch={(subGroup?: string) => onLaunchWorkflow(w.id, subGroup, undefined, w.scope)}
                   />
                 )
               })}
@@ -243,6 +247,7 @@ export const MessageList = memo(function MessageList({
 
 function WorkflowButton({
   workflowName,
+  scope,
   color,
   bg,
   bgHover,
@@ -251,6 +256,7 @@ function WorkflowButton({
   onLaunch,
 }: {
   workflowName: string
+  scope: WorkflowScope
   color: string
   bg: string
   bgHover: string
@@ -284,7 +290,8 @@ function WorkflowButton({
           e.currentTarget.style.backgroundColor = bg
         }}
       >
-        ▶ {workflowName}
+        ▶ {workflowName}{' '}
+        <span className="text-[10px] font-normal opacity-70 whitespace-nowrap">{SCOPE_LABELS[scope]}</span>
       </button>
       {hasSubGroups && (
         <div ref={menuRef} className="relative">

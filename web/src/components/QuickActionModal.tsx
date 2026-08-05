@@ -13,13 +13,14 @@ import { useWorkflowsStore } from '../stores/workflows'
 import { useAgentsStore } from '../stores/agents'
 import { useSessionStore } from '../stores/session'
 import { dedupById, fuzzyMatch, handleModalNavigation } from '../lib/modal-utils'
+import type { WorkflowScope } from '@shared/types.js'
 
 interface QuickActionModalProps {
   isOpen: boolean
   onClose: () => void
   onCloseComplete?: () => void
   onSelectCommand: (commandId: string, textareaContent?: string) => void
-  onSelectWorkflow: (workflowId: string) => void
+  onSelectWorkflow: (workflowId: string, scope?: WorkflowScope) => void
   onCloseCompleteAction?: () => void
   textareaContent?: string
   onSearchMessages?: () => void
@@ -145,7 +146,7 @@ export function QuickActionModal({
       id: w.id,
       name: w.name,
       prefix: 'Workflow > Run',
-      action: () => onSelectWorkflow(w.id),
+      action: () => onSelectWorkflow(w.id, w.scope),
     })),
     ...(['normal', 'dangerous'] as const)
       .filter((m) => m !== currentDangerLevel)

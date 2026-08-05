@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { authFetch } from '../lib/api'
 import { saveEntity, duplicateEntity } from './utils'
-import type { WorkflowParameter } from '@shared/types.js'
+import type { WorkflowParameter, WorkflowScope } from '@shared/types.js'
 
 export type { WorkflowParameter }
+export type { WorkflowScope }
 
 export interface WorkflowCondition {
   type: string
@@ -23,6 +24,8 @@ export interface WorkflowInfo {
   startCondition?: WorkflowCondition
   subGroups?: string[]
   parameters?: WorkflowParameter[]
+  /** Which scope this definition lives in (server-annotated). */
+  scope: WorkflowScope
 }
 
 export interface WorkflowStep {
@@ -73,7 +76,7 @@ interface WorkflowsState {
   setWorkdir: (workdir?: string) => void
   fetchWorkflows: (workdir?: string) => Promise<void>
   fetchTemplateVariables: () => Promise<void>
-  fetchWorkflow: (id: string, workdir?: string) => Promise<WorkflowFull | null>
+  fetchWorkflow: (id: string, workdir?: string, scope?: WorkflowScope) => Promise<WorkflowFull | null>
   fetchDefaultContent: (id: string, workdir?: string) => Promise<WorkflowFull | null>
   createWorkflow: (
     workflow: WorkflowFull,
@@ -84,8 +87,13 @@ interface WorkflowsState {
     id: string,
     workflow: Partial<WorkflowFull>,
     workdir?: string,
+    scope?: WorkflowScope,
   ) => Promise<{ success: boolean; error?: string }>
-  deleteWorkflow: (id: string, workdir?: string) => Promise<{ success: boolean; error?: string; reason?: string }>
+  deleteWorkflow: (
+    id: string,
+    scope: WorkflowScope,
+    workdir?: string,
+  ) => Promise<{ success: boolean; error?: string; reason?: string }>
   duplicateWorkflow: (
     id: string,
     destination?: 'project' | 'user',
@@ -94,6 +102,15 @@ interface WorkflowsState {
 }
 
 const workdirQuery = (workdir: string | undefined): string => (workdir ? `?workdir=${encodeURIComponent(workdir)}` : '')
+
+const scopeQuery = (scope: WorkflowScope | undefined): string => (scope ? `&scope=${scope}` : '')
+
+/** Flat list of every workflow across scopes, preserving all scope variants. */
+export const selectAllWorkflows = (state: WorkflowsState): WorkflowInfo[] => [
+  ...state.defaults,
+  ...state.userItems,
+  ...state.projectItems,
+]
 
 export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   defaults: [],
@@ -132,9 +149,9 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     }
   },
 
-  fetchWorkflow: async (id: string, workdir) => {
+  fetchWorkflow: async (id: string, workdir, scope) => {
     try {
-      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}`)
+      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}${scopeQuery(scope)}`)
       if (!res.ok) return null
       return (await res.json()) as WorkflowFull
     } catch {
@@ -162,25 +179,27 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     return result
   },
 
-  updateWorkflow: async (id: string, workflow: Partial<WorkflowFull>, workdir) => {
+  updateWorkflow: async (id: string, workflow: Partial<WorkflowFull>, workdir, scope) => {
     const wd = workdir ?? get().workdir
     const result = await saveEntity(
       'PUT',
-      `/api/workflows/${id}${workdirQuery(wd)}`,
+      `/api/workflows/${id}${workdirQuery(wd)}${scopeQuery(scope)}`,
       workflow as unknown as Record<string, unknown>,
     )
     if (result.success) await get().fetchWorkflows(wd)
     return result
   },
 
-  deleteWorkflow: async (id: string, workdir) => {
+  deleteWorkflow: async (id: string, scope, workdir) => {
     try {
-      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}`, { method: 'DELETE' })
+      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}${scopeQuery(scope)}`, {
+        method: 'DELETE',
+      })
       const data = await res.json()
       if (res.ok) {
         set((state) => ({
-          userItems: state.userItems.filter((p) => p.id !== id),
-          projectItems: state.projectItems.filter((p) => p.id !== id),
+          ...(scope === 'user' ? { userItems: state.userItems.filter((p) => p.id !== id) } : {}),
+          ...(scope === 'project' ? { projectItems: state.projectItems.filter((p) => p.id !== id) } : {}),
         }))
         return { success: true }
       }

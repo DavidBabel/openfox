@@ -1,9 +1,11 @@
-import type { WorkflowParameter } from '@shared/types.js'
+import type { WorkflowParameter, WorkflowScope } from '@shared/types.js'
 
 export interface WorkflowInfo {
   id: string
   name: string
   parameters?: WorkflowParameter[]
+  /** Which scope this definition lives in (server-annotated). */
+  scope: WorkflowScope
 }
 
 export interface CommandInfo {

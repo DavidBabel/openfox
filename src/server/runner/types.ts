@@ -5,7 +5,7 @@
  * State is derived from session criteria, not persisted separately.
  */
 
-import type { Attachment, StatsIdentity } from '../../shared/types.js'
+import type { Attachment, StatsIdentity, WorkflowLaunchScope } from '../../shared/types.js'
 import type { ServerMessage } from '../../shared/protocol.js'
 import type { LLMClientWithModel } from '../llm/client.js'
 import type { StreamTiming } from '../llm/streaming.js'
@@ -34,6 +34,12 @@ export interface OrchestratorOptions {
   signal?: AbortSignal
   /** Override the globally active workflow for this session */
   workflowId?: string
+  /**
+   * Which scope to resolve the workflow from: 'builtin' | 'user' | 'project',
+   * or 'auto' for server precedence (project > user > builtin). Invalid values
+   * are normalized to 'auto'.
+   */
+  scope: WorkflowLaunchScope
   /** Resume from a specific step (used after a user step pause) */
   resumeFromStep?: string
   /** Initial step output when resuming */

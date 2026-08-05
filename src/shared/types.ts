@@ -39,6 +39,12 @@ export interface WorkflowParameter {
   required?: boolean
 }
 
+/** Where a workflow definition lives: bundled defaults, global config, or the project's .openfox/. */
+export type WorkflowScope = 'builtin' | 'user' | 'project'
+
+/** Launch scope: an explicit bucket to resolve from, or 'auto' for server precedence (project > user > builtin). */
+export type WorkflowLaunchScope = WorkflowScope | 'auto'
+
 export type WorkflowExecutionStatus = 'running' | 'waiting' | 'completed' | 'cancelled' | 'blocked'
 
 /** A selectable branch presented to the user at a paused user step. */

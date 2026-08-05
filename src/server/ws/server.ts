@@ -18,6 +18,7 @@ import type { ProviderManager } from '../provider-manager.js'
 import { runChatTurn } from '../chat/orchestrator.js'
 
 import { runOrchestrator } from '../runner/index.js'
+import { normalizeWorkflowScope } from '../workflows/registry.js'
 import { appendCompactionPrompt } from '../context/compactor.js'
 import { computeSessionHash, applyDynamicContext, computeUnifiedDiff } from '../chat/dynamic-context.js'
 import { provideAnswer } from '../tools/index.js'
@@ -1297,6 +1298,7 @@ async function handleClientMessage(
             content?: string
             attachments?: unknown[]
             workflowId?: string
+            scope?: string
             subGroup?: string
             resumeFrom?: string
             stepOutput?: Record<string, string>
@@ -1365,6 +1367,7 @@ async function handleClientMessage(
         sessionId,
         llmClient: llmForSession(sessionId),
         statsIdentity: statsForSession(sessionId),
+        scope: normalizeWorkflowScope(launchPayload?.scope),
         ...(launchPayload?.workflowId ? { workflowId: launchPayload.workflowId } : {}),
         ...(launchPayload?.subGroup ? { subGroup: launchPayload.subGroup } : {}),
         ...(isResume && launchPayload?.resumeFrom ? { resumeFromStep: launchPayload.resumeFrom } : {}),

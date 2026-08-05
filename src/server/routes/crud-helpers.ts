@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { join } from 'node:path'
 import { pathExists, findFileByInternalId } from '../shared/item-loader.js'
+import { normalizeWorkflowScope } from '../workflows/registry.js'
+import type { WorkflowLaunchScope, WorkflowScope } from '../../shared/types.js'
 
 export function computeOverrideIds<T extends { metadata: { id: string } }>(defaults: T[], userItems: T[]): string[] {
   return userItems.filter((u) => defaults.some((d) => d.metadata.id === u.metadata.id)).map((u) => u.metadata.id)
@@ -11,6 +13,24 @@ export function resolveProjectDir(req: { query: Record<string, unknown> }, fallb
   if (typeof workdir !== 'string') return fallback
   const trimmed = workdir.trim()
   return trimmed ? trimmed : fallback
+}
+
+/** Resolve a ?scope= query param; anything invalid falls back to 'auto' (server precedence). */
+export function resolveScope(req: { query: Record<string, unknown> }): WorkflowLaunchScope {
+  const scope = req.query['scope']
+  return normalizeWorkflowScope(typeof scope === 'string' ? scope : undefined)
+}
+
+async function loadItemsForScope<T>(
+  config: Pick<CrudRouteConfig<T>, 'loadDefaults' | 'loadUser' | 'loadProject' | 'loadAll'>,
+  configDir: string,
+  projectDir: string | undefined,
+  scope: WorkflowLaunchScope,
+): Promise<T[]> {
+  if (scope === 'builtin') return config.loadDefaults()
+  if (scope === 'user') return config.loadUser(configDir)
+  if (scope === 'project') return projectDir ? config.loadProject(projectDir) : []
+  return config.loadAll(configDir, projectDir)
 }
 
 export interface LoadFunctions<T> {
@@ -71,6 +91,8 @@ export interface CrudRouteConfig<T> {
   getDefaultIds?: () => Promise<string[]>
   validateCreate?: (body: Record<string, unknown>) => string | null
   mapToResponse: (item: T) => { [key: string]: unknown }
+  /** Opt in to scope annotation (GET /) and ?scope= handling (GET/:id, PUT, DELETE). Workflows only. */
+  annotateScope?: boolean
   extraGetData?: (effectiveProjectDir?: string) => Promise<{ [key: string]: unknown }>
   extraRoutes?: (router: Router) => void
 }
@@ -92,10 +114,15 @@ export function createCrudRoutes<T extends { metadata: { id: string; name: strin
     const userOverrideIds = computeOverrideIds(defaults, userItems)
     const projectOverrideIds = computeOverrideIds(defaults, projectItems)
     const extra = config.extraGetData ? await config.extraGetData(effectiveProjectDir) : {}
+    const annotate = (item: { [key: string]: unknown }, scope: WorkflowScope) => ({ ...item, scope })
+    const mapWithScope = (items: T[], scope: WorkflowScope) =>
+      config.annotateScope
+        ? items.map((i) => annotate(config.mapToResponse(i), scope))
+        : items.map(config.mapToResponse)
     res.json({
-      defaults: defaults.map(config.mapToResponse),
-      userItems: userItems.map(config.mapToResponse),
-      projectItems: projectItems.map(config.mapToResponse),
+      defaults: mapWithScope(defaults, 'builtin'),
+      userItems: mapWithScope(userItems, 'user'),
+      projectItems: mapWithScope(projectItems, 'project'),
       overrideIds: [...userOverrideIds, ...projectOverrideIds],
       ...extra,
     })
@@ -119,7 +146,8 @@ export function createCrudRoutes<T extends { metadata: { id: string; name: strin
   router.get('/:id', async (req, res) => {
     const { id } = req.params
     const effectiveProjectDir = resolveProjectDir(req, projectDir)
-    const items = await config.loadAll(configDir, effectiveProjectDir)
+    const scope = config.annotateScope ? resolveScope(req) : 'auto'
+    const items = await loadItemsForScope(config, configDir, effectiveProjectDir, scope)
     const item = config.findById(id, items)
     if (!item) {
       return res.status(404).json({ error: 'Not found' })
@@ -167,7 +195,13 @@ export function createCrudRoutes<T extends { metadata: { id: string; name: strin
       ...body,
       metadata: { ...existing.metadata, ...meta, id },
     } as unknown as T
-    const isProject = await isProjectItem(effectiveProjectDir, config.dirName, id, config.ext)
+    const scope = config.annotateScope ? resolveScope(req) : 'auto'
+    const isProject =
+      scope === 'project'
+        ? true
+        : scope === 'user'
+          ? false
+          : await isProjectItem(effectiveProjectDir, config.dirName, id, config.ext)
     if (isProject) {
       await config.saveToProject(effectiveProjectDir!, updated)
     } else {
@@ -179,17 +213,19 @@ export function createCrudRoutes<T extends { metadata: { id: string; name: strin
   router.delete('/:id', async (req, res) => {
     const { id } = req.params
     const effectiveProjectDir = resolveProjectDir(req, projectDir)
-    const isProject = await isProjectItem(effectiveProjectDir, config.dirName, id, config.ext)
-    if (isProject) {
-      const result = await config.deleteProject(effectiveProjectDir!, id)
-      if (!result.success) {
-        return res.status(500).json({ error: 'Failed to delete project item' })
-      }
-      return res.json({ success: true })
-    }
-    const result = await config.delete(configDir, id)
+    const scope = config.annotateScope ? resolveScope(req) : 'auto'
+    const target =
+      scope === 'project' || scope === 'user'
+        ? scope
+        : (await isProjectItem(effectiveProjectDir, config.dirName, id, config.ext))
+          ? 'project'
+          : 'user'
+    const result =
+      target === 'project' ? await config.deleteProject(effectiveProjectDir!, id) : await config.delete(configDir, id)
     if (!result.success) {
-      return res.status(403).json({ error: result.reason ?? 'Cannot delete this item' })
+      return res.status(target === 'project' ? 500 : 403).json({
+        error: target === 'project' ? 'Failed to delete project item' : (result.reason ?? 'Cannot delete this item'),
+      })
     }
     res.json({ success: true })
   })

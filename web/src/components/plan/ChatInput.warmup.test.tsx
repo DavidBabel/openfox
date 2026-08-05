@@ -32,6 +32,11 @@ vi.mock('../../stores/workflows', () => ({
       selector({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() }),
     { getState: () => ({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() }) },
   ),
+  selectAllWorkflows: (state: { defaults: unknown[]; userItems: unknown[]; projectItems: unknown[] }) => [
+    ...state.defaults,
+    ...state.userItems,
+    ...state.projectItems,
+  ],
 }))
 
 vi.mock('../../stores/commands', () => ({

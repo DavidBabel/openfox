@@ -27,6 +27,7 @@ import { WorkflowListSection } from './workflows/WorkflowListItem'
 import { StepPanel } from './workflows/StepPanel'
 import { TransitionPanel } from './workflows/TransitionPanel'
 import { CONDITION_LABELS, CONDITION_TYPES, resolveAgent } from './workflows/layout'
+import type { WorkflowScope } from '@shared/types.js'
 
 interface WorkflowsModalProps {
   isOpen: boolean
@@ -75,6 +76,9 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
 
   const [view, setView] = useState<'list' | 'edit'>('list')
   const [editingId, setEditingId] = useState<string | null>(null)
+  // Scope of the row being edited (set only when the edit originated from a
+  // scope-specific section). Undefined means "let the server resolve" (auto).
+  const [editingScope, setEditingScope] = useState<WorkflowScope | undefined>(undefined)
   const [isReadOnly, setIsReadOnly] = useState(false)
   const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null)
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null)
@@ -177,8 +181,9 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
     setView('edit')
   }
 
-  const handleEdit = async (workflowId: string) => {
-    const workflow = await fetchWorkflow(workflowId, projectDir)
+  const handleEdit = async (workflowId: string, scope?: WorkflowScope) => {
+    setEditingScope(scope)
+    const workflow = await fetchWorkflow(workflowId, projectDir, scope)
     if (!workflow) return
     populateForm(workflow, { editingId: workflowId, isReadOnly: false, selectedNodeKey: null, selectedEdgeKey: null })
   }
@@ -224,7 +229,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
       startCondition: formStartCondition,
     }
     const result = editingId
-      ? await updateWorkflow(editingId, workflow, projectDir)
+      ? await updateWorkflow(editingId, workflow, projectDir, editingScope)
       : await createWorkflow(workflow, formDestination, projectDir)
     setSaving(false)
     if (!result.success) {
@@ -258,13 +263,15 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
     if (!editingId) setFormId(toSlug(name))
   }
 
-  const fetchWorkflowContent = async (workflowId: string) => {
+  const fetchWorkflowContent = async (workflowId: string, scope?: WorkflowScope) => {
     const isDefault = defaults.some((d) => d.id === workflowId)
-    return isDefault ? await fetchDefaultContent(workflowId, projectDir) : await fetchWorkflow(workflowId, projectDir)
+    return isDefault
+      ? await fetchDefaultContent(workflowId, projectDir)
+      : await fetchWorkflow(workflowId, projectDir, scope)
   }
 
-  const handleDuplicate = async (workflowId: string) => {
-    const content = await fetchWorkflowContent(workflowId)
+  const handleDuplicate = async (workflowId: string, scope?: WorkflowScope) => {
+    const content = await fetchWorkflowContent(workflowId, scope)
     if (!content) return
     populateForm(
       {
@@ -281,6 +288,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
 
   const handleNew = () => {
     setEditingId(null)
+    setEditingScope(undefined)
     setFormName('')
     setFormId('')
     setFormDescription('')
@@ -299,8 +307,8 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
     setView('edit')
   }
 
-  const handleDelete = async (workflowId: string) => {
-    await deleteWorkflowAction(workflowId, projectDir)
+  const handleDelete = async (workflowId: string, scope: WorkflowScope) => {
+    await deleteWorkflowAction(workflowId, scope, projectDir)
     clearConfirm()
   }
 
@@ -977,14 +985,14 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
             items={userItems}
             renderActions={(wf) => (
               <>
-                <EditButton onClick={() => handleEdit(wf.id)}>
+                <EditButton onClick={() => handleEdit(wf.id, 'user')}>
                   <span className="text-[10px]">Edit</span>
                 </EditButton>
-                <DuplicateIcon onClick={() => handleDuplicate(wf.id)} />
-                {isConfirming(wf.id, 'delete') ? (
-                  <ConfirmButton onConfirm={() => handleDelete(wf.id)} onCancel={clearConfirm} />
+                <DuplicateIcon onClick={() => handleDuplicate(wf.id, 'user')} />
+                {isConfirming(`user:${wf.id}`, 'delete') ? (
+                  <ConfirmButton onConfirm={() => handleDelete(wf.id, 'user')} onCancel={clearConfirm} />
                 ) : (
-                  <DeleteIcon onClick={() => requestDelete(wf.id)} />
+                  <DeleteIcon onClick={() => requestDelete(`user:${wf.id}`)} />
                 )}
               </>
             )}
@@ -995,14 +1003,14 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
               items={projectItems}
               renderActions={(wf) => (
                 <>
-                  <EditButton onClick={() => handleEdit(wf.id)}>
+                  <EditButton onClick={() => handleEdit(wf.id, 'project')}>
                     <span className="text-[10px]">Edit</span>
                   </EditButton>
-                  <DuplicateIcon onClick={() => handleDuplicate(wf.id)} />
-                  {isConfirming(wf.id, 'delete') ? (
-                    <ConfirmButton onConfirm={() => handleDelete(wf.id)} onCancel={clearConfirm} />
+                  <DuplicateIcon onClick={() => handleDuplicate(wf.id, 'project')} />
+                  {isConfirming(`project:${wf.id}`, 'delete') ? (
+                    <ConfirmButton onConfirm={() => handleDelete(wf.id, 'project')} onCancel={clearConfirm} />
                   ) : (
-                    <DeleteIcon onClick={() => requestDelete(wf.id)} />
+                    <DeleteIcon onClick={() => requestDelete(`project:${wf.id}`)} />
                   )}
                 </>
               )}
