@@ -712,6 +712,10 @@ export async function executeWorkflow(
 
         // Pause workflow execution — frontend shows choice/Continue buttons
         if (executionId) {
+          const choices = userStepChoices(step).map((choice) => {
+            const target = choice.goto ? stepsById.get(choice.goto) : undefined
+            return target ? { ...choice, nextStepName: target.name } : choice
+          })
           sessionManager.waitAtStep(
             sessionId,
             executionId,
@@ -721,7 +725,7 @@ export async function executeWorkflow(
             workflow.metadata.id,
             workflow.metadata.name,
             workflow.metadata.color,
-            userStepChoices(step),
+            choices,
           )
         }
 

@@ -55,6 +55,8 @@ export interface UserStepChoice {
   label: string
   /** Target step the choice routes to. */
   goto: string
+  /** Display name of the target step, when it resolves to a step in the workflow. */
+  nextStepName?: string
 }
 
 export interface WorkflowExecution {

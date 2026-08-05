@@ -220,6 +220,12 @@ test.describe('Full-stack Build & Verify E2E', () => {
     // Click the workflow button to start Build & Verify
     await page.getByTestId('workflow-run-button').first().click()
 
+    // The workflow opens with a user step asking where to work. Pick the
+    // "Work in current workspace" option (no new workspace) so the rest of
+    // the pipeline runs in place.
+    await page.getByRole('button', { name: 'Work in current workspace' }).waitFor({ state: 'visible', timeout: 30000 })
+    await page.getByRole('button', { name: 'Work in current workspace' }).click()
+
     // Wait for Build & Verify to complete — task completed card appears with stats
     await page.waitForSelector('[data-testid="task-completed-card"]', { timeout: 120000 })
     await page.waitForTimeout(1000)

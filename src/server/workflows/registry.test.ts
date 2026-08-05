@@ -172,6 +172,38 @@ describe('loadDefaultWorkflows', () => {
     expect(defaults.length).toBeGreaterThanOrEqual(1)
     expect(defaults.some((w) => w.metadata.id === 'default')).toBe(true)
   })
+
+  it('default Build & Verify workflow starts with a user step offering work-here vs start-a-workspace', async () => {
+    const defaults = await loadDefaultWorkflows()
+    const wf = defaults.find((w) => w.metadata.id === 'default')
+    expect(wf).toBeDefined()
+    expect(wf!.entryStep).toBe('work_location')
+
+    const location = wf!.steps.find((s) => s.id === 'work_location')
+    expect(location).toBeDefined()
+    expect(location!.type).toBe('user')
+    expect(location!.name).toBe('Where to work')
+    expect(location!.phase).toBe('build')
+    expect(location!.transitions).toEqual([
+      { when: { type: 'step_result', result: 'Work in current workspace' }, goto: 'build' },
+      { when: { type: 'step_result', result: 'Start a new workspace' }, goto: 'setup_workspace' },
+    ])
+
+    const setup = wf!.steps.find((s) => s.id === 'setup_workspace')
+    expect(setup).toBeDefined()
+    const setupStep = setup!
+    expect(setupStep.type).toBe('agent')
+    if (setupStep.type === 'agent') {
+      expect(setupStep.name).toBe('Setting up workspace')
+      expect(setupStep.agentId).toBe('builder')
+      expect(setupStep.phase).toBe('build')
+      expect(setupStep.transitions).toEqual([{ when: { type: 'always' }, goto: 'build' }])
+    }
+
+    const stepIds = wf!.steps.map((s) => s.id)
+    expect(stepIds.indexOf('work_location')).toBeLessThan(stepIds.indexOf('setup_workspace'))
+    expect(stepIds.indexOf('setup_workspace')).toBeLessThan(stepIds.indexOf('build'))
+  })
 })
 
 describe('findWorkflowById', () => {

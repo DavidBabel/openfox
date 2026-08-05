@@ -10,7 +10,9 @@ const mockContinueWorkflow = vi.fn()
 const mockState = {
   phase: 'waiting',
   hasWaitingWorkflow: true,
-  pendingChoices: undefined as Array<{ id: string; label: string; goto: string }> | undefined,
+  criteriaPending: false,
+  displayItems: [] as Array<Record<string, unknown>>,
+  pendingChoices: undefined as Array<{ id: string; label: string; goto: string; nextStepName?: string }> | undefined,
 }
 
 function buildSessionState() {
@@ -21,7 +23,9 @@ function buildSessionState() {
       mode: 'planner',
       criteria: [],
       metadata: {},
-      metadataEntries: {},
+      metadataEntries: mockState.criteriaPending
+        ? { criteria: [{ id: 'c1', description: 'x', status: 'pending' }] }
+        : {},
     },
     waitingWorkflow: mockState.hasWaitingWorkflow
       ? {
@@ -67,7 +71,12 @@ vi.mock('../../stores/workflows', () => ({
   useWorkflowsStore: Object.assign(
     (selector?: (state: unknown) => unknown) =>
       selector
-        ? selector({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() })
+        ? selector({
+            defaults: [{ id: 'default', name: 'Build & Verify', color: '#3b82f6' }],
+            userItems: [],
+            projectItems: [],
+            fetchWorkflows: vi.fn(),
+          })
         : { defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() },
     { getState: vi.fn() },
   ),
@@ -101,7 +110,7 @@ function renderMessageList() {
   }
   return render(
     <MessageList
-      displayItems={[]}
+      displayItems={mockState.displayItems as never}
       scrollContainerRef={mockOsRef}
       highlightedMessageId={null}
       onLaunchWorkflow={vi.fn()}
@@ -118,6 +127,8 @@ describe('MessageList continue workflow button', () => {
     mockContinueWorkflow.mockClear()
     mockState.phase = 'waiting'
     mockState.hasWaitingWorkflow = true
+    mockState.criteriaPending = false
+    mockState.displayItems = []
     mockState.pendingChoices = undefined
   })
 
@@ -147,14 +158,21 @@ describe('MessageList continue workflow button', () => {
 
   it('renders one button per pendingChoices when choices are present', () => {
     mockState.pendingChoices = [
-      { id: 'apply', label: 'apply', goto: 'apply_fixes' },
-      { id: 'skip', label: 'skip', goto: 'start_dev_server' },
-      { id: 'continue', label: 'Continue', goto: 'start_dev_server' },
+      { id: 'apply', label: 'apply', goto: 'apply_fixes', nextStepName: 'Apply Fixes' },
+      { id: 'skip', label: 'skip', goto: 'start_dev_server', nextStepName: 'Start Dev Server' },
+      { id: 'continue', label: 'Continue', goto: 'start_dev_server', nextStepName: 'Start Dev Server' },
     ]
     renderMessageList()
     expect(screen.getByRole('button', { name: 'apply' })).toBeDefined()
     expect(screen.getByRole('button', { name: 'skip' })).toBeDefined()
-    // The synthetic continue choice keeps the rich "Continue <workflow> (<step>)" label
+    // The synthetic continue choice shows the NEXT step it leads to, not the current user step
+    expect(screen.getByRole('button', { name: /continue pr review \(start dev server\)/i })).toBeDefined()
+    expect(screen.queryByRole('button', { name: /manual testing/i })).toBeNull()
+  })
+
+  it('falls back to the current step name when a continue choice has no nextStepName', () => {
+    mockState.pendingChoices = [{ id: 'continue', label: 'Continue', goto: 'start_dev_server' }]
+    renderMessageList()
     expect(screen.getByRole('button', { name: /continue pr review \(manual testing\)/i })).toBeDefined()
   })
 
@@ -173,5 +191,29 @@ describe('MessageList continue workflow button', () => {
     mockState.pendingChoices = undefined
     renderMessageList()
     expect(screen.getAllByRole('button', { name: /continue/i })).toHaveLength(1)
+  })
+
+  it('hides the workflow launcher while a workflow is waiting at a user step', () => {
+    mockState.criteriaPending = true
+    mockState.displayItems = [{ type: 'message', message: { role: 'assistant', content: 'ok' } }]
+    mockState.pendingChoices = [
+      { id: 'Work in current workspace', label: 'Work in current workspace', goto: 'build', nextStepName: 'Implement' },
+      {
+        id: 'Start a new workspace',
+        label: 'Start a new workspace',
+        goto: 'setup_workspace',
+        nextStepName: 'Setting up workspace',
+      },
+    ]
+    renderMessageList()
+    expect(screen.queryByTestId('workflow-run-button')).toBeNull()
+  })
+
+  it('shows the workflow launcher when no workflow is running or waiting', () => {
+    mockState.criteriaPending = true
+    mockState.displayItems = [{ type: 'message', message: { role: 'assistant', content: 'ok' } }]
+    mockState.hasWaitingWorkflow = false
+    renderMessageList()
+    expect(screen.getAllByTestId('workflow-run-button').length).toBeGreaterThan(0)
   })
 })

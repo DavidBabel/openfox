@@ -546,9 +546,9 @@ describe('executeWorkflow mode changes', () => {
     expect(mockSessionManager.waitAtStep).toHaveBeenCalled()
     const choices = mockSessionManager.waitAtStep.mock.calls[0][8]
     expect(choices).toEqual([
-      { id: 'apply', label: 'apply', goto: 'apply_fixes' },
-      { id: 'skip', label: 'skip', goto: 'start_dev_server' },
-      { id: 'continue', label: 'Continue', goto: 'start_dev_server' },
+      { id: 'apply', label: 'apply', goto: 'apply_fixes', nextStepName: 'Apply' },
+      { id: 'skip', label: 'skip', goto: 'start_dev_server', nextStepName: 'Start' },
+      { id: 'continue', label: 'Continue', goto: 'start_dev_server', nextStepName: 'Start' },
     ])
   })
 

@@ -106,13 +106,13 @@ describe('Workflow User-Choice Branching', () => {
     )
     const waitingPayload = waiting!.payload as {
       currentStepId: string
-      pendingChoices?: Array<{ id: string; label: string; goto: string }>
+      pendingChoices?: Array<{ id: string; label: string; goto: string; nextStepName?: string }>
     }
     expect(waitingPayload.currentStepId).toBe('choose')
     expect(waitingPayload.pendingChoices).toEqual([
-      { id: 'apply', label: 'apply', goto: 'applied' },
-      { id: 'skip', label: 'skip', goto: 'skipped' },
-      { id: 'continue', label: 'Continue', goto: 'applied' },
+      { id: 'apply', label: 'apply', goto: 'applied', nextStepName: 'Applied' },
+      { id: 'skip', label: 'skip', goto: 'skipped', nextStepName: 'Skipped' },
+      { id: 'continue', label: 'Continue', goto: 'applied', nextStepName: 'Applied' },
     ])
 
     // Resume with the 'skip' choice — should run the 'skipped' shell step only

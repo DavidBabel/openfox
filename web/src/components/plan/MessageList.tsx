@@ -56,7 +56,9 @@ export const MessageList = memo(function MessageList({
   const hasNewCriteria = criteria.some((c) => c.status === 'pending')
   const isDone = sessionPhase === 'done'
   const hasAssistantResponse = displayItems.some((item) => item.type === 'message' && item.message.role === 'assistant')
-  const showStartBuilding = hasNewCriteria && !isRunning && hasAssistantResponse && !isDone
+  const hasActiveWorkflow =
+    activeWorkflowExecution?.status === 'running' || activeWorkflowExecution?.status === 'waiting'
+  const showStartBuilding = hasNewCriteria && !isRunning && hasAssistantResponse && !isDone && !hasActiveWorkflow
   const showContinueWorkflow = activeWorkflowExecution?.status === 'waiting' && !isRunning
 
   const projectId = useSessionStore((state) => state.currentSession?.projectId)
@@ -181,6 +183,7 @@ export const MessageList = memo(function MessageList({
                         activeWorkflowExecution.currentStepName ?? '...'
                       })`,
                       goto: '',
+                      nextStepName: undefined as string | undefined,
                     },
                   ]
               ).map((choice) => (
@@ -193,7 +196,7 @@ export const MessageList = memo(function MessageList({
                   {continuing
                     ? '⏳ Continuing...'
                     : choice.id === 'continue'
-                      ? `▶ Continue ${activeWorkflowExecution.workflowName} (${activeWorkflowExecution.currentStepName ?? '...'})`
+                      ? `▶ Continue ${activeWorkflowExecution.workflowName} (${choice.nextStepName ?? activeWorkflowExecution.currentStepName ?? '...'})`
                       : choice.label}
                 </button>
               ))}
