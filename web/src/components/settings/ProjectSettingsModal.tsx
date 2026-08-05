@@ -9,7 +9,7 @@ import { useMcpStore } from '../../stores/mcp'
 import { mcpStatusColor, mcpStatusDot } from '../../lib/mcp-utils'
 import { wsClient } from '../../lib/ws'
 import { authFetch } from '../../lib/api'
-import { getRootDirBlockReason } from '@shared/workspace.js'
+import { formatRootDir, getRootDirBlockReason, suggestRootDirChild } from '@shared/workspace.js'
 
 interface ProjectSettingsModalProps {
   isOpen: boolean
@@ -185,9 +185,9 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     if (trimmedRootDir) {
       const blockReason = getRootDirBlockReason(trimmedRootDir)
       if (blockReason === 'exact') {
-        const displayPath = trimmedRootDir.replace(/\/+$/, '') || '/'
+        const displayPath = formatRootDir(trimmedRootDir)
         setSaveError(
-          `Cannot use "${displayPath}" directly as workspace root. Use a subdirectory like "${displayPath}/${project.name}" instead.`,
+          `Cannot use "${displayPath}" directly as workspace root. Use a subdirectory like "${suggestRootDirChild(trimmedRootDir, project.name)}" instead.`,
         )
         return
       }
@@ -228,7 +228,6 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setSaveError(data?.error ?? 'Failed to validate workspace root directory')
-        setSaving(false)
         return
       }
 
@@ -236,14 +235,12 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
 
       if (!data.exists) {
         setResolvedPath(data.resolvedPath)
-        setSaving(false)
         setShowCreateDirModal(true)
         return
       }
 
       if (data.workspaces && data.workspaces.length > 0) {
         setPendingWorkspaces(data.workspaces)
-        setSaving(false)
         setShowMigrationWarning(true)
         return
       }
@@ -252,6 +249,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       await persistSettings()
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to validate settings')
+    } finally {
       setSaving(false)
     }
   }
