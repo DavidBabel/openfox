@@ -7,6 +7,8 @@ export function useContextMenu() {
   const onContextMenu = useCallback((e: React.MouseEvent, enabled: boolean) => {
     if (!enabled) return
     if (window.getSelection()?.toString()) return
+    const target = e.target instanceof Element ? e.target : null
+    if (target?.closest('a')) return
     e.preventDefault()
     setPos({ x: e.clientX, y: e.clientY })
   }, [])
