@@ -27,7 +27,7 @@ import { SidebarSummaryHeader } from './SidebarSummaryHeader'
 import { shouldCaptureMessageSearchShortcut } from './message-search-shortcut'
 
 import { groupMessages, type DisplayItem } from './groupMessages.js'
-import { FEED_REVEAL_EVENT } from './feed-window'
+import { FEED_REVEAL_EVENT, AUTOSCROLL_REARM_EVENT } from './feed-window'
 import { usePromptHistory } from '../../hooks/usePromptHistory.js'
 import { useAutoScroll } from '@/hooks/useAutoScroll.ts'
 import { useViewport } from '../../hooks/useViewport'
@@ -141,6 +141,12 @@ export function PlanPanel({
     getViewport,
   )
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
+
+  useEffect(() => {
+    const handler = () => setAutoScroll(true)
+    window.addEventListener(AUTOSCROLL_REARM_EVENT, handler)
+    return () => window.removeEventListener(AUTOSCROLL_REARM_EVENT, handler)
+  }, [setAutoScroll])
   const [pendingParamWorkflow, setPendingParamWorkflow] = useState<{
     id: string
     name: string

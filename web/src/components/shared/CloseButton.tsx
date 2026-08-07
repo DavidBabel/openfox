@@ -5,6 +5,8 @@ interface CloseButtonProps {
   className?: string
   size?: 'sm' | 'md' | 'lg' | 'xl'
   variant?: 'default' | 'overlay' | 'sidebar' | 'modal'
+  'aria-label'?: string
+  title?: string
 }
 
 const sizeClasses = {
@@ -16,7 +18,14 @@ const sizeClasses = {
 
 const CLOSE_PATH = 'M6 18L18 6M6 6l12 12'
 
-export function CloseButton({ onClick, className = '', size = 'md', variant = 'default' }: CloseButtonProps) {
+export function CloseButton({
+  onClick,
+  className = '',
+  size = 'md',
+  variant = 'default',
+  'aria-label': ariaLabel,
+  title = 'Close',
+}: CloseButtonProps) {
   const baseClasses =
     variant === 'overlay'
       ? 'bg-accent-error text-white rounded-full flex items-center justify-center hover:bg-accent-error/80 transition-colors'
@@ -32,7 +41,8 @@ export function CloseButton({ onClick, className = '', size = 'md', variant = 'd
       icon={CLOSE_PATH}
       iconSize={sizeClasses[size]}
       className={`${baseClasses} ${className}`}
-      title="Close"
+      title={title}
+      {...(ariaLabel !== undefined ? { 'aria-label': ariaLabel } : {})}
     />
   )
 }

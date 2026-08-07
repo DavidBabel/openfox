@@ -1458,12 +1458,15 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    const { messageId, content } = req.body
+    const { messageId, content, attachments } = req.body
     if (typeof messageId !== 'string' || !messageId) {
       return res.status(400).json({ error: 'messageId is required' })
     }
     if (content !== undefined && (typeof content !== 'string' || !content.trim())) {
       return res.status(400).json({ error: 'content must be a non-empty string if provided' })
+    }
+    if (attachments !== undefined && !Array.isArray(attachments)) {
+      return res.status(400).json({ error: 'attachments must be an array if provided' })
     }
 
     const { getEventStore } = await import('./events/index.js')
@@ -1485,7 +1488,13 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { truncateSessionMessages } = await import('./events/index.js')
     truncateSessionMessages(sessionId, msgIndex - 1)
 
-    sessionManager.queueMessage(sessionId, 'asap', content ?? msg.content, msg.attachments, msg.messageKind)
+    sessionManager.queueMessage(
+      sessionId,
+      'asap',
+      content ?? msg.content,
+      attachments ?? msg.attachments,
+      msg.messageKind,
+    )
 
     res.json({ success: true })
   })

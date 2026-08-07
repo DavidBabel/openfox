@@ -1,4 +1,5 @@
 import { appUrl } from './basePath'
+import type { Attachment } from '@shared/types.js'
 
 export function getSessionToken(): string | null {
   return localStorage.getItem('openfox_token')
@@ -27,12 +28,21 @@ export async function truncateSession(sessionId: string, messageIndex: number): 
   }
 }
 
-export async function replayMessage(sessionId: string, messageId: string, content?: string): Promise<boolean> {
+export async function replayMessage(
+  sessionId: string,
+  messageId: string,
+  content?: string,
+  attachments?: Attachment[],
+): Promise<boolean> {
   try {
     const res = await authFetch(`/api/sessions/${sessionId}/replay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messageId, ...(content !== undefined ? { content } : {}) }),
+      body: JSON.stringify({
+        messageId,
+        ...(content !== undefined ? { content } : {}),
+        ...(attachments !== undefined ? { attachments } : {}),
+      }),
     })
     return res.ok
   } catch {

@@ -1,15 +1,17 @@
 import { memo, useCallback, useRef, useState } from 'react'
 import { OptionalScrollArea } from '../shared/OptionalScrollArea'
-import type { Message } from '@shared/types.js'
+import type { Attachment, Message } from '@shared/types.js'
 import type { TaskCompletedPayload } from '@shared/protocol.js'
 import { Markdown } from '../shared/Markdown'
 import { AssistantMessage } from './AssistantMessage'
 import { TaskCompletedCard } from './TaskCompletedCard'
 import { WorkflowStartedCard } from './WorkflowStartedCard'
 import { MessageAttachments } from '../shared/MessageAttachments.js'
+import { AttachmentPreview } from '../shared/AttachmentPreview.js'
 import { AutoPromptCard } from './AutoPromptCard'
-import { CheckIcon, CopyIcon, EditSmallIcon, ReloadIcon, XCloseIcon, BranchIcon } from '../shared/icons'
+import { CheckIcon, CopyIcon, EditSmallIcon, ReloadIcon, BranchIcon } from '../shared/icons'
 import { replayMessage, forkSession } from '../../lib/api.js'
+import { AUTOSCROLL_REARM_EVENT } from './feed-window'
 import { useSessionStore } from '../../stores/session.js'
 import { copyToClipboard } from '../../lib/clipboard.js'
 import { shouldAutofocus } from '../../lib/device'
@@ -39,6 +41,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
   const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
+  const [editAttachments, setEditAttachments] = useState<Attachment[]>(message.attachments ?? [])
   const [pending, setPending] = useState(false)
   const [forkPending, setForkPending] = useState(false)
   const [forkError, setForkError] = useState<string | null>(null)
@@ -84,6 +87,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     const ok = await replayMessage(sessionId, messageId)
     setPending(false)
     if (ok) {
+      window.dispatchEvent(new CustomEvent(AUTOSCROLL_REARM_EVENT))
       loadSession(sessionId, true)
     } else {
       setError('Failed to replay')
@@ -94,9 +98,10 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     if (!sessionId || !messageId || !editContent.trim() || pending) return
     setPending(true)
     setError(null)
-    const ok = await replayMessage(sessionId, messageId, editContent)
+    const ok = await replayMessage(sessionId, messageId, editContent, editAttachments)
     setPending(false)
     if (ok) {
+      window.dispatchEvent(new CustomEvent(AUTOSCROLL_REARM_EVENT))
       loadSession(sessionId, true)
       setEditing(false)
     } else {
@@ -106,6 +111,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
 
   const handleEditCancel = () => {
     setEditContent(message.content)
+    setEditAttachments(message.attachments ?? [])
     setEditing(false)
     setError(null)
   }
@@ -138,6 +144,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
                 onClick={() => {
                   setError(null)
                   setEditContent(message.content)
+                  setEditAttachments(message.attachments ?? [])
                   setEditing(true)
                 }}
                 title="Edit & resend"
@@ -197,25 +204,34 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
               disabled={pending}
               autoFocus={shouldAutofocus()}
             />
+            {editAttachments.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {editAttachments.map((attachment) => (
+                  <AttachmentPreview
+                    key={attachment.id}
+                    attachment={attachment}
+                    onRemove={(id) => setEditAttachments((prev) => prev.filter((a) => a.id !== id))}
+                  />
+                ))}
+              </div>
+            )}
             {error && <p className="text-xs text-accent-error">{error}</p>}
-            <div className="flex justify-end gap-1">
+            <div className="flex justify-end gap-1.5">
               <button
                 onClick={handleEditCancel}
                 disabled={pending}
-                className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary disabled:opacity-50"
-                title="Cancel"
+                className="px-4 py-1.5 rounded text-sm bg-bg-tertiary/50 text-text-muted hover:bg-bg-tertiary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <XCloseIcon className="w-3.5 h-3.5" />
+                Cancel
               </button>
               <button
                 onClick={() => {
                   void handleEditConfirm()
                 }}
                 disabled={pending || !editContent.trim()}
-                className="p-1 rounded hover:bg-bg-tertiary text-accent-primary hover:text-accent-primary disabled:opacity-50"
-                title="Confirm (Ctrl+Enter)"
+                className="px-4 py-1.5 rounded text-sm bg-accent-primary/20 text-accent-primary font-medium hover:bg-accent-primary/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                <CheckIcon className="w-3.5 h-3.5" />
+                Send
               </button>
             </div>
           </div>

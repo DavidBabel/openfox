@@ -20,9 +20,15 @@ function mountReplayRoute(
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    const { messageId } = req.body
+    const { messageId, content, attachments } = req.body
     if (typeof messageId !== 'string' || !messageId) {
       return res.status(400).json({ error: 'messageId is required' })
+    }
+    if (content !== undefined && (typeof content !== 'string' || !content.trim())) {
+      return res.status(400).json({ error: 'content must be a non-empty string if provided' })
+    }
+    if (attachments !== undefined && !Array.isArray(attachments)) {
+      return res.status(400).json({ error: 'attachments must be an array if provided' })
     }
 
     const { getEventStore } = await import('./events/index.js')
@@ -44,7 +50,13 @@ function mountReplayRoute(
     const { truncateSessionMessages } = await import('./events/index.js')
     truncateSessionMessages(sessionId, msgIndex - 1)
 
-    deps.sessionManager.queueMessage(sessionId, 'asap', msg.content, msg.attachments, msg.messageKind)
+    deps.sessionManager.queueMessage(
+      sessionId,
+      'asap',
+      content ?? msg.content,
+      attachments ?? msg.attachments,
+      msg.messageKind,
+    )
 
     res.json({ success: true })
   })
@@ -315,5 +327,73 @@ describe('Replay endpoint', () => {
       undefined,
       undefined,
     )
+  })
+
+  it('keeps original attachments when replaying without an attachments payload', async () => {
+    sessionManager.getSession.mockReturnValue({ id: 'session-1', messages: [] })
+    sessionManager.queueMessage.mockReturnValue({ queueId: 'q-1' })
+
+    append({ type: 'session.initialized', data: { projectId: 'p1', workdir: '/tmp', contextWindowId: 'window-1' } })
+    append({
+      type: 'message.start',
+      data: {
+        messageId: 'user-att',
+        role: 'user',
+        content: 'Analyze this file',
+        attachments: [{ id: 'a1', filename: 'report.pdf', mimeType: 'application/pdf', size: 2048, data: 'pdf-data' }],
+      },
+    })
+    append({ type: 'message.done', data: { messageId: 'user-att' } })
+
+    const { status } = await fetchJson(url('/api/sessions/session-1/replay'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: 'user-att' }),
+    })
+    expect(status).toBe(200)
+    expect(sessionManager.queueMessage).toHaveBeenCalledWith(
+      'session-1',
+      'asap',
+      'Analyze this file',
+      [{ id: 'a1', filename: 'report.pdf', mimeType: 'application/pdf', size: 2048, data: 'pdf-data' }],
+      undefined,
+    )
+  })
+
+  it('replaces attachments with an empty array when an edited replay removes them', async () => {
+    sessionManager.getSession.mockReturnValue({ id: 'session-1', messages: [] })
+    sessionManager.queueMessage.mockReturnValue({ queueId: 'q-1' })
+
+    append({ type: 'session.initialized', data: { projectId: 'p1', workdir: '/tmp', contextWindowId: 'window-1' } })
+    append({
+      type: 'message.start',
+      data: {
+        messageId: 'user-att',
+        role: 'user',
+        content: 'Analyze this file',
+        attachments: [{ id: 'a1', filename: 'report.pdf', mimeType: 'application/pdf', size: 2048, data: 'pdf-data' }],
+      },
+    })
+    append({ type: 'message.done', data: { messageId: 'user-att' } })
+
+    const { status } = await fetchJson(url('/api/sessions/session-1/replay'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: 'user-att', content: 'No attachment now', attachments: [] }),
+    })
+    expect(status).toBe(200)
+    expect(sessionManager.queueMessage).toHaveBeenCalledWith('session-1', 'asap', 'No attachment now', [], undefined)
+  })
+
+  it('returns 400 if attachments is not an array', async () => {
+    sessionManager.getSession.mockReturnValue({ id: 'session-1', messages: [] })
+
+    const { status, body } = await fetchJson(url('/api/sessions/session-1/replay'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: 'msg-1', attachments: 'not-an-array' }),
+    })
+    expect(status).toBe(400)
+    expect(body).toEqual({ error: 'attachments must be an array if provided' })
   })
 })
