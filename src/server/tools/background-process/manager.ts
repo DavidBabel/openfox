@@ -56,7 +56,14 @@ export function startProcessCommand(processId: string, sessionId: string, comman
 
   emitProcessEvent(processId, {
     type: 'backgroundProcess.started',
-    payload: { processId, name: proc.name, pid: child.pid ?? null, status: 'running' },
+    payload: {
+      processId,
+      name: proc.name,
+      command: proc.command,
+      cwd: proc.cwd,
+      pid: child.pid ?? null,
+      status: 'running',
+    },
     sessionId,
   })
 

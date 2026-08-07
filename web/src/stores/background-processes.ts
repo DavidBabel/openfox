@@ -95,9 +95,11 @@ export const useBackgroundProcessesStore = create<BackgroundProcessStore>()((set
     handleMessage: (type, payload) => {
       switch (type) {
         case 'backgroundProcess.started': {
-          const { processId, name, pid, status } = payload as {
+          const { processId, name, command, cwd, pid, status } = payload as {
             processId: string
             name: string
+            command: string
+            cwd: string
             pid: number
             status: string
           }
@@ -108,8 +110,8 @@ export const useBackgroundProcessesStore = create<BackgroundProcessStore>()((set
                 id: processId,
                 sessionId: '',
                 name,
-                command: '',
-                cwd: '',
+                command,
+                cwd,
                 pid,
                 status: status as BackgroundProcess['status'],
                 exitCode: null,

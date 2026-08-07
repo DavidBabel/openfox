@@ -10,6 +10,7 @@ import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 
 interface LogViewerProps {
   title: string
+  subtitle?: string
   logs: { stream: 'stdout' | 'stderr'; content: string; type?: 'marker' }[]
   onClose: () => void
   onClear?: () => void
@@ -19,6 +20,7 @@ interface LogViewerProps {
 
 export const LogViewer = memo(function LogViewer({
   title,
+  subtitle,
   logs,
   onClose,
   onClear,
@@ -70,6 +72,12 @@ export const LogViewer = memo(function LogViewer({
         </div>
       }
     >
+      {subtitle && (
+        <div className="subtitle-strip flex items-start gap-2 px-2 py-1.5 mb-2 bg-bg-tertiary rounded text-[11px] font-mono text-text-secondary whitespace-pre-wrap break-all border border-border">
+          <span className="text-text-muted flex-shrink-0 select-none">Command:</span>
+          <span>{subtitle}</span>
+        </div>
+      )}
       <ScrollArea ref={scrollRef} className="flex-1 -m-4 p-4" onScrollbarGesture={handleScrollbarGesture}>
         <LogRenderer logs={logs} preClassName={preClassName} />
       </ScrollArea>

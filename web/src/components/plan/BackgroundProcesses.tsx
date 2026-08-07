@@ -88,16 +88,21 @@ export const BackgroundProcesses = memo(function BackgroundProcesses({ sessionId
         ))}
       </div>
 
-      {expandedProcessId && (
-        <LogViewer
-          title={activeProcesses.find((p) => p.id === expandedProcessId)?.name ?? ''}
-          logs={expandedLogs}
-          onClose={() => {
-            setExpandedProcessId(null)
-            setExpandedLogs([])
-          }}
-        />
-      )}
+      {expandedProcessId &&
+        (() => {
+          const process = activeProcesses.find((p) => p.id === expandedProcessId)
+          return (
+            <LogViewer
+              title={process?.name ?? ''}
+              subtitle={process?.command}
+              logs={expandedLogs}
+              onClose={() => {
+                setExpandedProcessId(null)
+                setExpandedLogs([])
+              }}
+            />
+          )
+        })()}
     </div>
   )
 })

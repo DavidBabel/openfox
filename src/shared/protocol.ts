@@ -441,6 +441,8 @@ export interface DevServerStatePayload {
 export interface BackgroundProcessStartedPayload {
   processId: string
   name: string
+  command: string
+  cwd: string
   pid: number
   status: BackgroundProcessStatus
 }
