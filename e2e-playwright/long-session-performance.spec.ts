@@ -37,11 +37,20 @@ function createReferenceMessages(): Message[] {
       timestamp: new Date(1_700_000_000_000 + messageIndex++).toISOString(),
     })
 
-    const callsInRun = Math.floor(REFERENCE.llmCalls / REFERENCE.subAgentRuns) + (run < REFERENCE.llmCalls % REFERENCE.subAgentRuns ? 1 : 0)
+    const callsInRun =
+      Math.floor(REFERENCE.llmCalls / REFERENCE.subAgentRuns) +
+      (run < REFERENCE.llmCalls % REFERENCE.subAgentRuns ? 1 : 0)
     for (let call = 0; call < callsInRun; call++) {
       const remainingMessages = REFERENCE.llmCalls - (messageIndex - (run + 1))
       const remainingTools = REFERENCE.toolCalls - toolIndex
-      const count = Math.max(0, Math.min(2 + (toolIndex < REFERENCE.toolCalls % REFERENCE.llmCalls ? 1 : 0), remainingTools, remainingMessages > 0 ? 3 : remainingTools))
+      const count = Math.max(
+        0,
+        Math.min(
+          2 + (toolIndex < REFERENCE.toolCalls % REFERENCE.llmCalls ? 1 : 0),
+          remainingTools,
+          remainingMessages > 0 ? 3 : remainingTools,
+        ),
+      )
       const toolCalls = Array.from({ length: count }, () => createToolCall(toolIndex++))
 
       messages.push({
@@ -144,7 +153,9 @@ test('reference-sized session stays responsive while collapsed', async ({ page, 
   for (let index = 0; index < 10; index++) {
     const started = performance.now()
     await page.setViewportSize(index % 2 === 0 ? { width: 1100, height: 720 } : { width: 1450, height: 920 })
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    )
     resizeSamples.push(performance.now() - started)
   }
 
@@ -166,7 +177,9 @@ test('reference-sized session stays responsive while collapsed', async ({ page, 
   for (let index = 0; index < 6; index++) {
     const started = performance.now()
     await sidebarToggle.click()
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    )
     clickSamples.push(performance.now() - started)
   }
 

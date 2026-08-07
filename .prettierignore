@@ -1,0 +1,4 @@
+# LSP test fixtures are static samples mirroring real-world (often messy) files;
+# several are intentionally malformed to exercise error handling and cannot be
+# parsed by prettier, so the whole subtree is left as-is.
+src/server/lsp/__fixtures__/

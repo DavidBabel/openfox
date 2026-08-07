@@ -3,12 +3,7 @@ import { authFetch } from '../lib/api'
 import { saveEntity, duplicateEntity } from './utils'
 
 export type SkillSource =
-  | 'bundled'
-  | 'global-shared'
-  | 'global-openfox'
-  | 'selected'
-  | 'project-shared'
-  | 'project-openfox'
+  'bundled' | 'global-shared' | 'global-openfox' | 'selected' | 'project-shared' | 'project-openfox'
 
 export interface SelectedSkillDirectory {
   configuredPath: string

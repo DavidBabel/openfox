@@ -8,8 +8,7 @@ function buildStreamRequestObject(params: {
   reasoningEffort?: ReasoningEffort | undefined
   signal?: AbortSignal | undefined
   modelSettings?:
-    | { temperature?: number; topP?: number; topK?: number; maxTokens?: number; supportsVision?: boolean }
-    | undefined
+    { temperature?: number; topP?: number; topK?: number; maxTokens?: number; supportsVision?: boolean } | undefined
 }): LLMCompletionRequest {
   const { messages, tools, toolChoice, reasoningEffort, signal, modelSettings } = params
   return {

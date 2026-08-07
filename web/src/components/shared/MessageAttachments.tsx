@@ -68,7 +68,9 @@ export function MessageAttachments({ attachments, messageId }: MessageAttachment
                   <img
                     src={attachment.data}
                     alt={
-                      (fallback?.type === 'done' && fallback.description) || attachment.description || attachment.filename
+                      (fallback?.type === 'done' && fallback.description) ||
+                      attachment.description ||
+                      attachment.filename
                     }
                     className="max-w-[256px] max-h-[256px] object-contain rounded-lg border border-border hover:border-accent-primary transition-colors cursor-pointer"
                   />
@@ -89,7 +91,10 @@ export function MessageAttachments({ attachments, messageId }: MessageAttachment
           }
 
           return (
-            <div key={attachment.id} className="inline-flex items-start gap-3 p-3 bg-bg-tertiary rounded-lg border border-border max-w-[300px]">
+            <div
+              key={attachment.id}
+              className="inline-flex items-start gap-3 p-3 bg-bg-tertiary rounded-lg border border-border max-w-[300px]"
+            >
               <div className="w-10 h-10 flex items-center justify-center rounded-md bg-bg-secondary text-sm font-bold text-text-muted shrink-0">
                 {getFileExtension(attachment.filename)}
               </div>

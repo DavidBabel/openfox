@@ -114,15 +114,7 @@ describe('ConfirmModal', () => {
   })
 
   it('uses default label and variant when not specified', () => {
-    render(
-      <ConfirmModal
-        isOpen={true}
-        onClose={vi.fn()}
-        onConfirm={vi.fn()}
-        title="Test"
-        message="Test message"
-      />,
-    )
+    render(<ConfirmModal isOpen={true} onClose={vi.fn()} onConfirm={vi.fn()} title="Test" message="Test message" />)
 
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeDefined()
   })

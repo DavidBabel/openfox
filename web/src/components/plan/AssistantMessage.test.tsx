@@ -116,5 +116,4 @@ describe('AssistantMessage', () => {
     expect(html).toContain('deepseek-v4-flash-dspark')
     expect(html).not.toContain('my-provider/')
   })
-
 })

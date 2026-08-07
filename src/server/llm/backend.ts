@@ -4,15 +4,7 @@
  */
 
 export type Backend =
-  | 'vllm'
-  | 'sglang'
-  | 'ollama'
-  | 'llamacpp'
-  | 'lmstudio'
-  | 'opencode-go'
-  | 'openai'
-  | 'anthropic'
-  | 'unknown'
+  'vllm' | 'sglang' | 'ollama' | 'llamacpp' | 'lmstudio' | 'opencode-go' | 'openai' | 'anthropic' | 'unknown'
 
 export interface BackendCapabilities {
   /** Whether chat_template_kwargs with enable_thinking works (vLLM/SGLang) */

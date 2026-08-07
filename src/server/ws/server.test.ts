@@ -232,8 +232,7 @@ function createEventStore() {
     }
   >()
   let globalResolveNext:
-    | ((event: { seq: number; sessionId: string; timestamp: number; type: string; data: unknown }) => void)
-    | null = null
+    ((event: { seq: number; sessionId: string; timestamp: number; type: string; data: unknown }) => void) | null = null
 
   const mockDb = {
     prepare: vi.fn((query: string) => ({

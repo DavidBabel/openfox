@@ -8,11 +8,11 @@
 OpenFox ships frequently — 2–3 patch versions per day.
 Each release gets its own section in CHANGELOG.md with three categories:
 
-| Category       | What goes here                                      |
-|----------------|-----------------------------------------------------|
-| **Features**   | Brand-new capabilities, new commands, new UI panels |
+| Category         | What goes here                                           |
+| ---------------- | -------------------------------------------------------- |
+| **Features**     | Brand-new capabilities, new commands, new UI panels      |
 | **Enhancements** | Improvements to existing features, refactors, perf, docs |
-| **Bug Fixes**  | Defect resolutions, crash fixes, incorrect behavior |
+| **Bug Fixes**    | Defect resolutions, crash fixes, incorrect behavior      |
 
 ## Workflow
 
@@ -74,6 +74,7 @@ Take the sub-agent's output and wrap it in a version heading with the tag's date
 ## 2.0.77 - 2026-07-20
 
 ### Features
+
 - PDFs with embedded images are now fully understood by the AI...
 ```
 
@@ -81,7 +82,7 @@ Take the sub-agent's output and wrap it in a version heading with the tag's date
 
 Before presenting to the user, cross-check your entry against the previous release's entry in CHANGELOG.md:
 
-1. **Bullet format** — every bullet must use **bold lead-in** followed by ` — ` (space, em dash, space). Plain-text bullets are wrong.
+1. **Bullet format** — every bullet must use **bold lead-in** followed by `—` (space, em dash, space). Plain-text bullets are wrong.
 2. **Blank lines** — one blank line between version heading and first category, one between category heading and first bullet.
 3. **Section omission** — drop empty categories entirely.
 4. **Character limit** — max ~100 chars per bullet, punchy and user-first.
@@ -104,24 +105,28 @@ Once approved, insert the entry at the top of `CHANGELOG.md` (right after `# Cha
 ## 2.0.77 - 2026-07-20
 
 ### Features
+
 - PDFs with embedded images are now fully understood by the AI...
 - Configure a timeout for slow MCP tools...
 - View and manage session metadata in a full-screen modal...
 
 ### Enhancements
+
 - Workflow button styling polished...
 
 ### Bug Fixes
+
 - Agent no longer stalls after a failed tool call on LM Studio / Qwen...
 - MCP servers with broken outputSchema references now connect successfully...
 - Edit & Resend text area now uses full width...
 ```
 
 **Style guidelines:**
+
 - Use sentence case for descriptions.
 - Lead with the user-visible outcome, not the implementation detail.
 - If a section is empty, omit it entirely (don't write "Features" with nothing under it).
-- Every bullet must use **bold lead-in** followed by ` — ` (space, em dash, space) then the description. Match the existing formatting exactly — scan the previous entries to confirm consistency before proceeding.
+- Every bullet must use **bold lead-in** followed by `—` (space, em dash, space) then the description. Match the existing formatting exactly — scan the previous entries to confirm consistency before proceeding.
 
 ### 7. Commit the changelog
 
@@ -165,6 +170,7 @@ git checkout develop && git merge main --ff-only && git push origin develop
 
 ```markdown
 ## [2.0.0] - 2026-06-21
+
 ...
 ```
 
@@ -174,19 +180,23 @@ git checkout develop && git merge main --ff-only && git push origin develop
 ## 2.0.77 - 2026-07-20
 
 ### Features
+
 - **PDFs with embedded images are now fully understood** — diagrams, screenshots, and figures inside PDFs are extracted and sent to vision-capable models as images, or described via a fallback vision model for non-vision models. Previously, embedded images were silently lost.
 - **Configure a timeout for slow MCP tools** — set a per-server timeout (in seconds) from the Tools settings tab or via the mcp_config tool. Hanging or slow tool calls now abort gracefully instead of blocking indefinitely.
 - **View and manage session metadata in a full-screen modal** — click any metadata section in the sidebar (acceptance criteria, review findings, todos, etc.) to open a spacious modal where you can add, edit, delete, and cycle status on entries without truncation.
 
 ### Enhancements
+
 - **Workflow button styling polished** — the "more options" (⋮) button now has comfortable padding, and the main workflow button shows clean rounded corners when no subgroup menu exists.
 
 ### Bug Fixes
+
 - **Agent no longer stalls after a failed tool call on LM Studio / Qwen** — fixed a critical bug where the agent loop would silently stop responding when a tool call failed. The agent now recovers and continues generating normally.
 - **MCP servers with broken outputSchema references now connect successfully** — servers like Stitch that include malformed $ref values in their tool schemas no longer crash AJV validation, preventing all tools from loading.
 - **Edit & Resend text area now uses full width** — when editing a message, the input area expands beyond the usual 75% bubble width, making long edits much easier to work with.
 
 ## [2.0.0] - 2026-06-21
+
 ...
 ```
 

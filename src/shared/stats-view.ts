@@ -17,8 +17,7 @@ export interface PerformanceChartData {
 }
 
 type StatsViewData =
-  | Pick<SessionStats, 'dataPoints' | 'callDataPoints'>
-  | Pick<ModelSessionStats, 'dataPoints' | 'callDataPoints'>
+  Pick<SessionStats, 'dataPoints' | 'callDataPoints'> | Pick<ModelSessionStats, 'dataPoints' | 'callDataPoints'>
 
 export function buildResponseLogRows(stats: StatsViewData): ResponseLogRow[] {
   const callsByMessageId = new Map<string, CallStatsDataPoint[]>()

@@ -53,7 +53,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(1)
@@ -67,7 +71,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(1)
@@ -81,7 +89,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(1)
@@ -95,7 +107,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(1)
@@ -110,7 +126,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(1)
@@ -122,7 +142,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(attachments).toHaveLength(0)
     expect(errors).toHaveLength(1)
@@ -135,7 +159,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(attachments).toHaveLength(0)
     expect(errors).toHaveLength(1)
@@ -147,7 +175,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(1)
@@ -161,7 +193,11 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(file, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      file,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(1)
@@ -176,8 +212,16 @@ describe('file-processing', () => {
     const attachments: any[] = []
     const errors: string[] = []
 
-    await processFile(txtFile, (att) => attachments.push(att), (err) => errors.push(err))
-    await processFile(jsonFile, (att) => attachments.push(att), (err) => errors.push(err))
+    await processFile(
+      txtFile,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
+    await processFile(
+      jsonFile,
+      (att) => attachments.push(att),
+      (err) => errors.push(err),
+    )
 
     expect(errors).toHaveLength(0)
     expect(attachments).toHaveLength(2)

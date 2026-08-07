@@ -22,7 +22,5 @@ export function formatMetadataKeyLabel(key: string): string {
 }
 
 export function formatMetadataKeyLabelLower(key: string): string {
-  return Object.hasOwn(metadataKeyLabelsLower, key)
-    ? (metadataKeyLabelsLower[key] as string)
-    : key.replace(/_/g, ' ')
+  return Object.hasOwn(metadataKeyLabelsLower, key) ? (metadataKeyLabelsLower[key] as string) : key.replace(/_/g, ' ')
 }

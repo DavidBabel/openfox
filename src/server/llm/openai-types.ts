@@ -37,10 +37,7 @@ export interface ChatCompletionTool {
 }
 
 export type ChatCompletionToolChoiceOption =
-  | 'auto'
-  | 'none'
-  | 'required'
-  | { type: 'function'; function: { name: string } }
+  'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } }
 
 export interface ChatCompletionCreateParamsBase {
   model: string

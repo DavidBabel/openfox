@@ -24,11 +24,15 @@ vi.mock('../../hooks/useAutoScroll', () => ({
 }))
 
 vi.mock('./AssistantMessage', () => ({
-  AssistantMessage: ({ message }: { message: Message }) => <article data-testid="subagent-message">{message.content}</article>,
+  AssistantMessage: ({ message }: { message: Message }) => (
+    <article data-testid="subagent-message">{message.content}</article>
+  ),
 }))
 
 vi.mock('./ChatMessage', () => ({
-  ChatMessage: ({ message }: { message: Message }) => <article data-testid="subagent-message">{message.content}</article>,
+  ChatMessage: ({ message }: { message: Message }) => (
+    <article data-testid="subagent-message">{message.content}</article>
+  ),
 }))
 
 import { SubAgentContainer } from './SubAgentContainer'
