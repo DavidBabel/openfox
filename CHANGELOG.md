@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.113 - 2026-08-07
+
+### Features
+
+- **⚠️ Heads-up: Build & Verify now asks where to work** — the workflow prompts for a workspace before running and can auto-create one, replacing the previous silent default
+- **Pin favorite sessions to the top** — star any session to keep it at the top of the sidebar and session picker
+- **Sidebars are resizable** — drag to resize the session and project rails; widths reset on page refresh
+- **Built-in workflow authoring skill** — agents can load the canonical spec to write compliant workflows
+
+### Enhancements
+
+- **Editable attachments when editing a message** — attachments show with remove buttons and persist on resend
+- **Launch command pinned in the log viewer** — background processes show their start command and cwd at the top
+
+### Bug Fixes
+
+- **Same-name workflows can coexist** — built-in, global, and project workflows share IDs without colliding, each tagged and separately editable
+- **Native context menu over links** — right-clicking a link opens the browser menu instead of the custom one
+- **Auto-scroll rearmed after replay** — replaying or edit-resending a message resumes live scrolling on streamed output
+- **No stray empty workspace.json** — unrelated settings saves no longer drop an empty config file into `.openfox/`
+- **Inputs behave on touch devices** — fields no longer steal focus and pop the soft keyboard on phones and tablets
+- **OpenCode Go model catalog fixed** — models now load from the correct `/zen/go/v1` endpoint
+- **Windows paths and root checks fixed** — backslash workspace paths are detected again, bare drive roots are rejected, casing changes no longer warn falsely, and the root save flag can't get stuck
+- **Token budget counts output accurately** — context-size tracking includes prompt plus completion, preventing spurious context-length errors
+- **Unknown slash commands sent as text** — a `/`-input that isn't a command sends as a normal message instead of vanishing
+- **Slash commands honor their agent mode** — launching a command now applies the agent mode configured for it
+
 ## 2.0.112 - 2026-08-03
 
 ### Bug Fixes
