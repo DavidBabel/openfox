@@ -12,6 +12,37 @@ function isAlive(pid: number): boolean {
   }
 }
 
+/**
+ * Termination is not synchronous — `taskkill /f /t` in particular returns before
+ * Windows has finished reaping the tree, and the close event trails the exit — so
+ * a fixed sleep before asserting is a race that loses under parallel test load.
+ * Poll instead; on timeout we fall through and let the assertion do the reporting.
+ */
+async function waitFor(condition: () => boolean | Promise<boolean>, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline && !(await condition())) await sleep(50)
+}
+
+/**
+ * Poll until the tree under rootPid has at least `min` descendants. A fixed
+ * settle sleep after spawn loses on slow runners: the children may not have
+ * been forked yet, and a tree kill issued before they exist lets them escape
+ * the taskkill snapshot on Windows and hold inherited pipes open forever.
+ */
+async function waitForDescendants(rootPid: number, min: number): Promise<number[]> {
+  let descendants: number[] = []
+  await waitFor(async () => {
+    descendants = await getDescendants(rootPid)
+    return descendants.length >= min
+  })
+  return descendants
+}
+
+const allDead =
+  (...pids: number[]) =>
+  () =>
+    !pids.some(isAlive)
+
 /** Collect all descendant PIDs via ps (Unix) or CIM (Windows, where ps does not exist) */
 async function getDescendants(rootPid: number): Promise<number[]> {
   const [cmd, args] =
@@ -74,7 +105,7 @@ describe('terminateProcessTree', () => {
     expect(isAlive(proc.pid!)).toBe(true)
 
     await terminateProcessTree(proc)
-    await sleep(100)
+    await waitFor(allDead(proc.pid!))
 
     expect(isAlive(proc.pid!)).toBe(false)
   })
@@ -83,9 +114,7 @@ describe('terminateProcessTree', () => {
     const proc = spawn(process.execPath, ['-e', TREE_SCRIPT], { stdio: 'ignore', detached: true })
 
     expect(proc.pid).toBeTruthy()
-    await sleep(400)
-
-    const descendants = await getDescendants(proc.pid!)
+    const descendants = await waitForDescendants(proc.pid!, 2)
     expect(descendants.length).toBeGreaterThanOrEqual(2)
 
     // All should be alive before termination
@@ -95,7 +124,7 @@ describe('terminateProcessTree', () => {
 
     // Terminate the tree
     await terminateProcessTree(proc)
-    await sleep(300)
+    await waitFor(allDead(proc.pid!, ...descendants))
 
     // All should be dead now
     expect(isAlive(proc.pid!)).toBe(false)
@@ -136,8 +165,16 @@ describe('terminateProcessTree', () => {
       closed = true
     })
 
+    // On Windows, MSYS bash cannot exec-replace itself the way Unix bash does
+    // with a single command: 'sleep 300' runs as a child sleep.exe holding the
+    // inherited pipes. Terminating before that child exists lets it escape the
+    // taskkill tree snapshot and keep the pipes open — 'close' then never
+    // fires (flaked exactly this way on the CI runner). On Unix bash execs
+    // into sleep, so there is no child to wait for.
+    if (process.platform === 'win32') await waitForDescendants(proc.pid!, 1)
+
     await terminateProcessTree(proc)
-    await sleep(300)
+    await waitFor(() => closed && !isAlive(proc.pid!))
 
     expect(closed).toBe(true)
     expect(isAlive(proc.pid!)).toBe(false)
@@ -150,13 +187,14 @@ describe('terminateProcessTree', () => {
     })
 
     expect(proc.pid).toBeTruthy()
-    await sleep(300)
-
-    const descendants = await getDescendants(proc.pid!)
+    // TREE_SCRIPT always spawns two children — wait for both, or the kill can
+    // race the second one's launch (its inherited pipe closes mid-start, which
+    // surfaces as an ERROR_NO_DATA dialog on Windows and a possible orphan).
+    const descendants = await waitForDescendants(proc.pid!, 2)
     expect(descendants.length).toBeGreaterThanOrEqual(1)
 
     await terminateProcessTree(proc, { immediate: true })
-    await sleep(300)
+    await waitFor(allDead(proc.pid!, ...descendants))
 
     expect(isAlive(proc.pid!)).toBe(false)
     for (const pid of descendants) {
@@ -174,10 +212,10 @@ describe('terminateProcessTree', () => {
     })
 
     expect(proc.pid).toBeTruthy()
-    await sleep(400)
 
-    // Confirm children are alive
-    const descendants = await getDescendants(proc.pid!)
+    // Confirm children are alive (TREE_SCRIPT spawns two — wait for both so
+    // the kill cannot race the second child's launch)
+    const descendants = await waitForDescendants(proc.pid!, 2)
     expect(descendants.length).toBeGreaterThanOrEqual(1)
 
     let closed = false
@@ -186,7 +224,7 @@ describe('terminateProcessTree', () => {
     })
 
     await terminateProcessTree(proc)
-    await sleep(300)
+    await waitFor(() => closed && allDead(proc.pid!, ...descendants)())
 
     expect(closed).toBe(true)
     expect(isAlive(proc.pid!)).toBe(false)
