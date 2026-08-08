@@ -124,16 +124,16 @@ describe('useAutoScroll', () => {
     expect(result.current.isAutoScrollActive).toBe(false)
   })
 
-  it('re-engages (magnet) when a user scroll lands within the 2px threshold of the bottom', () => {
+  it('never resurrects auto-scroll from a plain scroll event near the bottom', () => {
     const { el, result } = setup()
 
-    el.scrollTop = 118
+    el.scrollTop = 259
     act(() => el.dispatchEvent(new Event('scroll')))
     expect(result.current.isAutoScrollActive).toBe(false)
 
-    el.scrollTop = 378
+    el.scrollTop = 359
     act(() => el.dispatchEvent(new Event('scroll')))
-    expect(result.current.isAutoScrollActive).toBe(true)
+    expect(result.current.isAutoScrollActive).toBe(false)
   })
 
   it('detaches on wheel-up and re-engages on wheel-down within 100px of the bottom', async () => {
@@ -207,6 +207,55 @@ describe('useAutoScroll', () => {
 
     act(() => el.dispatchEvent(new Event('scroll')))
     expect(result.current.isAutoScrollActive).toBe(false)
+  })
+
+  it('stays detached when streaming growth swallows the wheel-up distance and the settle scroll lands at the bottom', () => {
+    const { el, metrics, result } = setup()
+    expect(result.current.isAutoScrollActive).toBe(true)
+
+    act(() => el.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 })))
+    expect(result.current.isAutoScrollActive).toBe(false)
+
+    // The LLM keeps streaming: content grows by more than the wheel scrolled,
+    // so the browser's settle scroll reports a near-zero gap to the bottom.
+    metrics.scrollHeight = 2860
+    el.scrollTop = 2139
+    act(() => el.dispatchEvent(new Event('scroll')))
+    expect(result.current.isAutoScrollActive).toBe(false)
+  })
+
+  it('wheel-up wins over a previously queued wheel-down re-enable even if streaming later brings the bottom near', async () => {
+    const { el, metrics, result } = setup()
+    expect(result.current.isAutoScrollActive).toBe(true)
+
+    // Trackpad jitter: a small wheel-down queues a near-bottom re-enable…
+    act(() => el.dispatchEvent(new WheelEvent('wheel', { deltaY: 25 })))
+    // …then the user flicks up to hard-stop.
+    act(() => el.dispatchEvent(new WheelEvent('wheel', { deltaY: -240 })))
+    expect(result.current.isAutoScrollActive).toBe(false)
+
+    // Content grows while any deferred decision would still be pending.
+    metrics.scrollHeight = 2660
+    el.scrollTop = 1939
+    await flushRaf()
+    expect(result.current.isAutoScrollActive).toBe(false)
+  })
+
+  it('re-engages when a single decisive wheel-down from beyond the threshold lands at the bottom', async () => {
+    const { el, result } = setup()
+    expect(result.current.isAutoScrollActive).toBe(true)
+
+    // User scrolls up and away; the browser settles far beyond the threshold.
+    act(() => el.dispatchEvent(new WheelEvent('wheel', { deltaY: -1080 })))
+    el.scrollTop = 120
+    expect(result.current.isAutoScrollActive).toBe(false)
+
+    // One hard flick downward starts beyond the re-enable threshold…
+    act(() => el.dispatchEvent(new WheelEvent('wheel', { deltaY: 1080 })))
+    // …and the browser settles near the bottom before the re-enable check runs.
+    el.scrollTop = 315
+    await flushRaf()
+    expect(result.current.isAutoScrollActive).toBe(true)
   })
 
   it('disables instantly on scrollbar pointer-down and ignores scroll events while dragging', () => {

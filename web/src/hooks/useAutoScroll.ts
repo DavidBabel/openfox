@@ -3,7 +3,6 @@ import { Session } from '@shared/types.ts'
 
 export type ScrollbarGestureKind = 'down' | 'move' | 'up'
 
-const MAGNET_SCROLL_PX = 2
 const WHEEL_REENABLE_PX = 100
 export const DRAG_MAGNET_GAP_PX = 6
 const FOLLOW_GUARD_MS = 1500
@@ -23,6 +22,11 @@ export const useAutoScroll = (
   const draggingRef = useRef(false)
   const lastFollowRef = useRef(0)
   const programmaticRef = useRef(false)
+  // Every transition to inactive increments this epoch. Deferred near-bottom
+  // re-enable checks capture it when scheduled and abort if it changed by the
+  // time they run, so a stale check can never resurrect auto-scroll after the
+  // user stopped it (e.g. wheel-up beating a queued wheel-down re-enable).
+  const detachEpochRef = useRef(0)
   const [isAutoScrollActive, setIsAutoScrollActive] = useState(true)
 
   const getEffectiveScroller = useCallback((): HTMLElement | null => {
@@ -33,6 +37,7 @@ export const useAutoScroll = (
   }, [getScroller, container_ref])
 
   const setActive = useCallback((value: boolean) => {
+    if (!value) detachEpochRef.current += 1
     is_active.current = value
     setIsAutoScrollActive(value)
   }, [])
@@ -98,17 +103,28 @@ export const useAutoScroll = (
     const scroller = getEffectiveScroller()
     if (!scroller) return
 
+    // Re-enable is deferred by two frames so the browser has applied the
+    // gesture's scroll before proximity is measured — a single decisive flick
+    // from beyond the threshold that lands at the bottom still re-attaches.
+    // The scheduled check is tied to the detach epoch: if anything disabled
+    // auto-scroll after it was queued (e.g. a wheel-up), the check aborts.
     const reEnableIfNearBottom = () => {
-      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
-      if (distance < WHEEL_REENABLE_PX) {
-        lastFollowRef.current = Date.now()
-        setActive(true)
-      }
+      const epoch = detachEpochRef.current
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (epoch !== detachEpochRef.current) return
+          const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
+          if (distance < WHEEL_REENABLE_PX) {
+            lastFollowRef.current = Date.now()
+            setActive(true)
+          }
+        })
+      })
     }
 
     const onWheel = (e: WheelEvent) => {
       if (e.deltaY > 0) {
-        requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
+        reEnableIfNearBottom()
         return
       }
       disableAutoscroll()
@@ -126,18 +142,12 @@ export const useAutoScroll = (
         disableAutoscroll()
         return
       }
-      requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
+      reEnableIfNearBottom()
     }
 
     const onScroll = () => {
       if (draggingRef.current) return
       if (programmaticRef.current) return
-      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.offsetHeight
-      if (distance < MAGNET_SCROLL_PX) {
-        lastFollowRef.current = Date.now()
-        setActive(true)
-        return
-      }
       if (Date.now() - lastFollowRef.current <= FOLLOW_GUARD_MS) return
       setActive(false)
     }
@@ -149,7 +159,7 @@ export const useAutoScroll = (
         return
       }
       if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'End') {
-        requestAnimationFrame(() => requestAnimationFrame(reEnableIfNearBottom))
+        reEnableIfNearBottom()
       }
     }
 
