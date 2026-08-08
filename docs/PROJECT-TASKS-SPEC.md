@@ -100,12 +100,12 @@ Capabilities carried over verbatim:
 
 Additional fields on the composer:
 
-- **Title** (short label for the card).
+- **Title** (short label for the card) — **optional, second-class**. Like sessions, titles are never mandatory: when omitted, one is derived automatically from the prompt (e.g. first line, truncated) so every card still has a label. It can be renamed at any time, from the editor or the card menu.
 - Optionally a richer **Description** (long form) in addition to the prompt used for execution.
 
 Validation rules:
 
-- Title is required; the prompt must contain at least text or one attachment (same emptiness rule as chat send).
+- The prompt must contain at least text or one attachment (same emptiness rule as chat send).
 
 ### 6.1 Edit semantics
 
