@@ -38,6 +38,7 @@ export function TaskColumn({
   onDragStart,
   onDropOnColumn,
   onDropOnCard,
+  onOpenSession,
 }: TaskColumnProps) {
   return (
     <section
@@ -79,6 +80,7 @@ export function TaskColumn({
             onDelete={onDelete}
             onDragStart={onDragStart}
             onDropOnCard={onDropOnCard}
+            onOpenSession={onOpenSession}
           />
         ))}
         {tasks.length === 0 && (

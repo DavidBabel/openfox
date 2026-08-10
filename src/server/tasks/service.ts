@@ -497,7 +497,7 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
     const defaults = parseDefaultModelSelection(config.defaultModelSelection)
     const providerId = task.providerId ?? defaults.providerId ?? null
     const model = task.model ?? defaults.model ?? null
-    const session = sessionManager.createSession(projectId, promptLabel(task.prompt), providerId, model)
+    const session = sessionManager.createSession(projectId, undefined, providerId, model)
     if (task.agentId) {
       try {
         sessionManager.setMode(session.id, task.agentId)

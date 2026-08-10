@@ -194,6 +194,7 @@ export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
     onDragStart: (task: ProjectTask) => {
       draggedRef.current = { task }
     },
+    onOpenSession: () => onClose(),
   }
 
   const renderColumn = (status: TaskStatus) => {

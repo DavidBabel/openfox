@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { useLocation } from 'wouter'
+import { Link } from 'wouter'
 import type { ProjectTask, TaskStatus } from '@shared/types.js'
 import type { AgentInfo } from '../../stores/agents'
 import { getAgentColor } from '../../stores/agents'
 import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
-import { Button } from '../shared/Button'
 import {
   EllipsisIcon,
   ChevronDownIcon,
@@ -32,6 +31,8 @@ export interface TaskCallbacks {
   onDuplicate: (task: ProjectTask) => void
   onDelete: (task: ProjectTask) => void
   onDropOnCard: (task: ProjectTask) => void
+  /** Invoked when a card's session link is opened (lets a host modal dismiss itself). */
+  onOpenSession?: (sessionId: string) => void
 }
 
 interface TaskCardProps extends TaskDragHandlers, TaskCallbacks {
@@ -54,18 +55,14 @@ export function TaskCard({
   onDelete,
   onDragStart,
   onDropOnCard,
+  onOpenSession,
 }: TaskCardProps) {
-  const [, navigate] = useLocation()
   const [showAudit, setShowAudit] = useState(false)
 
   const agent = agents.find((a) => a.id === task.agentId)
   const agentColor = task.agentId ? getAgentColor(agents, task.agentId) : undefined
   const images = task.attachments.filter((a) => a.mimeType.startsWith('image/'))
   const sessionToOpen = task.activeSessionId ?? task.sessionIds[task.sessionIds.length - 1]
-
-  const openSession = (sessionId: string) => {
-    navigate(`/p/${projectId}/s/${sessionId}`)
-  }
 
   const menuItems: DropdownMenuItem[] = [
     { label: 'Edit', icon: <EditSmallIcon className="w-3.5 h-3.5" />, onClick: () => onEdit(task) },
@@ -185,16 +182,16 @@ export function TaskCard({
           </span>
         )}
         {sessionToOpen && (
-          <Button
-            size="sm"
+          <Link
+            href={`/p/${projectId}/s/${sessionToOpen}`}
             onClick={(e) => {
               e.stopPropagation()
-              openSession(sessionToOpen)
+              onOpenSession?.(sessionToOpen)
             }}
-            className="ml-auto text-xs bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20 flex items-center gap-1"
+            className="ml-auto text-xs px-1.5 py-1 rounded bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20 flex items-center gap-1"
           >
             Open session <OpenExternalIcon className="w-2.5 h-2.5" />
-          </Button>
+          </Link>
         )}
       </div>
 

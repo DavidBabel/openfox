@@ -186,6 +186,16 @@ describe('TasksModal', () => {
     expect(screen.queryByText('Brand new idea')).toBeTruthy()
   })
 
+  it('renders Open session as a real link to the session and closes the modal on click', async () => {
+    const onClose = vi.fn()
+    render(<TasksModal isOpen onClose={onClose} projectId="proj-1" />)
+
+    const link = await screen.findByRole('link', { name: /open session/i })
+    expect(link.getAttribute('href')).toBe('/p/proj-1/s/sess-1')
+    fireEvent.click(link)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps queue counters accurate while a search filters the columns', async () => {
     render(<TasksModal isOpen onClose={() => {}} projectId="proj-1" />)
     // The board has 1 running + 1 queued. Searching away the queued card must

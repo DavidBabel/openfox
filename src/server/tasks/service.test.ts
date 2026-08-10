@@ -13,6 +13,7 @@ import type { Attachment } from '../../shared/types.js'
 interface FakeSession {
   id: string
   projectId: string
+  title?: string
 }
 
 interface FakeSessionManager {
@@ -42,9 +43,10 @@ function makeSessionManager(): FakeSessionManager & {
 
   return {
     ...mgr,
-    createSession: (_pid: string, _rest?: unknown) => {
+    createSession: (_pid: string, title?: unknown) => {
       counter.n += 1
       const session: FakeSession = { id: `sess-${counter.n}`, projectId: _pid }
+      if (typeof title === 'string' && title.length > 0) session.title = title
       mgr.createdSessions.push(session)
       mgr.sessions.set(session.id, session)
       return session
@@ -226,6 +228,14 @@ describe('project tasks service', () => {
       expect(sm.reminders[0]?.metadata).toMatchObject({ type: 'task' })
       // Prompt queued so the agent turn starts
       expect(sm.queued[0]?.content).toBe('Do the thing')
+    })
+
+    it('seeds the session without a prompt-derived title so auto-naming applies', async () => {
+      const task = create('Investigate and fix the flaky test in CI')
+      await service.move(projectId, task.id, 'in_progress', { actor: 'human' })
+
+      expect(sm.createdSessions).toHaveLength(1)
+      expect(sm.createdSessions[0]!.title).toBeUndefined()
     })
 
     it('second task queues when the single slot is busy', async () => {
