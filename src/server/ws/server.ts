@@ -1394,6 +1394,7 @@ async function handleClientMessage(
                     params: resumed.params,
                     initialStepOutput: resumed.stepOutput,
                     ...(exec.currentStepId ? { resumeFromStep: exec.currentStepId } : {}),
+                    ...(exec.subGroup ? { subGroup: exec.subGroup } : {}),
                   }
                 }
               }
@@ -1404,6 +1405,7 @@ async function handleClientMessage(
                 ...(Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
                 ...(Object.keys(exec.stepOutput).length > 0 ? { initialStepOutput: exec.stepOutput } : {}),
                 ...(exec.currentStepId ? { resumeFromStep: exec.currentStepId } : {}),
+                ...(exec.subGroup ? { subGroup: exec.subGroup } : {}),
               }
             })()
           : {}),

@@ -160,6 +160,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       resumeFrom: exec.currentStepId,
       stepOutput: exec.stepOutput,
       ...(exec.params && Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
+      ...(exec.subGroup ? { subGroup: exec.subGroup } : {}),
       ...(userChoice ? { userChoice } : {}),
       ...(content?.trim() ? { content } : {}),
       ...(attachments && attachments.length > 0 ? { attachments } : {}),

@@ -291,6 +291,7 @@ function runMigrations(db: Database.Database): void {
       step_output TEXT,
       params TEXT,
       pending_choices TEXT,
+      sub_group TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -308,6 +309,12 @@ function runMigrations(db: Database.Database): void {
   if (!workflowExecColumnNames.includes('pending_choices')) {
     logger.info('Migrating workflow_executions table: adding pending_choices column')
     db.exec(`ALTER TABLE workflow_executions ADD COLUMN pending_choices TEXT`)
+  }
+
+  // Migration: Add sub_group column (the sub-group slice a slice run belongs to)
+  if (!workflowExecColumnNames.includes('sub_group')) {
+    logger.info('Migrating workflow_executions table: adding sub_group column')
+    db.exec(`ALTER TABLE workflow_executions ADD COLUMN sub_group TEXT`)
   }
 
   logger.info('Database migrations completed')

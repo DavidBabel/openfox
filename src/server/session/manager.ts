@@ -595,6 +595,7 @@ export class SessionManager {
     workflowName: string,
     workflowColor: string | undefined,
     params: Record<string, string>,
+    subGroup?: string,
   ): void {
     // Cancel any existing active workflow execution before starting a new one
     const existing = this.getActiveWorkflowExecution(sessionId)
@@ -602,7 +603,7 @@ export class SessionManager {
       this.cancelWorkflow(sessionId, existing.id, existing.workflowId, existing.workflowName, existing.workflowColor)
     }
 
-    createWorkflowExecution(executionId, sessionId, workflowId, workflowName, workflowColor, params)
+    createWorkflowExecution(executionId, sessionId, workflowId, workflowName, workflowColor, params, subGroup)
     emitWorkflowExecutionChanged(sessionId, executionId, workflowId, workflowName, workflowColor, 'running')
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
@@ -800,6 +801,7 @@ export class SessionManager {
       ...(row.current_step_name ? { currentStepName: row.current_step_name } : {}),
       stepOutput: JSON.parse(row.step_output ?? '{}') as Record<string, string>,
       params: JSON.parse(row.params ?? '{}') as Record<string, string>,
+      ...(row.sub_group ? { subGroup: row.sub_group } : {}),
       ...(row.pending_choices
         ? { pendingChoices: JSON.parse(row.pending_choices) as import('../../shared/types.js').UserStepChoice[] }
         : {}),

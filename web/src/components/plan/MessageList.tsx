@@ -297,10 +297,10 @@ function WorkflowButton({
         <span className="text-[10px] font-normal opacity-70 whitespace-nowrap">{SCOPE_LABELS[scope]}</span>
       </button>
       {hasSubGroups && (
-        <div ref={menuRef} className="relative">
+        <div ref={menuRef} className="relative flex">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="px-2.5 py-1.5 rounded-r text-sm font-medium transition-colors"
+            className="px-2.5 py-1.5 rounded-r text-sm font-medium transition-colors flex items-center"
             style={{ backgroundColor: bg, color, border: `1px solid ${border}` }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = bgHover

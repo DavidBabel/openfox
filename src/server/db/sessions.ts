@@ -556,6 +556,7 @@ export interface WorkflowExecutionRow {
   step_output: string | null
   params: string | null
   pending_choices: string | null
+  sub_group: string | null
   created_at: number
   updated_at: number
 }
@@ -567,13 +568,24 @@ export function createWorkflowExecution(
   workflowName: string,
   workflowColor: string | undefined,
   params: Record<string, string>,
+  subGroup?: string,
 ): void {
   const db = getDatabase()
   const now = Date.now()
   db.prepare(
-    `INSERT INTO workflow_executions (id, session_id, workflow_id, workflow_name, workflow_color, status, step_output, params, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'running', '{}', ?, ?, ?)`,
-  ).run(id, sessionId, workflowId, workflowName, workflowColor ?? null, JSON.stringify(params), now, now)
+    `INSERT INTO workflow_executions (id, session_id, workflow_id, workflow_name, workflow_color, status, step_output, params, sub_group, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'running', '{}', ?, ?, ?, ?)`,
+  ).run(
+    id,
+    sessionId,
+    workflowId,
+    workflowName,
+    workflowColor ?? null,
+    JSON.stringify(params),
+    subGroup ?? null,
+    now,
+    now,
+  )
 }
 
 export function updateWorkflowExecutionStatus(

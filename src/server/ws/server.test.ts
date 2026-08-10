@@ -1185,6 +1185,76 @@ describe('createWebSocketServer', () => {
     expect(callArgs.params).toEqual({ pr_number: '157', pr_title: 'Fix bug' })
   })
 
+  it('sources the persisted sub-group when resuming a paused slice', async () => {
+    const sessionState: any = {
+      id: 'session-1',
+      projectId: 'project-1',
+      workdir: '/tmp/project',
+      mode: 'planner',
+      phase: 'waiting',
+      isRunning: false,
+      metadata: { title: null },
+      criteria: [{ id: 'tests-pass', description: 'Tests pass', status: { type: 'pending' }, attempts: [] }],
+    }
+    const sessionManager = createSessionManager({
+      createSession: vi.fn(() => sessionState),
+      getSession: vi.fn(() => sessionState),
+      requireSession: vi.fn(() => sessionState),
+      setMode: vi.fn((_id, mode) => ({ ...sessionState, mode })),
+      setPhase: vi.fn((_id, phase) => ({ ...sessionState, phase })),
+      setRunning: vi.fn((_id, isRunning) => {
+        sessionState.isRunning = isRunning
+      }),
+      setCurrentContextSize: vi.fn(),
+      getContextState: vi.fn(() => ({
+        currentTokens: 10,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      })),
+      getCurrentModelSettings: vi.fn(() => ({})),
+      getDynamicContextChanged: vi.fn(() => false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn(() => undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn(() => []),
+      getCurrentWindowMessages: vi.fn(() => []),
+      updateMessage: vi.fn(),
+      getActiveWorkflowExecution: vi.fn(() => ({
+        id: 'exec-1',
+        sessionId: 'session-1',
+        workflowId: 'default',
+        workflowName: 'Build & Verify',
+        status: 'waiting',
+        currentStepId: 'work_location',
+        stepOutput: {},
+        params: {},
+        subGroup: 'verify',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })),
+      resumeWorkflow: vi.fn(() => ({ params: {}, stepOutput: {} })),
+    })
+
+    runOrchestratorMock.mockResolvedValue({ success: true })
+
+    const harness = await createHarness({ sessionManager })
+
+    harness.send({ id: 'sl-ok', type: 'session.load', payload: { sessionId: 'session-1' } })
+    await harness.nextMessage((message) => message.id === 'sl-ok')
+
+    harness.send({ id: 'runner-resume', type: 'runner.launch', payload: { resumeFrom: 'work_location' } })
+    await harness.nextMessage((message) => message.id === 'runner-resume')
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    expect(runOrchestratorMock).toHaveBeenCalled()
+    const callArgs = runOrchestratorMock.mock.calls[0]![0]
+    expect(callArgs.subGroup).toBe('verify')
+  })
+
   it('handles runner relaunch, subscription failures, and orchestrator errors', async () => {
     const eventStore = createEventStore()
     eventStore.subscribe = vi.fn(() => ({

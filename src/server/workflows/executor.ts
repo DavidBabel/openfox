@@ -150,18 +150,25 @@ export function evaluateCondition(
   }
 }
 
+export function findMatchingTransition(
+  transitions: Transition[],
+  stepOutcome: StepOutcome | null,
+  metadataEntries?: Record<string, import('../../shared/types.js').MetadataEntry[]>,
+): Transition | null {
+  for (const transition of transitions) {
+    if (evaluateCondition(transition.when, stepOutcome, metadataEntries)) {
+      return transition
+    }
+  }
+  return null
+}
+
 export function evaluateTransitions(
   transitions: Transition[],
   stepOutcome: StepOutcome | null,
   metadataEntries?: Record<string, import('../../shared/types.js').MetadataEntry[]>,
 ): string {
-  for (const transition of transitions) {
-    if (evaluateCondition(transition.when, stepOutcome, metadataEntries)) {
-      return transition.goto
-    }
-  }
-  // No transition matched — treat as blocked
-  return TERMINAL_BLOCKED
+  return findMatchingTransition(transitions, stepOutcome, metadataEntries)?.goto ?? TERMINAL_BLOCKED
 }
 
 // ============================================================================
@@ -300,8 +307,16 @@ export async function executeWorkflow(
   const messagesBeforeWorkflow = sessionManager.requireSession(sessionId).messages.length
 
   const activeStepIds = new Set(activeSteps.map((s) => s.id))
+  // Sub-groups whose tagged transitions are eligible in this slice run. Starts
+  // with the running slice; each escape into another sub-group adds its tag.
+  const activeSubGroups = new Set<string>()
+  if (subGroup) {
+    activeSubGroups.add(subGroup)
+  }
+  // Map every step so transitions escaping a sub-group slice (see transition
+  // evaluation below) can resolve steps outside the active slice.
   const stepsById = new Map<string, WorkflowStep>()
-  for (const step of activeSteps) {
+  for (const step of workflow.steps) {
     stepsById.set(step.id, step)
   }
 
@@ -384,6 +399,7 @@ export async function executeWorkflow(
       workflow.metadata.name,
       workflow.metadata.color,
       options.params ?? {},
+      subGroup,
     )
   }
 
@@ -745,21 +761,31 @@ export async function executeWorkflow(
       }
     }
 
-    // Evaluate transitions
+    // Evaluate transitions. In a slice run, only untagged transitions and
+    // transitions tagged with an entered sub-group are candidates; on full runs
+    // every transition applies.
     const refreshedSession = sessionManager.requireSession(sessionId)
-    const effectiveTransitions = subGroup
-      ? step.transitions.filter((t) => !t.subGroup || t.subGroup === subGroup)
+    const candidates = subGroup
+      ? step.transitions.filter((t) => !t.subGroup || activeSubGroups.has(t.subGroup))
       : step.transitions
-    const rawNextStepId = evaluateTransitions(effectiveTransitions, stepOutcome, refreshedSession.metadataEntries)
+    const fired = findMatchingTransition(candidates, stepOutcome, refreshedSession.metadataEntries)
+    let nextStepId = fired ? fired.goto : TERMINAL_BLOCKED
 
-    // When running a sub-group, treat transitions to steps outside the group as $done
-    const nextStepId =
-      subGroup &&
-      rawNextStepId !== TERMINAL_DONE &&
-      rawNextStepId !== TERMINAL_BLOCKED &&
-      !activeStepIds.has(rawNextStepId)
-        ? TERMINAL_DONE
-        : rawNextStepId
+    // When running a sub-group, a transition leaving the active set either:
+    // - escapes (tagged with an entered sub-group): the target step is pulled
+    //   into the slice and executes, enabling loops across sub-groups; or
+    // - clamps to $done (untagged or tagged with a sub-group never entered).
+    if (subGroup && nextStepId !== TERMINAL_DONE && nextStepId !== TERMINAL_BLOCKED && !activeStepIds.has(nextStepId)) {
+      if (fired && fired.subGroup && activeSubGroups.has(fired.subGroup)) {
+        activeStepIds.add(nextStepId)
+        const targetStep = stepsById.get(nextStepId)
+        if (targetStep?.subGroup) {
+          activeSubGroups.add(targetStep.subGroup)
+        }
+      } else {
+        nextStepId = TERMINAL_DONE
+      }
+    }
 
     // Handle terminal states
     if (nextStepId === TERMINAL_DONE) {

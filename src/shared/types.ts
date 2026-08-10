@@ -72,6 +72,8 @@ export interface WorkflowExecution {
   params: Record<string, string>
   /** Available branches at a paused user step, if any. */
   pendingChoices?: UserStepChoice[]
+  /** Sub-group slice this run belongs to, when launched as a slice. */
+  subGroup?: string
   createdAt: number
   updatedAt: number
 }
