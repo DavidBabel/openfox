@@ -19,6 +19,7 @@ import { WorkflowsModal } from '../settings/WorkflowsModal'
 import { QuickActionModal } from '../QuickActionModal'
 import { MessageSearchModal } from './MessageSearchModal'
 import { ChatInput } from './ChatInput'
+import { EmptyFeedTaskCard } from '../tasks/EmptyFeedTaskCard'
 import { WorkflowParamModal } from './WorkflowParamModal'
 import { extractTemplateParams } from '../../lib/parse-slash-command'
 import { resolveWorkflowForLaunch } from '../../lib/workflow-scope'
@@ -317,6 +318,8 @@ export function PlanPanel({
           hiddenCount={hiddenCount}
           onScrollbarGesture={handleScrollbarGesture}
         />
+
+        {messages.length === 0 && session?.projectId && <EmptyFeedTaskCard projectId={session.projectId} />}
 
         <ChatInput
           input={input}

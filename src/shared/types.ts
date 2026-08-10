@@ -424,6 +424,88 @@ export type ToolName =
 // Criterion Types
 // ============================================================================
 
+// ============================================================================
+// Project Tasks
+// ============================================================================
+
+export type TaskStatus = 'todo' | 'in_progress' | 'done'
+/** Active state of an in-progress task: launched (occupies a slot) or queued (waiting for a slot). */
+export type TaskRunState = 'running' | 'queued'
+export type TaskActor = 'human' | 'agent' | 'system'
+
+/** Per-project gate (Definition of Done) configuration. */
+export interface TaskGateConfig {
+  id: string
+  name: string
+  /** Description of acceptable proof, e.g. "all green — every criterion passes with evidence". */
+  description: string
+  /** Whether the gate blocks Done until satisfied. */
+  required: boolean
+  /** 'done' = definition of done (blocks entering Done). 'ready' = definition of ready (off by default). */
+  variant: 'done' | 'ready'
+}
+
+/** A filled-in value for a gate field, recording who set it and when. */
+export interface TaskGateValue {
+  gateId: string
+  value: string
+  actor: TaskActor
+  actorName?: string
+  sessionId?: string
+  timestamp: string
+}
+
+export interface TaskAuditEntry {
+  id: string
+  timestamp: string
+  actor: TaskActor
+  actorName?: string
+  action: string
+  detail: string
+}
+
+export interface ProjectTask {
+  id: string
+  projectId: string
+  prompt: string
+  attachments: Attachment[]
+  status: TaskStatus
+  /** Present only while status is in_progress. */
+  runState?: TaskRunState
+  /** 1-based queue position while queued. */
+  queuePosition?: number
+  /** Ordering within the column (stable, used for drag-reorder). */
+  position: number
+  /** Monotonic revision counter — bumped on every mutation. Optimistic concurrency guard. */
+  version: number
+  agentId?: string
+  providerId?: string
+  model?: string
+  /** Linked sessions, active working session first, then historical attempts. */
+  sessionIds: string[]
+  activeSessionId?: string
+  gateValues: TaskGateValue[]
+  auditTrail: TaskAuditEntry[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectTaskSettings {
+  slotLimit: number
+  queuePaused: boolean
+}
+
+export interface ProjectTaskCounts {
+  open: number
+  todo: number
+  inProgress: number
+  /** Actively running (occupying a slot). */
+  running: number
+  /** Waiting for a slot to free. */
+  queued: number
+  done: number
+}
+
 export interface Criterion {
   id: string
   description: string // Self-contained contract, includes how to verify

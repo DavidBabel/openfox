@@ -4,6 +4,7 @@ import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
 import { useCommandsStore } from '../../stores/commands'
 import { authFetch } from '../../lib/api'
 import { parseSlashCommand, extractTemplateParams } from '../../lib/parse-slash-command'
+import { insertSuggestionAtCursor, focusTextareaAt, resolveSlashParamIds } from '../../lib/composer-utils'
 import { resolveWorkflowForLaunch } from '../../lib/workflow-scope'
 import { dedupById } from '../../lib/modal-utils'
 import type { WorkflowLaunchScope } from '@shared/types.js'
@@ -422,49 +423,35 @@ export function ChatInput({
       // Files get a trailing space (closes the popup); directories get a trailing
       // slash so the query continues and the popup refetches the dir's contents.
       const suffix = isDirectory ? '/' : ' '
-      const beforeCursor = input.slice(0, startIndex)
-      const afterCursor = input.slice(cursorPosRef.current)
-      const newText = `${beforeCursor}@${suggestion.path}${suffix}${afterCursor}`
+      const { newText, newCursorPos } = insertSuggestionAtCursor(
+        input,
+        cursorPosRef.current,
+        startIndex,
+        `@${suggestion.path}${suffix}`,
+      )
       setInput(newText)
-      const newCursorPos = startIndex + suggestion.path.length + 2
       cursorPosRef.current = newCursorPos
-      if (textareaRef.current) {
-        textareaRef.current.selectionStart = newCursorPos
-        textareaRef.current.selectionEnd = newCursorPos
-        textareaRef.current.focus()
-      }
+      focusTextareaAt(textareaRef.current, newCursorPos)
     },
     [input, setInput],
   )
 
   const handleSelectSlash = useCallback(
     (suggestion: SlashSuggestion, startIndex: number) => {
-      const beforeCursor = input.slice(0, startIndex)
-      const afterCursor = input.slice(cursorPosRef.current)
-      const newText = `${beforeCursor}/${suggestion.id} ${afterCursor}`
+      const { newText, newCursorPos } = insertSuggestionAtCursor(
+        input,
+        cursorPosRef.current,
+        startIndex,
+        `/${suggestion.id} `,
+      )
       setInput(newText)
-      const newCursorPos = startIndex + suggestion.id.length + 2
       cursorPosRef.current = newCursorPos
-      if (textareaRef.current) {
-        textareaRef.current.selectionStart = newCursorPos
-        textareaRef.current.selectionEnd = newCursorPos
-        textareaRef.current.focus()
-      }
-      // Set inline param hints
+      focusTextareaAt(textareaRef.current, newCursorPos)
+      // Set inline param hints (same resolution as the task editor)
       if (suggestion.type === 'workflow') {
         selectedSlashScopeRef.current = { id: suggestion.id, scope: suggestion.scope }
-        const wf = selectAllWorkflows(useWorkflowsStore.getState()).find(
-          (w) => w.id === suggestion.id && w.scope === suggestion.scope,
-        )
-        setActiveSlashParams((wf?.parameters ?? []).map((p) => p.id))
-      } else {
-        // Use paramNames from the command list (server-computed from prompt)
-        const allCmds = useCommandsStore.getState()
-        const cmd = dedupById(dedupById(allCmds.defaults, allCmds.userItems), allCmds.projectItems).find(
-          (c) => c.id === suggestion.id,
-        )
-        setActiveSlashParams(cmd?.paramNames ?? [])
       }
+      setActiveSlashParams(resolveSlashParamIds(suggestion))
     },
     [input, setInput],
   )

@@ -22,6 +22,9 @@ import { TerminalDrawer } from '../terminal/TerminalDrawer'
 import { ProjectDropdown } from './ProjectDropdown'
 import { SessionDropdown } from './SessionDropdown'
 import { MobileNav } from './MobileNav'
+import { TasksModal } from '../tasks/TasksModal'
+import { useTasksStore } from '../../stores/tasks'
+import { TasksIcon, ArrowRightIcon } from '../shared/icons'
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -33,6 +36,12 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement)
   const [location, setLocation] = useLocation()
+  const [tasksModalOpen, setTasksModalOpen] = useState(false)
+  const openTaskCount = useTasksStore((state) => state.counts.open)
+  const loadCounts = useTasksStore((state) => state.loadCounts)
+  const activeProjectId = useTasksStore((state) => state.activeProjectId)
+  const lastAutoLaunch = useTasksStore((state) => state.lastAutoLaunch)
+  const clearAutoLaunch = useTasksStore((state) => state.clearAutoLaunch)
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement)
@@ -72,6 +81,12 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     },
     { capture: true },
   )
+
+  useEffect(() => {
+    if (project?.id && activeProjectId !== project.id) {
+      void loadCounts(project.id)
+    }
+  }, [project?.id, activeProjectId, loadCounts])
 
   useEffect(() => {
     startAutoRefresh()
@@ -157,6 +172,22 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
 
         {isProjectPage && (
           <button
+            onClick={() => setTasksModalOpen(true)}
+            className="relative p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
+            title="Project tasks"
+            aria-label="Open project tasks"
+          >
+            <TasksIcon className="w-4 h-4" />
+            {openTaskCount > 0 && (
+              <span className="absolute top-0.5 right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-accent-primary text-white text-[9px] font-semibold flex items-center justify-center">
+                {openTaskCount > 99 ? '99+' : openTaskCount}
+              </span>
+            )}
+          </button>
+        )}
+
+        {isProjectPage && (
+          <button
             onClick={() => setTerminalOpen(!terminalIsOpen)}
             className={`p-2.5 rounded hover:bg-bg-tertiary transition-colors ${
               terminalIsOpen ? 'text-accent-primary' : 'text-text-muted hover:text-text-primary'
@@ -214,6 +245,29 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
 
       <GlobalSettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <TerminalDrawer isOpen={terminalIsOpen} onClose={() => setTerminalOpen(false)} />
+      {project && (
+        <TasksModal isOpen={tasksModalOpen} onClose={() => setTasksModalOpen(false)} projectId={project.id} />
+      )}
+      {lastAutoLaunch && (
+        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-secondary border border-border shadow-xl text-sm text-text-primary">
+          <span>“{lastAutoLaunch.taskTitle}” auto-launched — a slot freed up.</span>
+          <button
+            type="button"
+            onClick={() => {
+              const sessionId = lastAutoLaunch.sessionId
+              const targetProjectId = lastAutoLaunch.projectId
+              clearAutoLaunch()
+              setLocation(`/p/${targetProjectId}/s/${sessionId}`)
+            }}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-accent-primary/25 hover:bg-accent-primary/40 font-medium transition-colors"
+          >
+            Open session <ArrowRightIcon className="w-3 h-3" />
+          </button>
+          <button type="button" onClick={clearAutoLaunch} className="text-xs text-text-muted underline">
+            Dismiss
+          </button>
+        </div>
+      )}
     </header>
   )
 }

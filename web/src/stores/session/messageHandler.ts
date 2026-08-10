@@ -31,6 +31,7 @@ import type {
 } from '@shared/protocol.js'
 import { useDevServerStore } from '../dev-server'
 import { useBackgroundProcessesStore } from '../background-processes'
+import { useTasksStore } from '../tasks'
 import { playNewMessage } from '../../lib/sound'
 import type { AgentType } from '../notifications'
 import type { SessionState, PendingQuestion } from './types'
@@ -839,6 +840,11 @@ export function handleServerMessage(
     case 'backgroundProcess.exited':
     case 'backgroundProcess.removed': {
       useBackgroundProcessesStore.getState().handleMessage(message.type, message.payload as Record<string, unknown>)
+      break
+    }
+
+    case 'tasks.update': {
+      useTasksStore.getState().handleTasksUpdate(message.payload as import('@shared/protocol.js').TasksUpdatePayload)
       break
     }
 

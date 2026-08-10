@@ -135,6 +135,8 @@ export type ServerMessageType =
   | 'backgroundProcess.removed' // Process removed from list
   // Git status events
   | 'git.status' // Branch and diff info, pushed on interval or session load
+  // Project tasks events
+  | 'tasks.update' // A task (or task config) changed; clients owning the project update their boards
   // MCP server events
   | 'mcp.servers.changed' // MCP server configuration was modified by agent
   // Other
@@ -475,6 +477,22 @@ export interface GitDiffFile {
   status: 'modified' | 'added' | 'deleted'
   additions: number
   deletions: number
+}
+
+// Payloads for project tasks
+
+export interface TasksUpdatePayload {
+  projectId: string
+  /** Full refreshed task list — the modal renders one code path (fetch == push). */
+  tasks: import('./types.js').ProjectTask[]
+  settings: import('./types.js').ProjectTaskSettings
+  counts: import('./types.js').ProjectTaskCounts
+  /** Current gate configuration — pushed with every board update so config changes sync to all clients. */
+  gates?: import('./types.js').TaskGateConfig[] | undefined
+  /** Set when a queued task auto-launched so clients can offer to open the session. */
+  autoLaunched?: { taskId: string; taskTitle: string; sessionId: string; projectId: string } | undefined
+  /** Which task changed, when a targeted update is desired (informational). */
+  changedTaskId?: string | undefined
 }
 
 // Shared background process types

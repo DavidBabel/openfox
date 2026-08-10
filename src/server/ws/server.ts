@@ -17,8 +17,7 @@ import type { Message, Provider, ProviderBackend, StatsIdentity, Attachment } fr
 import type { ProviderManager } from '../provider-manager.js'
 import { runChatTurn } from '../chat/orchestrator.js'
 
-import { runOrchestrator } from '../runner/index.js'
-import { normalizeWorkflowScope } from '../workflows/registry.js'
+import { launchWorkflowRun } from '../runner/launch.js'
 import { appendCompactionPrompt } from '../context/compactor.js'
 import { computeSessionHash, applyDynamicContext, computeUnifiedDiff } from '../chat/dynamic-context.js'
 import { provideAnswer } from '../tools/index.js'
@@ -1313,11 +1312,9 @@ async function handleClientMessage(
       const hasUserMessage = hasUserContent || hasUserAttachments
       const isResume = !!launchPayload?.resumeFrom
 
-      // Mark session as running (emits running.changed event)
-      sessionManager.setRunning(sessionId, true)
-      sendForSession(sessionId, createSessionRunningMessage(true))
-
       // Create AbortController for this run (abort existing if any - defense in depth)
+      // The running-state lifecycle (setRunning + session.running messages) is
+      // owned by the shared launcher below.
       const controller = new AbortController()
       const existingController = activeAgents.get(sessionId)
       if (existingController) {
@@ -1362,87 +1359,34 @@ async function handleClientMessage(
         }
       }
 
-      runOrchestrator({
-        sessionManager,
-        sessionId,
-        llmClient: llmForSession(sessionId),
-        statsIdentity: statsForSession(sessionId),
-        scope: normalizeWorkflowScope(launchPayload?.scope),
-        ...(launchPayload?.workflowId ? { workflowId: launchPayload.workflowId } : {}),
-        ...(launchPayload?.subGroup ? { subGroup: launchPayload.subGroup } : {}),
-        ...(isResume && launchPayload?.resumeFrom ? { resumeFromStep: launchPayload.resumeFrom } : {}),
-        ...(isResume && launchPayload?.stepOutput ? { initialStepOutput: launchPayload.stepOutput } : {}),
-        ...(isResume && launchPayload?.userChoice ? { userChoice: launchPayload.userChoice } : {}),
-        ...(launchPayload?.params ? { params: launchPayload.params } : {}),
-        // On resume, prefer params/stepOutput from the persisted workflow execution
-        ...(isResume
-          ? (() => {
-              const exec = sessionManager.getActiveWorkflowExecution(sessionId)
-              if (!exec) return {}
-
-              if (exec.status === 'waiting') {
-                // Normal resume from a user step — call resumeWorkflow to update status
-                const resumed = sessionManager.resumeWorkflow(
-                  sessionId,
-                  exec.id,
-                  exec.workflowId,
-                  exec.workflowName,
-                  exec.workflowColor,
-                )
-                if (resumed) {
-                  return {
-                    params: resumed.params,
-                    initialStepOutput: resumed.stepOutput,
-                    ...(exec.currentStepId ? { resumeFromStep: exec.currentStepId } : {}),
-                    ...(exec.subGroup ? { subGroup: exec.subGroup } : {}),
-                  }
-                }
-              }
-
-              // For 'running' status (e.g. abort during agent step), use existing
-              // execution info without calling resumeWorkflow — status is already current.
-              return {
-                ...(Object.keys(exec.params).length > 0 ? { params: exec.params } : {}),
-                ...(Object.keys(exec.stepOutput).length > 0 ? { initialStepOutput: exec.stepOutput } : {}),
-                ...(exec.currentStepId ? { resumeFromStep: exec.currentStepId } : {}),
-                ...(exec.subGroup ? { subGroup: exec.subGroup } : {}),
-              }
-            })()
-          : {}),
-        ...(hasUserMessage
-          ? {
-              userMessage: {
+      launchWorkflowRun(
+        {
+          sessionManager,
+          sessionId,
+          controller,
+          llmClient: llmForSession(sessionId),
+          statsIdentity: statsForSession(sessionId),
+          broadcastForSession: (sid, msg) => _broadcastForSession(sid, msg),
+          onFinished: () => cleanupAfterTurn(sessionId, controller, sendForSession, true),
+        },
+        {
+          ...(launchPayload?.workflowId ? { workflowId: launchPayload.workflowId } : {}),
+          ...(launchPayload?.subGroup ? { subGroup: launchPayload.subGroup } : {}),
+          ...(launchPayload?.scope
+            ? { scope: launchPayload.scope as import('../../shared/types.js').WorkflowLaunchScope }
+            : {}),
+          ...(isResume && launchPayload?.resumeFrom ? { resumeFrom: launchPayload.resumeFrom } : {}),
+          ...(isResume && launchPayload?.stepOutput ? { stepOutput: launchPayload.stepOutput } : {}),
+          ...(isResume && launchPayload?.userChoice ? { userChoice: launchPayload.userChoice } : {}),
+          ...(launchPayload?.params ? { params: launchPayload.params } : {}),
+          ...(hasUserMessage
+            ? {
                 content: hasUserContent ? launchPayload!.content! : '',
                 ...(hasUserAttachments ? { attachments: launchAttachments! } : {}),
-              },
-            }
-          : {}),
-        signal: controller.signal,
-        onMessage: (msg) => _broadcastForSession(sessionId, msg), // For path confirmation dialogs
-      })
-        .catch((error: unknown) => {
-          // Don't create error message for controlled abort
-          if (error instanceof Error && error.message === 'Aborted') {
-            return
-          }
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          logger.error('Runner error', { error: errorMessage, sessionId })
-          // Surface validation errors to the user (e.g. missing required params)
-          _broadcastForSession(
-            sessionId,
-            createServerMessage('chat.error', { error: errorMessage, recoverable: false }),
-          )
-        })
-        .finally(() => {
-          try {
-            // Runner orchestrator bypasses runChatTurn, so isRunning must be cleared here
-            sessionManager.setRunning(sessionId, false)
-            sendForSession(sessionId, createSessionRunningMessage(false))
-            cleanupAfterTurn(sessionId, controller, sendForSession, true)
-          } catch {
-            // Session may have been deleted during execution
-          }
-        })
+              }
+            : {}),
+        },
+      )
 
       break
     }
