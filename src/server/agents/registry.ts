@@ -149,11 +149,11 @@ export async function deleteProjectAgent(
   return { success: false }
 }
 
-export async function loadAllAgentsDefault(): Promise<AgentDefinition[]> {
+export async function loadAllAgentsDefault(projectDir?: string): Promise<AgentDefinition[]> {
   try {
     const config = getRuntimeConfig()
     const configDir = getGlobalConfigDir(config.mode ?? 'production')
-    return await loadAllAgents(configDir, config.workdir)
+    return await loadAllAgents(configDir, projectDir ?? config.workdir)
   } catch {
     return loadDefaultAgents()
   }

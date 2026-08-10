@@ -161,6 +161,7 @@ function makeHarness(criteria: MetadataEntry[]) {
     setMode,
     setPhase,
     getEffectiveWorkdir: vi.fn().mockReturnValue('/tmp/test'),
+    getProjectWorkdir: vi.fn().mockReturnValue('/tmp/test'),
     addMessage: vi.fn(),
     startWorkflow: vi.fn(),
     updateWorkflowStep: vi.fn(),

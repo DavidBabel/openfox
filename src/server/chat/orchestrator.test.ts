@@ -221,6 +221,7 @@ function createSessionManager(state: Record<string, any>) {
     getCurrentModelSettings: vi.fn(() => undefined),
     getLspManager: vi.fn(() => ({ name: 'lsp' })),
     getEffectiveWorkdir: vi.fn((_id: string) => state['current']?.workspace ?? state['current']?.workdir ?? '/test'),
+    getProjectWorkdir: vi.fn((_id: string) => state['current']?.workdir ?? '/test'),
     setRunning: vi.fn(),
     getCachedPrompt: vi.fn(() => undefined),
     setCachedPrompt: vi.fn(),
@@ -1706,7 +1707,7 @@ describe('chat orchestrator', () => {
     })
   })
 
-  it('loads skills from the effective workdir when the session runs in a workspace', async () => {
+  it('loads skills from the session project workdir even when the session runs in a workspace', async () => {
     const eventStore = createEventStore()
     getEventStoreMock.mockReturnValue(eventStore)
     getAllInstructionsMock.mockResolvedValue({ content: 'Plan carefully', files: [] })
@@ -1748,7 +1749,7 @@ describe('chat orchestrator', () => {
       llmClient: { getModel: () => 'qwen3-32b' } as never,
     })
 
-    expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/tmp/openfox-test', '/workspaces/openfox/review-branch')
-    expect(getEnabledSkillMetadata).not.toHaveBeenCalledWith('/tmp/openfox-test', '/original/project')
+    expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/tmp/openfox-test', '/original/project')
+    expect(getEnabledSkillMetadata).not.toHaveBeenCalledWith('/tmp/openfox-test', '/workspaces/openfox/review-branch')
   })
 })

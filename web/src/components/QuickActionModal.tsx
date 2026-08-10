@@ -66,6 +66,7 @@ export function QuickActionModal({
   const switchMode = useSessionStore((state) => state.switchMode)
   const switchDangerLevel = useSessionStore((state) => state.switchDangerLevel)
   const currentProjectId = useSessionStore((state) => state.currentSession?.projectId)
+  const currentWorkdir = useSessionStore((state) => state.currentSession?.workdir)
   const closeCompleteAction = useRef<(() => void) | undefined>(undefined)
 
   const [search, setSearch] = useState('')
@@ -79,9 +80,9 @@ export function QuickActionModal({
 
   useEffect(() => {
     if (isOpen) {
-      fetchCommands()
-      fetchWorkflows()
-      fetchAgents()
+      fetchCommands(currentWorkdir)
+      fetchWorkflows(currentWorkdir)
+      fetchAgents(currentWorkdir)
       setSearch('')
       setSelectedIndex(0)
       const timer = setTimeout(() => {
@@ -89,7 +90,7 @@ export function QuickActionModal({
       }, 50)
       return () => clearTimeout(timer)
     }
-  }, [isOpen, fetchCommands, fetchWorkflows, fetchAgents])
+  }, [isOpen, fetchCommands, fetchWorkflows, fetchAgents, currentWorkdir])
 
   useEffect(() => {
     if (!isOpen && wasOpenRef.current) {

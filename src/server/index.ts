@@ -1143,7 +1143,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     if (!mode) {
       return res.status(400).json({ error: 'mode is required' })
     }
-    const allAgents = await loadAllAgentsDefault()
+    const allAgents = await loadAllAgentsDefault(sessionManager.getProjectWorkdir(sessionId))
     const topLevelIds = getTopLevelAgents(allAgents).map((a) => a.metadata.id)
     if (!topLevelIds.includes(mode)) {
       return res.status(400).json({ error: `Invalid mode. Must be one of: ${topLevelIds.join(', ')}` })

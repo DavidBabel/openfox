@@ -111,7 +111,7 @@ export function ChatInput({
   const workdir = useSessionStore((state) => state.currentSession?.workdir)
   const currentSession = useSessionStore((state) => state.currentSession)
   const warmupSentRef = useRef(false)
-  const workflowsFetchedRef = useRef(false)
+  const loadedWorkdirRef = useRef<string | undefined>(undefined)
   const sendingRef = useRef(false)
   const [activeSlashParams, setActiveSlashParams] = useState<string[]>([])
   // Records the scope chosen via the slash autocomplete so the launch resolves
@@ -120,27 +120,14 @@ export function ChatInput({
 
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
 
-  // Eagerly load workflows and commands so slash autocomplete always has data
+  // Eagerly load workflows and commands so slash autocomplete always has data.
+  // Scoped to the session's project workdir; reloads when the active project changes.
   useEffect(() => {
-    if (workflowsFetchedRef.current) return
-    workflowsFetchedRef.current = true
-    const allWorkflows = useWorkflowsStore.getState()
-    if (
-      allWorkflows.defaults.length === 0 &&
-      allWorkflows.userItems.length === 0 &&
-      allWorkflows.projectItems.length === 0
-    ) {
-      allWorkflows.fetchWorkflows()
-    }
-    const allCommands = useCommandsStore.getState()
-    if (
-      allCommands.defaults.length === 0 &&
-      allCommands.userItems.length === 0 &&
-      allCommands.projectItems.length === 0
-    ) {
-      allCommands.fetchCommands()
-    }
-  }, [])
+    if (loadedWorkdirRef.current === workdir) return
+    loadedWorkdirRef.current = workdir
+    useWorkflowsStore.getState().fetchWorkflows(workdir)
+    useCommandsStore.getState().fetchCommands(workdir)
+  }, [workdir])
 
   // Clear inline param hints when input is emptied (after send, escape, etc.)
   useEffect(() => {
@@ -388,7 +375,7 @@ export function ChatInput({
       }
       if (slashResult?.commandId) {
         // Fetch command, resolve params, send as message
-        allCommands.fetchCommand(slashResult.commandId).then((full) => {
+        allCommands.fetchCommand(slashResult.commandId, workdir).then((full) => {
           if (full) {
             // Map positional args to named params by order of appearance in the prompt
             const paramNames = extractTemplateParams(full.prompt)

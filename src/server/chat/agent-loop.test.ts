@@ -88,6 +88,7 @@ describe('executeTools', () => {
       }),
       getLspManager: vi.fn(),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       drainAsapMessages: vi.fn().mockReturnValue([]),
     } as unknown as SessionManager
 
@@ -357,6 +358,7 @@ describe('runTopLevelAgentLoop assembleRequest', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -464,6 +466,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 195000,
         maxTokens: 200000,
@@ -503,6 +506,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 190000,
         maxTokens: 200000,
@@ -543,6 +547,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 200000,
         maxTokens: 200000,
@@ -582,6 +587,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -621,6 +627,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -671,6 +678,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -710,6 +718,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -762,7 +771,7 @@ describe('maxTokens clamping', () => {
     expect(streamLLMPure).not.toHaveBeenCalled()
   })
 
-  it('passes effective workdir (workspace-aware) to getEnabledSkillMetadata instead of global workdir', async () => {
+  it('passes the session project workdir (not the workspace) to getEnabledSkillMetadata', async () => {
     const projectRoot = '/actual/project/dir'
     const workspacePath = '/workspaces/openfox/review-branch'
 
@@ -775,6 +784,7 @@ describe('maxTokens clamping', () => {
         isRunning: false,
       }),
       getEffectiveWorkdir: vi.fn().mockReturnValue(workspacePath),
+      getProjectWorkdir: vi.fn().mockReturnValue(projectRoot),
       getContextState: vi.fn().mockReturnValue({
         currentTokens: 0,
         maxTokens: 200000,
@@ -808,7 +818,7 @@ describe('maxTokens clamping', () => {
 
     await runTopLevelAgentLoop(makeConfig({ warmup: true }), mockTurnMetrics)
 
-    expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/test/config', workspacePath)
-    expect(getEnabledSkillMetadata).not.toHaveBeenCalledWith('/test/config', projectRoot)
+    expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/test/config', projectRoot)
+    expect(getEnabledSkillMetadata).not.toHaveBeenCalledWith('/test/config', workspacePath)
   })
 })

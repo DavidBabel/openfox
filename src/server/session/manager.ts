@@ -206,6 +206,17 @@ export class SessionManager {
     return session.workspace ?? session.workdir
   }
 
+  /**
+   * Get the project root working directory for a session.
+   * Ignores any active workspace — session.workdir is always the project root,
+   * which is where project-scoped .openfox/ content (agents, skills, commands,
+   * workflows) lives and is managed from.
+   */
+  getProjectWorkdir(sessionId: string): string {
+    const session = this.requireSession(sessionId)
+    return session.workdir
+  }
+
   // ============================================================================
   // Session Lifecycle
   // ============================================================================

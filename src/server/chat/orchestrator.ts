@@ -334,7 +334,7 @@ export async function runAgentTurn(
     onToolExecuted?: (toolCall: ToolCall, toolResult: ToolResult) => void
   },
 ): Promise<{ returnValueContent?: string; returnValueResult?: string }> {
-  const allAgents = await loadAllAgentsDefault()
+  const allAgents = await loadAllAgentsDefault(options.sessionManager.getProjectWorkdir(options.sessionId))
   const agentDef = findAgentById(agentId, allAgents) ?? findAgentById(resolveDefaultAgentId(), allAgents)!
 
   // Resolve per-agent model override (dedicated LLM client if configured).
@@ -351,7 +351,7 @@ export async function runAgentTurn(
   const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId)
   const runtimeConfig = getRuntimeConfig()
   const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
-  const skills = await getEnabledSkillMetadata(configDir, options.sessionManager.getEffectiveWorkdir(options.sessionId))
+  const skills = await getEnabledSkillMetadata(configDir, options.sessionManager.getProjectWorkdir(options.sessionId))
 
   return runTopLevelAgentLoop(
     {

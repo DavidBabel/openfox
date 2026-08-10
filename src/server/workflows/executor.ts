@@ -604,7 +604,7 @@ export async function executeWorkflow(
         const promptTemplate = subStep.prompt ?? 'Perform your task.'
         const resolvedPrompt = resolveTemplate(promptTemplate, templateCtx)
 
-        const allAgents = await loadAllAgentsDefault()
+        const allAgents = await loadAllAgentsDefault(sessionManager.getProjectWorkdir(sessionId))
         const agentDef = findAgentById(subStep.subAgentType, allAgents)
         if (!agentDef) {
           logger.error('Sub-agent definition not found', { subAgentType: subStep.subAgentType })

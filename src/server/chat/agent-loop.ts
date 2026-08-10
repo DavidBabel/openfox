@@ -188,7 +188,7 @@ export async function runTopLevelAgentLoop(
       const session = sessionManager.requireSession(sessionId)
       const runtimeConfig = getRuntimeConfig()
       const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
-      const skills = await getEnabledSkillMetadata(configDir, sessionManager.getEffectiveWorkdir(sessionId))
+      const skills = await getEnabledSkillMetadata(configDir, sessionManager.getProjectWorkdir(sessionId))
       const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId)
       const toolRegistry = config.getToolRegistry()
 
@@ -254,7 +254,7 @@ export async function runTopLevelAgentLoop(
 
     const runtimeConfig = getRuntimeConfig()
     const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
-    const skills = await getEnabledSkillMetadata(configDir, sessionManager.getEffectiveWorkdir(sessionId))
+    const skills = await getEnabledSkillMetadata(configDir, sessionManager.getProjectWorkdir(sessionId))
     if (signal?.aborted) throw new Error('Aborted')
 
     const assembledRequest = await config.assembleRequest({
@@ -296,7 +296,7 @@ export async function runTopLevelAgentLoop(
 
     // Build set of sub-agent IDs so streamLLMPure can show the correct
     // tool name in preparing events instead of hallucinated aliases.
-    const allAgents = await loadAllAgentsDefault()
+    const allAgents = await loadAllAgentsDefault(sessionManager.getProjectWorkdir(sessionId))
     const subAgentAliases = new Set(getSubAgents(allAgents).map((a) => a.metadata.id))
 
     const streamGen = streamLLMPure({

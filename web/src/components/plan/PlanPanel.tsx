@@ -351,7 +351,11 @@ export function PlanPanel({
           onSendCommand={handleSendCommand}
           clearInput={clearInput}
         />
-        <CommandsModal isOpen={showCommandsModal} onClose={() => setShowCommandsModal(false)} />
+        <CommandsModal
+          isOpen={showCommandsModal}
+          onClose={() => setShowCommandsModal(false)}
+          projectDir={session?.workdir}
+        />
         <WorkflowsModal
           isOpen={showWorkflowsModal}
           onClose={() => setShowWorkflowsModal(false)}
@@ -367,7 +371,7 @@ export function PlanPanel({
           onCloseComplete={focusChatTextarea}
           onCloseCompleteAction={() => window.dispatchEvent(new CustomEvent('open-session-dropdown'))}
           onSelectCommand={async (commandId, textareaContent) => {
-            const full = await useCommandsStore.getState().fetchCommand(commandId)
+            const full = await useCommandsStore.getState().fetchCommand(commandId, session?.workdir)
             if (full) {
               handleSendCommand(full.prompt, full.metadata.agentMode, textareaContent)
             }
