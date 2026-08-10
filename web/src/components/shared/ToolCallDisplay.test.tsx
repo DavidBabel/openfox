@@ -24,6 +24,12 @@ vi.mock('./Markdown', () => ({
   Markdown: ({ content }: { content: string }) => <div data-testid="markdown">{content}</div>,
 }))
 
+vi.mock('./ProjectTasksView', () => ({
+  ProjectTasksView: ({ action }: { action: string }) => (
+    <div data-testid="project-tasks-view">project tasks board ({action})</div>
+  ),
+}))
+
 vi.mock('./ScrollArea', () => ({
   ScrollArea: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }))
@@ -203,6 +209,45 @@ describe('ToolCallDisplay — PathConfirmationButtons placement', () => {
     expect(previewPos).not.toBe(-1)
     expect(denyPos).not.toBe(-1)
     expect(denyPos).toBeGreaterThan(previewPos)
+  })
+})
+
+describe('ToolCallDisplay — project_tasks', () => {
+  beforeEach(() => {
+    useSessionStore.setState({ pendingPathConfirmations: [] })
+    useSettingsStore.setState({ settings: {} })
+  })
+
+  afterEach(cleanup)
+
+  it('renders the project tasks view for a successful list', () => {
+    const { container } = render(
+      <ToolCallDisplay
+        tool="project_tasks"
+        args={{ action: 'list' }}
+        status="success"
+        result={'{"gates":[],"tasks":[]}'}
+        variant="expandable"
+      />,
+    )
+
+    expect(container.querySelector('[data-testid="project-tasks-view"]')).not.toBeNull()
+    expect(container.textContent).toContain('project tasks board (list)')
+  })
+
+  it('does not fall through to the generic result pre for project_tasks', () => {
+    const { container } = render(
+      <ToolCallDisplay
+        tool="project_tasks"
+        args={{ action: 'move', taskId: 'tk_02' }}
+        status="success"
+        result={'{"id":"tk_02","status":"in_progress"}'}
+        variant="expandable"
+      />,
+    )
+
+    expect(container.querySelector('[data-testid="project-tasks-view"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('Result:')
   })
 })
 

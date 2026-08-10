@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useState, type ComponentType } from 'react'
 import { OptionalScrollArea } from './OptionalScrollArea'
 import { useDisplaySettings } from '../../stores/settings'
 import type { Diagnostic, EditContextRegion } from '@shared/types.js'
@@ -11,6 +11,7 @@ import { TruncatedIndicator } from './TruncatedIndicator'
 import { DevServerView } from './DevServerView'
 import { BackgroundProcessView } from './BackgroundProcessView'
 import { WorkspaceView } from './WorkspaceView'
+import { ProjectTasksView } from './ProjectTasksView'
 import { PathConfirmationButtons } from './PathConfirmationButtons'
 import { formatToolArgsFull, formatToolArgsWithMetadata } from '../../lib/formatToolArgs'
 import { useSessionStore, type PendingPathConfirmation } from '../../stores/session'
@@ -63,6 +64,14 @@ function getContentSize(
   const content = args['content']
   if (typeof content === 'string') size += content.length
   return size
+}
+
+// Views that parse a JSON result by action and share the same prop shape.
+const RESULT_ACTION_VIEWS: Record<string, ComponentType<{ result: string; action: string }>> = {
+  dev_server: DevServerView,
+  workspace: WorkspaceView,
+  project_tasks: ProjectTasksView,
+  background_process: BackgroundProcessView,
 }
 
 const statusConfig = {
@@ -310,20 +319,12 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
             </div>
           )}
 
-          {/* Specialized rendering for dev_server */}
-          {tool === 'dev_server' && status === 'success' && result && (
-            <DevServerView result={result} action={String(args.action ?? '')} />
-          )}
-
-          {/* Specialized rendering for workspace */}
-          {tool === 'workspace' && status === 'success' && result && (
-            <WorkspaceView result={result} action={String(args.action ?? '')} />
-          )}
-
-          {/* Specialized rendering for background_process */}
-          {tool === 'background_process' && status === 'success' && result && (
-            <BackgroundProcessView result={result} action={String(args.action ?? '')} />
-          )}
+          {/* Specialized rendering for JSON-shaped action views */}
+          {(() => {
+            const View = RESULT_ACTION_VIEWS[tool]
+            if (!View || status !== 'success' || !result) return null
+            return <View result={result} action={String(args.action ?? '')} />
+          })()}
 
           {/* Specialized rendering for mcp_config */}
           {tool === 'mcp_config' && status === 'success' && (
@@ -350,6 +351,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
             tool !== 'web_fetch' &&
             tool !== 'dev_server' &&
             tool !== 'workspace' &&
+            tool !== 'project_tasks' &&
             tool !== 'background_process' &&
             tool !== 'mcp_config' &&
             tool !== 'step_done' && (

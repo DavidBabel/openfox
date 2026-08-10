@@ -158,6 +158,9 @@ describe('project_tasks tool', () => {
     expect(dup.success).toBe(true)
     const del = await execute('delete', { taskId: task.id }, projectId)
     expect(del.success).toBe(true)
+    const deleted = JSON.parse(del.output!) as { message: string; prompt: string }
+    expect(deleted.message).toBe('Deleted: Original')
+    expect(deleted.prompt).toBe('Original')
     const list = await execute('list', {}, projectId)
     const parsed = JSON.parse(list.output!) as { tasks: { prompt: string }[] }
     expect(parsed.tasks).toHaveLength(1)

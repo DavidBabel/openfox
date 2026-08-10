@@ -231,8 +231,16 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
 
         case 'delete': {
           if (!args.taskId) return helpers.error('Parameter "taskId" is required for action=delete')
+          const task = svc.get(projectId, args.taskId)
+          if (!task) return helpers.error(`Task not found: ${args.taskId}`)
           await svc.remove(projectId, args.taskId, actor)
-          return helpers.success(`Task ${args.taskId} deleted (linked sessions untouched)`)
+          return helpers.success(
+            JSON.stringify(
+              { message: `Deleted: ${task.prompt.split('\n')[0]}`, taskId: task.id, prompt: task.prompt },
+              null,
+              2,
+            ),
+          )
         }
 
         case 'reorder': {
