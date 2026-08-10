@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.114 - 2026-08-10
+
+### Features
+
+- **Project-scoped task board**
+  - Every idea, bug, or chore gets a home — a clean To Do / In Progress / Done board right inside your project, with search and drag-and-drop
+  - Run tasks in parallel or leave them queued — the next one starts automatically when a slot frees, and you get a nudge linking to its session
+  - One click turns a card into a focused working session — the agent already knows the task and what's expected
+  - Define your own "definition of done" — a task needs the required evidence before it can move to Done
+  - Agents work the board just like you — picking up, working on, and completing tasks, with every move visible and reversible
+  - A fresh chat offers your next open task — start it with one click from the empty feed
+  - Creating a task feels like chatting — same composer, slash commands, attachments, and agent/model selection
+
+### Enhancements
+
+- **Workflow sub-group slices can escape** — tagged transitions let a slice loop across groups (verify → build → verify → done) while untagged edges stay clamped
+
+### Bug Fixes
+
+- **Wheel-up scrolling reliably stops auto-scroll** — scrolling up while streaming detaches the feed; deliberate scrolls down still re-attach
+- **Dev-server inspect proxy survives high ports** — the port scan is clamped below 65536 so proxies above port 64535 start cleanly
+
 ## 2.0.113 - 2026-08-07
 
 ### Features
