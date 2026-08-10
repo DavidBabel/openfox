@@ -39,7 +39,7 @@ export function createSession(
   const id = crypto.randomUUID()
   const dangerLevel = getProjectDangerLevel(projectId)
 
-  const defaultAgent = resolveDefaultAgentId()
+  const defaultAgent = resolveDefaultAgentId(projectId)
 
   db.prepare(
     `

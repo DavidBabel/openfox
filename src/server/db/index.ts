@@ -154,6 +154,11 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE projects ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0`)
   }
 
+  if (!projectColumnNames.includes('default_agent')) {
+    logger.info('Migrating projects table: adding default_agent column')
+    db.exec(`ALTER TABLE projects ADD COLUMN default_agent TEXT`)
+  }
+
   if (!projectColumnNames.includes('workspace_root_dir')) {
     logger.info('Migrating projects table: adding workspace_root_dir column')
     db.exec(`ALTER TABLE projects ADD COLUMN workspace_root_dir TEXT`)

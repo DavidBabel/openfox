@@ -8,6 +8,7 @@ export interface Project {
   workdir: string
   customInstructions?: string // Project-specific instructions injected into prompts
   dangerLevel?: DangerLevel // Project default danger level for new sessions
+  defaultAgent?: string // Project default agent for new sessions (overrides global)
   isStarred?: boolean // Whether the project is starred for quick access
   workspaceRootDir?: string // Custom workspace root directory (user-specific, stored in DB)
   mcpOverrides?: Record<string, { disabled?: boolean; disabledTools?: string[] }> // Project-level MCP server overrides
