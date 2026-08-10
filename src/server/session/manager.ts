@@ -1245,9 +1245,13 @@ export class SessionManager {
   /**
    * Record that a file was read.
    */
-  recordFileRead(sessionId: string, filePath: string, contentHash: string): void {
+  recordFileRead(sessionId: string, filePath: string, contentHash: string, relPath?: string): void {
     const cache = this.readFilesCache.get(sessionId) ?? {}
-    cache[filePath] = { hash: contentHash, readAt: new Date().toISOString() }
+    cache[filePath] = {
+      hash: contentHash,
+      readAt: new Date().toISOString(),
+      ...(relPath ? { relPath } : {}),
+    }
     this.readFilesCache.set(sessionId, cache)
   }
 
@@ -1261,12 +1265,13 @@ export class SessionManager {
   /**
    * Update file hash after write.
    */
-  updateFileHash(sessionId: string, filePath: string, contentHash: string): void {
+  updateFileHash(sessionId: string, filePath: string, contentHash: string, relPath?: string): void {
     const cache = this.readFilesCache.get(sessionId) ?? {}
     const existingEntry = cache[filePath]
     cache[filePath] = {
       hash: contentHash,
       readAt: existingEntry?.readAt ?? new Date().toISOString(),
+      ...(relPath ? { relPath } : {}),
     }
     this.readFilesCache.set(sessionId, cache)
   }

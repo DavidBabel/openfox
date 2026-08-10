@@ -556,6 +556,7 @@ export interface MetadataEntry {
 export interface FileReadEntry {
   hash: string // SHA-256 hash of file content when read
   readAt: string // ISO timestamp of when file was read
+  relPath?: string // repo-relative path, enables cross-workspace read matching
 }
 
 export interface ExecutionState {
