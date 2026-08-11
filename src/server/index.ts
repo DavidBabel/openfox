@@ -273,7 +273,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   })
 
   // Changelog (public)
-  app.get('/api/changelog', async (_req, res) => {
+  app.get('/api/changelog', async (req, res) => {
     try {
       const fs = await import('node:fs')
       const path = await import('node:path')
@@ -284,7 +284,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         changelogPath = path.resolve(dirname, '../../CHANGELOG.md')
       }
       const content = fs.readFileSync(changelogPath, 'utf-8')
-      res.json({ content })
+      const since = typeof req.query['since'] === 'string' ? req.query['since'] : undefined
+      const { trimChangelog } = await import('./utils/changelog.js')
+      res.json({ content: since ? trimChangelog(content, since) : content })
     } catch {
       res.json({ content: '# Changelog\n\nUnable to load changelog.' })
     }

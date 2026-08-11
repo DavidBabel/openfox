@@ -33,6 +33,7 @@ import { OnboardingWizard } from './components/onboarding/OnboardingWizard'
 import { CrossSessionConfirmationBanner } from './components/shared/CrossSessionConfirmationBanner'
 import { UpdateBanner } from './components/UpdateBanner'
 import { ChangelogModal } from './components/ChangelogModal'
+import { getStoredLastVersion, getStoredPreviousVersion, isVersionNewerThan, trackVersion } from './lib/versionTracking'
 
 function hasStoredToken(): boolean {
   if (typeof window === 'undefined') return false
@@ -269,14 +270,18 @@ function App() {
       localStorage.removeItem('update_pending')
     }
 
-    // Check version change (npm / manual upgrade)
+    // Check version change (npm / manual upgrade). Only a genuine upgrade
+    // shows the modal (a downgrade or dev-prerelease drift has nothing new to
+    // offer). trackVersion preserves the previous version durably, so the
+    // changelog trim boundary survives even if a different window performed
+    // or observed the update.
     if (configFetched) {
       const currentVersion = useConfigStore.getState().version
-      const lastVersion = localStorage.getItem('openfox_last_version')
-      if (currentVersion && lastVersion && currentVersion !== lastVersion) {
+      const lastVersion = getStoredLastVersion()
+      if (isVersionNewerThan(currentVersion, lastVersion)) {
         shouldShow = true
       }
-      localStorage.setItem('openfox_last_version', currentVersion ?? '')
+      trackVersion(currentVersion)
     }
 
     if (shouldShow) {
@@ -415,7 +420,11 @@ function App() {
         </div>
       </div>
       <UpdateBanner />
-      <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
+      <ChangelogModal
+        isOpen={showChangelog}
+        onClose={() => setShowChangelog(false)}
+        since={getStoredPreviousVersion() ?? undefined}
+      />
     </>
   )
 }
