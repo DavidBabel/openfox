@@ -26,9 +26,30 @@ vi.mock('../../stores/project', () => ({
   useProjectStore: (selector: (state: unknown) => unknown) => selector({ projects: [{ id: 'p1', name: 'acme-app' }] }),
 }))
 
-const pane = (id: string, title: string) => ({
+const pane = (id: string, title: string, messages: unknown[] = []) => ({
   session: { id, projectId: 'p1', metadata: { title } },
-  messages: [],
+  messages,
+})
+
+const statsMessage = (generationSpeed: number, timestamp = Date.now()) => ({
+  id: `m-${generationSpeed}`,
+  role: 'assistant',
+  content: 'test',
+  timestamp: new Date(timestamp).toISOString(),
+  tokenCount: 100,
+  stats: {
+    providerId: 'provider-1',
+    providerName: 'Local vLLM',
+    backend: 'vllm',
+    model: 'test-model',
+    mode: 'builder',
+    totalTime: 10,
+    toolTime: 2,
+    prefillTokens: 60_000,
+    prefillSpeed: 10_000,
+    generationTokens: 60,
+    generationSpeed,
+  },
 })
 
 const makeSummary = (id: string, overrides: Record<string, unknown> = {}) => ({
@@ -152,5 +173,28 @@ describe('SplitControlPanel', () => {
     const aside = document.querySelector('aside')
     expect(aside?.className).toContain('w-0')
     expect(aside?.className).toContain('overflow-hidden')
+  })
+
+  it('shows the aggregate generation chart between open panes and sessions', () => {
+    storeState.openSessionIds = ['s1', 's2']
+    storeState.focusedSessionId = 's1'
+    storeState.panes = {
+      s1: pane('s1', 'First', [statsMessage(30, Date.now() - 60_000)]),
+      s2: pane('s2', 'Second', [statsMessage(40, Date.now() - 120_000)]),
+    }
+    renderPanel()
+    const section = screen.getByTestId('aggregate-stats')
+    expect(section.querySelector('svg')).not.toBeNull()
+    expect(screen.getByText('70 tok/s')).toBeDefined()
+  })
+
+  it('shows a placeholder when no open pane has stats', () => {
+    storeState.openSessionIds = ['s1']
+    storeState.panes = { s1: pane('s1', 'First') }
+    renderPanel()
+    const section = screen.getByTestId('aggregate-stats')
+    expect(section).toBeDefined()
+    expect(screen.getByText('No generation in the last 30 min')).toBeDefined()
+    expect(section.querySelector('svg')).toBeNull()
   })
 })

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { useProjectStore } from '../../stores/project'
 import { ChevronUpIcon, ChevronDownIcon, XCloseIcon } from '../shared/icons'
+import { AggregateStats } from './AggregateStats'
 import type { SplitLayoutMode } from '../../lib/splitPersistence'
 import type { SessionSummary } from '@shared/types.js'
 
@@ -163,6 +164,10 @@ export function SplitControlPanel({ collapsed = false, layout, onLayoutChange }:
               })}
             </ul>
           )}
+        </div>
+
+        <div className="px-3 pt-3 pb-4 border-t border-border">
+          <AggregateStats />
         </div>
 
         <div className="px-3 pt-3 pb-4 border-t border-border">
