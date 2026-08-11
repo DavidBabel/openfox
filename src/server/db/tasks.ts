@@ -10,6 +10,7 @@
  * only reads and writes rows.
  */
 
+import { randomBytes } from 'node:crypto'
 import type {
   ProjectTask,
   TaskGateConfig,
@@ -97,7 +98,7 @@ export interface CreateTaskInput {
 export function createTask(projectId: string, input: CreateTaskInput): ProjectTask {
   const db = getDatabase()
   const now = new Date().toISOString()
-  const id = crypto.randomUUID()
+  const id = randomBytes(8).toString('hex')
 
   const position = db
     .prepare(`SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM tasks WHERE project_id = ? AND status = 'todo'`)

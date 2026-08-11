@@ -177,6 +177,12 @@ describe('project tasks service', () => {
     expect(broadcasts.at(-1)?.tasks).toHaveLength(1)
   })
 
+  it('assigns compact hexadecimal ids', () => {
+    const task = create('Compact id task')
+    expect(task.id).toMatch(/^[0-9a-f]{16}$/)
+    expect(task.id.length).toBeLessThan(36)
+  })
+
   it('rejects a task with neither text nor attachments', () => {
     expect(() => service.create(projectId, { prompt: '   ' }, { actor: 'human' })).toThrow(/prompt or an attachment/)
   })

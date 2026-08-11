@@ -144,12 +144,10 @@ describe('project_tasks tool', () => {
   })
 
   it('returns a structured gate error telling the agent to fill fields first', async () => {
-    await execute(
-      'set_gates',
-      {
-        gates: [{ id: 'commit', name: 'Commit', description: 'need a commit sha', required: true, variant: 'done' }],
-      },
+    service.setGateConfig(
       projectId,
+      [{ id: 'commit', name: 'Commit', description: 'need a commit sha', required: true, variant: 'done' }],
+      { actor: 'human' },
     )
     const created = await execute('create', { prompt: 'Ship' }, projectId)
     const task = JSON.parse(created.output!) as { id: string }
@@ -172,7 +170,7 @@ describe('project_tasks tool', () => {
 
     const ctx = {
       ...makeContext(projectId),
-      permittedActions: { project_tasks: ['list', 'get'] },
+      permittedActions: { project_tasks: ['list'] },
     }
     const denied = await projectTasksTool.execute({ action: 'move', taskId: task.id, to: 'in_progress' }, ctx)
     expect(denied.success).toBe(false)
@@ -190,11 +188,9 @@ describe('project_tasks tool', () => {
     expect(moved.error).toContain('refresh and retry')
   })
 
-  it('duplicates and deletes', async () => {
+  it('deletes a task', async () => {
     const created = await execute('create', { prompt: 'Original' }, projectId)
     const task = JSON.parse(created.output!) as { id: string }
-    const dup = await execute('duplicate', { taskId: task.id }, projectId)
-    expect(dup.success).toBe(true)
     const del = await execute('delete', { taskId: task.id }, projectId)
     expect(del.success).toBe(true)
     const deleted = JSON.parse(del.output!) as { message: string; prompt: string }
@@ -202,7 +198,22 @@ describe('project_tasks tool', () => {
     expect(deleted.prompt).toBe('Original')
     const list = await execute('list', {}, projectId)
     const parsed = JSON.parse(list.output!) as { tasks: { prompt: string }[] }
-    expect(parsed.tasks).toHaveLength(1)
-    expect(parsed.tasks[0]!.prompt).toBe('Original')
+    expect(parsed.tasks).toHaveLength(0)
+  })
+
+  it('rejects actions removed from the agent surface', async () => {
+    for (const action of ['get', 'duplicate', 'reorder', 'set_gates']) {
+      const result = await execute(action, { taskId: 'x' }, projectId)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('Invalid action')
+    }
+  })
+
+  it('keeps the LLM-facing definition lean', () => {
+    const desc = projectTasksTool.definition.function.description
+    expect(desc.length).toBeLessThanOrEqual(1000)
+    for (const removed of ['duplicate', 'reorder', 'set_gates']) {
+      expect(desc).not.toContain(removed)
+    }
   })
 })

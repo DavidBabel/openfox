@@ -6,8 +6,9 @@ import { getGateConfig } from '../db/tasks.js'
 /**
  * project_tasks — agent participation on the project task board.
  *
- * Full parity with the human: list, get, create, edit, move, fill gate
- * values, duplicate, delete, reorder, and manage gate configuration.
+ * Lean agent surface: list, create, edit, move, set_gate_value, delete.
+ * The service retains full CRUD (human UI uses duplicate/reorder/gate
+ * config directly); this tool only exposes what agents actually need.
  *
  * Rules enforced by the service, not here:
  * - An agent's move to In Progress binds to the CURRENT session — the tool
@@ -33,21 +34,9 @@ function getTasksService(): TasksService {
   return tasksService
 }
 
-type TaskAction =
-  'list' | 'get' | 'create' | 'edit' | 'move' | 'set_gate_value' | 'set_gates' | 'duplicate' | 'delete' | 'reorder'
+type TaskAction = 'list' | 'create' | 'edit' | 'move' | 'set_gate_value' | 'delete'
 
-const VALID_ACTIONS: TaskAction[] = [
-  'list',
-  'get',
-  'create',
-  'edit',
-  'move',
-  'set_gate_value',
-  'set_gates',
-  'duplicate',
-  'delete',
-  'reorder',
-]
+const VALID_ACTIONS: TaskAction[] = ['list', 'create', 'edit', 'move', 'set_gate_value', 'delete']
 
 const LIST_STATUSES = ['todo', 'in_progress', 'done', 'all'] as const
 
@@ -63,9 +52,7 @@ interface ProjectTasksArgs {
   reason?: string
   gateId?: string
   value?: string
-  gates?: unknown[]
   status?: 'todo' | 'in_progress' | 'done' | 'all'
-  index?: number
   expectedVersion?: number
 }
 
@@ -76,32 +63,25 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
     function: {
       name: 'project_tasks',
       description:
-        'Work with the project task board — the kanban of tasks owned by this project. Provides full parity with the human UI: ' +
-        'list, get, create, edit, move, fill gate values, set gate configuration, duplicate, delete, and reorder.\n\n' +
+        'Kanban task board for this project. Core loop: list → move → set_gate_value.\n\n' +
         'Rules:\n' +
-        '- Moving a task to in_progress binds it to YOUR current session (you never create a new session for it).\n' +
-        "- Entering 'done' is blocked by unmet column gates (definition of done). When blocked, the error lists the missing " +
-        'fields; set them with action=set_gate_value (filling proof/evidence as part of your work), then retry the move.\n' +
-        '- All transitions are serialized server-side. If another actor changed the task, you get a CONFLICT error: re-list and retry.\n\n' +
+        '- Moving to in_progress binds the task to YOUR current session.\n' +
+        '- Moving to done is blocked by unmet gates: the error names the missing fields — fill them via ' +
+        "set_gate_value (that's part of the work), then retry the move.\n" +
+        '- Stale writes fail with CONFLICT — re-list and retry.\n\n' +
         'Actions:\n' +
-        '- list: list tasks (with gate values, status, queue position, bound session, audit trail). Defaults to open tasks (todo + in_progress); filter with status (todo | in_progress | done | all)\n' +
-        '- get: fetch a single task (taskId)\n' +
-        '- create: create a task in To Do (prompt must contain text or an attachment)\n' +
-        '- edit: update prompt/attachments/agent/model (taskId + any fields)\n' +
-        "- move: change state — to: 'todo' | 'in_progress' | 'done' (optional reason for reverts)\n" +
+        '- list: tasks (status, gate values, queue position, bound session, audit trail); defaults to open tasks, ' +
+        'filter via status (todo | in_progress | done | all)\n' +
+        '- create: add a task to To Do (prompt required)\n' +
+        '- edit: update prompt/attachments/agent/model (taskId + fields)\n' +
+        '- move: change column (to: todo | in_progress | done; optional reason)\n' +
         '- set_gate_value: fill a gate field (taskId, gateId, value)\n' +
-        '- set_gates: replace the project gate configuration (gates: array of {id, name, description, required, variant})\n' +
-        '- duplicate: copy a task into To Do (taskId)\n' +
-        '- delete: permanently delete a task (taskId). Sessions stay untouched.\n' +
-        '- reorder: move a task to an index within its column (taskId, status, index)',
+        '- delete: remove a task (taskId)',
       parameters: {
         type: 'object',
         properties: {
           action: { type: 'string', enum: VALID_ACTIONS, description: 'The action to perform' },
-          taskId: {
-            type: 'string',
-            description: 'Target task id (get, edit, move, set_gate_value, duplicate, delete, reorder)',
-          },
+          taskId: { type: 'string', description: 'Target task id (edit, move, set_gate_value, delete)' },
           prompt: { type: 'string', description: 'The prompt/instruction executed when the task launches' },
           attachments: { type: 'array', description: 'Optional attachments (same shape as chat attachments)' },
           agentId: { type: 'string', description: 'Selected agent id' },
@@ -111,21 +91,14 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
           reason: { type: 'string', description: 'Optional short reason (recorded in the audit trail) for reverts' },
           gateId: { type: 'string', description: 'Gate field id for set_gate_value' },
           value: { type: 'string', description: 'Proof/evidence value for set_gate_value' },
-          gates: {
-            type: 'array',
-            description: 'Full replacement gate config: [{id, name, description, required, variant}]',
-          },
           status: {
             type: 'string',
             enum: ['todo', 'in_progress', 'done', 'all'],
-            description:
-              'Column filter for action=list ("todo" | "in_progress" | "done" | "all"); also the destination column for action=reorder',
+            description: 'Column filter for action=list (default: open tasks)',
           },
-          index: { type: 'number', description: 'Zero-based target index within the column (reorder)' },
           expectedVersion: {
             type: 'number',
-            description:
-              'Optimistic concurrency guard — pass the task version you saw; stale writes fail with CONFLICT',
+            description: 'Task version from your last read; stale writes fail with CONFLICT',
           },
         },
         required: ['action'],
@@ -159,13 +132,6 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
               : tasks.filter((t) => (status === undefined ? t.status !== 'done' : t.status === status))
           const gates = getGateConfig(projectId)
           return helpers.success(JSON.stringify({ gates, tasks: filtered.map((t) => taskForAgent(t)) }, null, 2))
-        }
-
-        case 'get': {
-          if (!args.taskId) return helpers.error('Parameter "taskId" is required for action=get')
-          const task = svc.get(projectId, args.taskId)
-          if (!task) return helpers.error(`Task not found: ${args.taskId}`)
-          return helpers.success(JSON.stringify(taskForAgent(task), null, 2))
         }
 
         case 'create': {
@@ -231,21 +197,6 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
           return helpers.success(JSON.stringify(taskForAgent(result.task), null, 2))
         }
 
-        case 'set_gates': {
-          if (!Array.isArray(args.gates)) {
-            return helpers.error('Parameter "gates" (array) is required for action=set_gates')
-          }
-          const gates = sanitizeGates(args.gates)
-          svc.setGateConfig(projectId, gates, actor)
-          return helpers.success(JSON.stringify({ gates }, null, 2))
-        }
-
-        case 'duplicate': {
-          if (!args.taskId) return helpers.error('Parameter "taskId" is required for action=duplicate')
-          const task = svc.duplicate(projectId, args.taskId, actor)
-          return helpers.success(JSON.stringify(taskForAgent(task), null, 2))
-        }
-
         case 'delete': {
           if (!args.taskId) return helpers.error('Parameter "taskId" is required for action=delete')
           const task = svc.get(projectId, args.taskId)
@@ -258,18 +209,6 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
               2,
             ),
           )
-        }
-
-        case 'reorder': {
-          if (!args.taskId) return helpers.error('Parameter "taskId" is required for action=reorder')
-          if (!args.status || args.index === undefined) {
-            return helpers.error('Parameters "status" and "index" are required for action=reorder')
-          }
-          if (args.status === 'all') {
-            return helpers.error('status="all" is not a valid column for action=reorder')
-          }
-          const task = svc.reorder(projectId, args.taskId, args.status, args.index)
-          return helpers.success(JSON.stringify(taskForAgent(task), null, 2))
         }
 
         default:
@@ -331,23 +270,4 @@ function sanitizeAttachments(raw: unknown[]): import('../../shared/types.js').At
       typeof (a as { id?: unknown }).id === 'string' &&
       typeof (a as { filename?: unknown }).filename === 'string',
   )
-}
-
-function sanitizeGates(raw: unknown[]): import('../../shared/types.js').TaskGateConfig[] {
-  return raw.map((g, i) => {
-    const gate = g as {
-      id?: unknown
-      name?: unknown
-      description?: unknown
-      required?: unknown
-      variant?: unknown
-    }
-    return {
-      id: typeof gate.id === 'string' && gate.id ? gate.id : `gate_${i}`,
-      name: typeof gate.name === 'string' && gate.name ? gate.name : `Gate ${i + 1}`,
-      description: typeof gate.description === 'string' ? gate.description : '',
-      required: gate.required !== false,
-      variant: gate.variant === 'ready' ? 'ready' : 'done',
-    }
-  })
 }
