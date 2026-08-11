@@ -241,9 +241,9 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
 
   return (
     <div className="flex-shrink-0 px-4 py-1.5 border-b border-border bg-secondary">
-      <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-between gap-x-2 gap-y-1 text-sm">
+      <div className="grid grid-cols-2 @sm:flex @sm:items-center @sm:justify-between gap-x-2 gap-y-1 text-sm">
         {/* ---- Workspace / Branch ---- */}
-        <div className="flex items-center gap-1 min-w-0 sm:shrink-0">
+        <div className="flex items-center gap-1 min-w-0 @sm:shrink-0">
           <FolderIcon className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
           <span className="truncate text-text-secondary max-w-[120px]">{workspaceName}</span>
           <span className="text-text-muted">/</span>
@@ -277,10 +277,10 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
         </div>
 
         {/* ---- Divider ---- */}
-        <div className="hidden sm:block w-px bg-border self-stretch mx-1" />
+        <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
 
         {/* ---- Metadata Status ---- */}
-        <div className="flex-1 flex items-center sm:justify-center justify-self-end gap-1 min-w-0">
+        <div className="flex-1 flex items-center @sm:justify-center justify-self-end gap-1 min-w-0">
           <MetadataStatusSummary entries={criteriaEntries} />
           {otherCount > 0 && (
             <span
@@ -326,10 +326,10 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
         </div>
 
         {/* ---- Divider ---- */}
-        <div className="hidden sm:block w-px bg-border self-stretch mx-1" />
+        <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
 
         {/* Mobile row separator — full width */}
-        <div className="col-span-2 border-t border-border sm:hidden -mx-4" />
+        <div className="col-span-2 border-t border-border @sm:hidden -mx-4" />
 
         {/* ---- Context ---- */}
         <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -358,7 +358,7 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
         </div>
 
         {/* ---- Divider ---- */}
-        <div className="hidden sm:block w-px bg-border self-stretch mx-1" />
+        <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
 
         {/* ---- Dev Server ---- */}
         <div className="flex items-center gap-1.5 min-w-0 shrink-0 justify-self-end">

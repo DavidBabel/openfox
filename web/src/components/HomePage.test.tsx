@@ -38,6 +38,7 @@ vi.mock('../stores/session', () => ({
     const state = {
       sessions: sessionStore.sessions,
       searchSessions: null,
+      sessionsWithPendingConfirmations: [],
       listSessions: listSessionsMock,
       listHomeSessions: listHomeSessionsMock,
       ensureFullSessionList: ensureFullSessionListMock,
@@ -144,6 +145,14 @@ describe('HomePage', () => {
   it('exports the component', async () => {
     const { HomePage } = await import('./HomePage')
     expect(HomePage).toBeDefined()
+  })
+
+  it('links to the split-view route from the homepage entry point', async () => {
+    const { HomePage } = await import('./HomePage')
+    const container = render(<HomePage />)
+    const link = container.querySelector('a[href="/split-view"]')
+    expect(link).toBeTruthy()
+    expect(link?.textContent).toContain('Open split view')
   })
 
   it('renders the search bar when sessions exist', async () => {

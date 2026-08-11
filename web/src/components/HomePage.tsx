@@ -4,10 +4,11 @@ import { Link } from 'wouter'
 import { useSessionStore } from '../stores/session'
 import { useProjectStore } from '../stores/project'
 import { Button } from './shared/Button'
+import { CurrentlyRunning } from './split/CurrentlyRunning'
 import { OpenProjectModal } from './CreateSessionModal'
 import { DeleteProjectConfirmationModal } from './DeleteProjectConfirmationModal'
 import { formatRelativeDate } from '../lib/format-date'
-import { SearchIcon, XCloseIcon, FolderIcon, TrashIcon, TasksIcon } from './shared/icons'
+import { SearchIcon, XCloseIcon, FolderIcon, TrashIcon, TasksIcon, ColumnsIcon } from './shared/icons'
 import { Spinner } from './shared/Spinner'
 import { fuzzyMatch, highlightMatches } from '../lib/modal-utils'
 import { shouldAutofocus } from '../lib/device'
@@ -248,10 +249,21 @@ export function HomePage() {
             <h1 className="text-3xl font-bold text-accent-primary">OpenFox</h1>
             <p className="text-text-secondary">Local LLM-powered coding assistant with contract-driven execution</p>
           </div>
-          <Button variant="primary" onClick={handleOpenProject}>
-            Open Project
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/split-view"
+              className="inline-flex items-center gap-1.5 rounded font-medium transition-colors bg-bg-secondary border border-border text-text-primary hover:bg-bg-tertiary px-3 py-1.5 text-sm"
+            >
+              <ColumnsIcon className="w-4 h-4" />
+              Open split view
+            </Link>
+            <Button variant="primary" onClick={handleOpenProject}>
+              Open Project
+            </Button>
+          </div>
         </div>
+
+        <CurrentlyRunning />
 
         {sessions.length > 0 && (
           <div className="mb-4 md:mb-6 relative">

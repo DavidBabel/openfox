@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
-import { useSessionStore, useIsRunning } from '../../stores/session'
+import { useSessionStore, useIsRunning, useQueuedMessages } from '../../stores/session'
+import { useScopedPaneState } from './session-scope'
 import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
 import { useCommandsStore } from '../../stores/commands'
 import { authFetch } from '../../lib/api'
@@ -46,7 +47,7 @@ interface ChatInputProps {
   errorMessage: string | null
   setErrorMessage: (msg: string | null) => void
   scrollToBottom?: () => void
-  sessionId: string | undefined
+  sessionId: string | null | undefined
   showHistory: boolean
   history: PromptHistoryItem[]
   selectedIndex: number
@@ -102,14 +103,29 @@ export function ChatInput({
   const autocompleteRef = useRef<AtMentionAutocompleteHandle>(null)
   const slashAutocompleteRef = useRef<SlashAutocompleteHandle>(null)
 
-  const isRunning = useIsRunning()
+  const isRunning = useIsRunning(sessionId)
   const stopGeneration = useSessionStore((state) => state.stopGeneration)
   const cancelQueued = useSessionStore((state) => state.cancelQueued)
-  const queuedMessages = useSessionStore((state) => state.queuedMessages)
-  const restoredInput = useSessionStore((state) => state.restoredInput)
+  const queuedMessages = useQueuedMessages(sessionId)
+  const restoredInput = useScopedPaneState(
+    sessionId,
+    (pane) => pane.restoredInput ?? null,
+    (state) => state.restoredInput,
+    null,
+  )
   const clearRestoredInput = useSessionStore((state) => state.clearRestoredInput)
-  const workdir = useSessionStore((state) => state.currentSession?.workdir)
-  const currentSession = useSessionStore((state) => state.currentSession)
+  const workdir = useScopedPaneState(
+    sessionId,
+    (pane) => pane.session?.workdir ?? undefined,
+    (state) => state.currentSession?.workdir,
+    undefined,
+  )
+  const currentSession = useScopedPaneState(
+    sessionId,
+    (pane) => pane.session ?? null,
+    (state) => state.currentSession,
+    null,
+  )
   const warmupSentRef = useRef(false)
   const loadedWorkdirRef = useRef<string | undefined>(undefined)
   const sendingRef = useRef(false)
@@ -118,7 +134,7 @@ export function ChatInput({
   // the exact definition the user picked (only honored when the id still matches).
   const selectedSlashScopeRef = useRef<{ id: string; scope: WorkflowLaunchScope } | null>(null)
 
-  const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll)
+  const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll, sessionId)
 
   // Eagerly load workflows and commands so slash autocomplete always has data.
   // Scoped to the session's project workdir; reloads when the active project changes.
@@ -139,7 +155,7 @@ export function ChatInput({
   useEffect(() => {
     if (restoredInput !== null) {
       setInput(restoredInput)
-      clearRestoredInput()
+      clearRestoredInput(sessionId)
       if (shouldAutofocus()) textareaRef.current?.focus()
     }
   }, [restoredInput, setInput, clearRestoredInput])
@@ -246,7 +262,7 @@ export function ChatInput({
         case 'Escape':
           e.preventDefault()
           closeHistory()
-          if (isRunning) stopGeneration()
+          if (isRunning && sessionId) stopGeneration(sessionId)
           return
         case 'ArrowUp':
           e.preventDefault()
@@ -486,12 +502,12 @@ export function ChatInput({
   return (
     <div className="relative">
       {isRunning && (
-        <div className="absolute -top-8 left-2 md:left-4 z-10">
+        <div className="absolute -top-8 left-2 @md:left-4 z-10">
           <RunningIndicator />
         </div>
       )}
       <div
-        className={`absolute -top-8 right-2 md:right-4 z-10 flex items-center gap-2 border${!isAutoScrollActive ? ' rounded backdrop-blur-xl saturate-150 border-border' : ' border-transparent'}`}
+        className={`absolute -top-8 right-2 @md:right-4 z-10 flex items-center gap-2 border${!isAutoScrollActive ? ' rounded backdrop-blur-xl saturate-150 border-border' : ' border-transparent'}`}
       >
         <AutoScrollToggle
           isActive={isAutoScrollActive}
@@ -511,7 +527,7 @@ export function ChatInput({
 
       <WorkflowBar />
 
-      <form onSubmit={handleSubmit} className="p-2 md:p-4 bg-secondary rounded-lg">
+      <form onSubmit={handleSubmit} className="p-2 @md:p-4 bg-secondary rounded-lg">
         <input
           ref={fileInputRef}
           type="file"
@@ -551,7 +567,10 @@ export function ChatInput({
           />
         )}
 
-        <QueuedMessages messages={queuedMessages} onCancel={cancelQueued} />
+        <QueuedMessages
+          messages={queuedMessages}
+          onCancel={(queueId) => sessionId && cancelQueued(sessionId, queueId)}
+        />
 
         <div
           className={`flex items-end gap-3 p-3 rounded transition-colors ${
@@ -616,7 +635,7 @@ export function ChatInput({
             {isRunning && (
               <button
                 type="button"
-                onClick={() => stopGeneration()}
+                onClick={() => sessionId && stopGeneration(sessionId)}
                 data-testid="chat-stop-button"
                 className="flex items-center gap-1 px-4 py-1.5 rounded bg-accent-error/20 text-sm text-accent-error font-medium hover:bg-accent-error/30 transition-colors whitespace-nowrap"
               >

@@ -16,6 +16,7 @@ vi.mock('../../lib/ws', () => ({
 vi.mock('wouter', () => ({
   Link: ({ children, href, className }: any) => `<a href="${href}" class="${className}">${children}</a>`,
   useLocation: vi.fn(() => ['/', vi.fn()]),
+  useSearch: () => '',
 }))
 
 interface MockStore {
@@ -31,6 +32,7 @@ function mockStore(initial: Record<string, any>): MockStore {
   fn.setState = (partial: Record<string, any>) => {
     state = { ...state, ...partial }
   }
+  ;(fn as unknown as { getState: () => Record<string, any> }).getState = () => state
   return fn
 }
 
@@ -39,6 +41,8 @@ vi.mock('../../stores/session', () => ({
     currentSession: null,
     sessions: [],
     messages: [],
+    openSessionIds: [],
+    focusedSessionId: null,
     agentMode: 'planner',
     planMode: false,
     status: 'idle',
@@ -73,6 +77,8 @@ vi.mock('../../stores/session', () => ({
     abortInProgress: false,
     error: null,
     pendingSessionCreate: false,
+    openPane: vi.fn(async () => undefined),
+    exitSplitView: vi.fn(),
   }),
 }))
 
@@ -245,5 +251,58 @@ describe('Header', () => {
     expect(btn!.textContent).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...')
     // Title attribute should still contain the full name
     expect(btn!.getAttribute('title')).toBe(longTitle)
+  })
+
+  it('shows the control panel toggle on the split-view route', async () => {
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/split-view', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header onMenuClick={vi.fn()} />)
+    expect(container.querySelector('[aria-label="Toggle split view control panel"]')).toBeTruthy()
+  })
+
+  it('opens split view and adds the current session as a pane', async () => {
+    const { useSessionStore } = await import('../../stores/session')
+    ;(useSessionStore as unknown as MockStore).setState({
+      currentSession: { id: 's1', metadata: { title: 'T' } },
+    })
+
+    const { useLocation } = await import('wouter')
+    const setLocation = vi.fn()
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/s/s1', setLocation])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    const btn = container.querySelector('[aria-label="Open split view"]')
+    expect(btn).toBeTruthy()
+    act(() => {
+      btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(setLocation).toHaveBeenCalledWith('/split-view')
+    const { openPane } = useSessionStore.getState()
+    expect(openPane).toHaveBeenCalledWith('s1', { focus: true })
+  })
+
+  it('shows the split indicator and exits back home from the split route', async () => {
+    const { useSessionStore } = await import('../../stores/session')
+    ;(useSessionStore as unknown as MockStore).setState({ openSessionIds: ['s1', 's2'] })
+
+    const { useLocation } = await import('wouter')
+    const setLocation = vi.fn()
+    vi.mocked(useLocation).mockReturnValue(['/split-view', setLocation])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    expect(container.querySelector('[data-testid="split-indicator"]')?.textContent).toContain('2')
+
+    const exitBtn = container.querySelector('[aria-label="Exit split view"]')
+    expect(exitBtn).toBeTruthy()
+    act(() => {
+      exitBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(setLocation).toHaveBeenCalledWith('/')
+    const { exitSplitView } = useSessionStore.getState()
+    expect(exitSplitView).toHaveBeenCalledTimes(1)
   })
 })

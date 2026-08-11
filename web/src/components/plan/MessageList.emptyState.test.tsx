@@ -13,6 +13,8 @@ vi.mock('../../stores/session', () => ({
   useSessionStore: (selector: (state: unknown) => unknown) =>
     selector({
       currentSession: { id: 's1', phase: 'planning', criteria: [], metadata: {}, metadataEntries: {} },
+      panes: {},
+      focusedSessionId: null,
       messages: [],
       hiddenCount: 0,
       error: null,

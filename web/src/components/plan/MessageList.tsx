@@ -11,6 +11,7 @@ import { ChatFeedItems } from './ChatFeedItems'
 import { CloseButton } from '../shared/CloseButton'
 import { ChevronUpIcon } from '../shared/icons'
 import { useClickOutside } from '../../hooks/useClickOutside'
+import { useSessionScope, useScopedPaneState } from './session-scope'
 import type { DisplayItem } from './groupMessages.js'
 import type { MetadataEntry, WorkflowScope } from '@shared/types.js'
 
@@ -42,13 +43,39 @@ export const MessageList = memo(function MessageList({
   onScrollbarGesture,
   emptyState,
 }: MessageListProps) {
-  const criteria = useSessionStore((state) => state.currentSession?.metadataEntries?.['criteria'] ?? EMPTY_CRITERIA)
-  const sessionId = useSessionStore((state) => state.currentSession?.id)
-  const sessionPhase = useSessionStore((state) => state.currentSession?.phase)
-  const error = useSessionStore((state) => state.error)
+  const scopeId = useSessionScope()
+  const criteria = useScopedPaneState(
+    scopeId,
+    (pane) => pane.session?.metadataEntries?.['criteria'] ?? EMPTY_CRITERIA,
+    (state) => state.currentSession?.metadataEntries?.['criteria'] ?? EMPTY_CRITERIA,
+    EMPTY_CRITERIA,
+  )
+  const sessionId = useScopedPaneState(
+    scopeId,
+    (pane) => pane.session?.id ?? null,
+    (state) => state.currentSession?.id ?? null,
+    null,
+  )
+  const sessionPhase = useScopedPaneState(
+    scopeId,
+    (pane) => pane.session?.phase ?? null,
+    (state) => state.currentSession?.phase ?? null,
+    null,
+  )
+  const error = useScopedPaneState(
+    scopeId,
+    (pane) => pane.error ?? null,
+    (state) => state.error,
+    null,
+  )
   const clearError = useSessionStore((state) => state.clearError)
-  const isRunning = useIsRunning()
-  const activeWorkflowExecution = useSessionStore((state) => state.activeWorkflowExecution)
+  const isRunning = useIsRunning(scopeId)
+  const activeWorkflowExecution = useScopedPaneState(
+    scopeId,
+    (pane) => pane.activeWorkflowExecution ?? null,
+    (state) => state.activeWorkflowExecution,
+    null,
+  )
   const continueWorkflow = useSessionStore((state) => state.continueWorkflow)
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
@@ -63,7 +90,12 @@ export const MessageList = memo(function MessageList({
   const showStartBuilding = hasNewCriteria && !isRunning && hasAssistantResponse && !isDone && !hasActiveWorkflow
   const showContinueWorkflow = activeWorkflowExecution?.status === 'waiting' && !isRunning
 
-  const projectId = useSessionStore((state) => state.currentSession?.projectId)
+  const projectId = useScopedPaneState(
+    scopeId,
+    (pane) => pane.session?.projectId ?? undefined,
+    (state) => state.currentSession?.projectId,
+    undefined,
+  )
   const [popupBlocked, setPopupBlocked] = useState(false)
   const [isScrollable, setIsScrollable] = useState(false)
   const [scrolledPastTop, setScrolledPastTop] = useState(false)
@@ -98,13 +130,13 @@ export const MessageList = memo(function MessageList({
 
   const handleContinue = useCallback(
     (choiceId?: string) => {
-      if (continuing) return
+      if (continuing || !scopeId) return
       setContinuing(true)
-      continueWorkflow(choiceId)
+      continueWorkflow(scopeId, choiceId)
       // Re-enable after a timeout in case the workflow doesn't start
       setTimeout(() => setContinuing(false), 5000)
     },
-    [continuing, continueWorkflow],
+    [continuing, continueWorkflow, scopeId],
   )
 
   const scrollToTop = useCallback(() => {
@@ -123,7 +155,7 @@ export const MessageList = memo(function MessageList({
         <div className="flex min-h-full flex-col">
           <div className="pt-4">
             {hiddenCount > 0 && (
-              <div className="px-2 md:px-4 pb-2 space-y-1">
+              <div className="px-2 @md:px-4 pb-2 space-y-1">
                 <button
                   onClick={openFullHistory}
                   className="w-full text-sm text-text-muted hover:text-text-primary bg-bg-tertiary/50 hover:bg-bg-tertiary border border-border rounded px-3 py-2 transition-colors text-center"
@@ -159,9 +191,9 @@ export const MessageList = memo(function MessageList({
             />
           </div>
           {displayItems.length === 0 && emptyState && (
-            <div className="flex flex-1 items-center justify-center px-2 md:px-4 py-4">{emptyState}</div>
+            <div className="flex flex-1 items-center justify-center px-2 @md:px-4 py-4">{emptyState}</div>
           )}
-          <div className="px-2 md:px-4 pb-4">
+          <div className="px-2 @md:px-4 pb-4">
             {error && (
               <div className="feed-item bg-text-tool-error/10 border border-text-tool-error/50 rounded p-2">
                 <div className="flex items-start justify-between gap-2">

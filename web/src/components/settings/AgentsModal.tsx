@@ -3,6 +3,7 @@ import { Modal } from '../shared/SelfContainedModal'
 import { useAgentsStore, type AgentFull } from '../../stores/agents'
 import { useConfigStore } from '../../stores/config'
 import { useSessionStore } from '../../stores/session'
+import { useSessionScope } from '../plan/session-scope'
 import { authFetch } from '../../lib/api'
 import { CRUDListHeader, useConfirmDialog, DestinationSelector, ModalActions } from './CRUDModal'
 import { AgentGroup } from './agents/AgentListItem'
@@ -243,10 +244,13 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
 
     // Propagate to current session if this agent is active
     const agentId = editingId ?? formId
-    const currentSession = useSessionStore.getState().currentSession
-    if (currentSession?.mode === agentId && formModel) {
+    const sessionId = useSessionScope()
+    const currentSession = sessionId
+      ? (useSessionStore.getState().panes[sessionId]?.session ?? null)
+      : useSessionStore.getState().currentSession
+    if (currentSession?.mode === agentId && formModel && sessionId) {
       const { providerId, model } = parseModelOverride(formModel)
-      useSessionStore.getState().setSessionProvider(providerId, model)
+      useSessionStore.getState().setSessionProvider(sessionId, providerId, model)
     }
 
     setSaving(false)
@@ -487,10 +491,13 @@ function BuiltInModelModal({
       await saveAgentModelOverride(agentId, value)
 
       // Propagate to current session if this agent is active
-      const currentSession = useSessionStore.getState().currentSession
-      if (currentSession?.mode === agentId && value) {
+      const sessionId = useSessionScope()
+      const currentSession = sessionId
+        ? (useSessionStore.getState().panes[sessionId]?.session ?? null)
+        : useSessionStore.getState().currentSession
+      if (currentSession?.mode === agentId && value && sessionId) {
         const { providerId, model } = parseModelOverride(value)
-        useSessionStore.getState().setSessionProvider(providerId, model)
+        useSessionStore.getState().setSessionProvider(sessionId, providerId, model)
       }
 
       onSaved()

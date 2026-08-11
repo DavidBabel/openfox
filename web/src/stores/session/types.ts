@@ -8,6 +8,7 @@ import type {
   ContextState,
   Attachment,
   WorkflowLaunchScope,
+  WorkflowExecution,
 } from '@shared/types.js'
 import type { ServerMessage, QueuedMessage, ChoiceOption } from '@shared/protocol.js'
 import type { ConnectionStatus } from '../../lib/ws'
@@ -35,6 +36,43 @@ export interface StreamingBuffer {
   toolOutput: { messageId: string; callId: string; stream: 'stdout' | 'stderr'; content: string }[]
 }
 
+export type GitStatus = {
+  branch: string | null
+  diff: {
+    files: { path: string; status: 'modified' | 'added' | 'deleted'; additions: number; deletions: number }[]
+  }
+} | null
+
+export type VisionFallbackItem = {
+  type: 'start' | 'done'
+  attachmentId: string
+  filename?: string
+  description?: string
+}
+
+/**
+ * Full per-session feed state. The split view holds one of these for every
+ * open pane; the single-session view derives the "current" fields from the
+ * focused pane.
+ */
+export interface SessionPane {
+  session: Session | null
+  messages: Message[]
+  hiddenCount: number
+  currentTodos: Todo[]
+  contextState: ContextState | null
+  subAgentContextStates: Record<string, ContextState>
+  pendingPathConfirmations: PendingPathConfirmation[]
+  pendingQuestions: PendingQuestion[]
+  visionFallbackByMessage: Record<string, VisionFallbackItem>
+  queuedMessages: QueuedMessage[]
+  abortInProgress: boolean
+  restoredInput: string | null
+  activeWorkflowExecution: WorkflowExecution | null
+  gitStatus: GitStatus
+  error: { code: string; message: string } | null
+}
+
 export interface SessionState {
   connectionStatus: ConnectionStatus
   showPasswordModal: boolean
@@ -51,24 +89,21 @@ export interface SessionState {
   pendingPathConfirmations: PendingPathConfirmation[]
   crossSessionConfirmations: Record<string, PendingPathConfirmation[]>
   sessionsWithPendingConfirmations: string[]
-  gitStatus: {
-    branch: string | null
-    diff: { files: { path: string; status: 'modified' | 'added' | 'deleted'; additions: number; deletions: number }[] }
-  } | null
+  gitStatus: GitStatus
   pendingQuestions: PendingQuestion[]
-  visionFallbackByMessage: Record<
-    string,
-    { type: 'start' | 'done'; attachmentId: string; filename?: string; description?: string }
-  >
+  visionFallbackByMessage: Record<string, VisionFallbackItem>
   queuedMessages: QueuedMessage[]
   abortInProgress: boolean
   restoredInput: string | null
-  activeWorkflowExecution: import('@shared/types.js').WorkflowExecution | null
+  activeWorkflowExecution: WorkflowExecution | null
   error: { code: string; message: string } | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
   pendingSessionCreate: boolean | string
   pendingUpdate: boolean
+  panes: Record<string, SessionPane>
+  openSessionIds: string[]
+  focusedSessionId: string | null
   connect: () => Promise<void>
   reconnect: () => void
   disconnect: () => void
@@ -76,6 +111,13 @@ export interface SessionState {
   cancelPassword: () => void
   createSession: (projectId: string, title?: string) => Promise<Session | null>
   loadSession: (sessionId: string, force?: boolean) => Promise<void>
+  openPane: (sessionId: string, opts?: { focus?: boolean }) => Promise<void>
+  closePane: (sessionId: string) => void
+  focusPane: (sessionId: string) => void
+  reorderPane: (sessionId: string, direction: -1 | 1) => void
+  isPaneOpen: (sessionId: string) => boolean
+  enterSplitView: (sessionIds: string[], focusId?: string) => Promise<void>
+  exitSplitView: () => void
   listSessions: (projectId?: string, limit?: number) => Promise<void>
   listHomeSessions: () => Promise<void>
   ensureFullSessionList: () => Promise<void>
@@ -86,13 +128,15 @@ export interface SessionState {
   loadMoreSessions: (projectId: string) => Promise<void>
   clearSession: () => void
   sendMessage: (
+    sessionId: string,
     content: string,
     attachments?: Attachment[],
     opts?: { messageKind?: 'command'; isSystemGenerated?: boolean },
   ) => void
-  stopGeneration: () => void
-  continueGeneration: () => void
+  stopGeneration: (sessionId: string) => void
+  continueGeneration: (sessionId: string) => void
   launchWorkflow: (
+    sessionId: string,
     content?: string,
     attachments?: Attachment[],
     workflowId?: string,
@@ -100,25 +144,25 @@ export interface SessionState {
     params?: Record<string, string>,
     scope?: WorkflowLaunchScope,
   ) => void
-  continueWorkflow: (choiceId?: string) => void
-  exitWorkflow: () => void
-  switchMode: (mode: SessionMode) => void
-  switchDangerLevel: (dangerLevel: 'normal' | 'dangerous') => void
-  editCriteria: (criteria: Criterion[]) => void
-  compactContext: () => void
-  setSessionProvider: (providerId: string, model?: string) => Promise<Session | null>
+  continueWorkflow: (sessionId: string, choiceId?: string) => void
+  exitWorkflow: (sessionId: string) => void
+  switchMode: (sessionId: string, mode: SessionMode) => void
+  switchDangerLevel: (sessionId: string, dangerLevel: 'normal' | 'dangerous') => void
+  editCriteria: (sessionId: string, criteria: Criterion[]) => void
+  compactContext: (sessionId: string) => void
+  setSessionProvider: (sessionId: string, providerId: string, model?: string) => Promise<Session | null>
   updateContextState: (contextState: ContextState) => void
   updateSubAgentContextState: (subAgentId: string, context: ContextState) => void
   clearSubAgentContextState: (subAgentId: string) => void
-  confirmPath: (callId: string, approved: boolean, alwaysAllow?: boolean) => void
-  answerQuestion: (callId: string, answer: string, skip?: boolean) => void
-  queueAsap: (content: string, attachments?: Attachment[], messageKind?: string) => void
-  queueCompletion: (content: string, attachments?: Attachment[], messageKind?: string) => void
-  cancelQueued: (queueId: string) => void
+  confirmPath: (sessionId: string, callId: string, approved: boolean, alwaysAllow?: boolean) => void
+  answerQuestion: (sessionId: string, callId: string, answer: string, skip?: boolean) => void
+  queueAsap: (sessionId: string, content: string, attachments?: Attachment[], messageKind?: string) => void
+  queueCompletion: (sessionId: string, content: string, attachments?: Attachment[], messageKind?: string) => void
+  cancelQueued: (sessionId: string, queueId: string) => void
   queueUpdate: () => void
   triggerPendingUpdate: () => void
   clearError: () => void
-  clearRestoredInput: () => void
+  clearRestoredInput: (sessionId?: string | null) => void
   resetPendingSessionCreate: () => void
   handleServerMessage: (message: ServerMessage) => void
 }
