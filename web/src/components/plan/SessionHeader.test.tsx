@@ -161,4 +161,22 @@ describe('SessionHeader', () => {
     )
     expect(triggerPendingUpdateMock).toHaveBeenCalled()
   })
+
+  it('keeps a stable hook order when the session scope resolves after mount', () => {
+    // Fresh-project scenario: the scoped session id is falsy on the first
+    // render (session still loading) and pops in on the next. useSessionScope
+    // must not call hooks conditionally on the provider value, or React
+    // throws "change in the order of Hooks" / "Rendered fewer hooks".
+    const { rerender } = render(
+      <SessionScopeProvider value="">
+        <SessionHeader />
+      </SessionScopeProvider>,
+    )
+    rerender(
+      <SessionScopeProvider value="s1">
+        <SessionHeader />
+      </SessionScopeProvider>,
+    )
+    expect(screen.queryByText('System prompt has changed —')).toBeNull()
+  })
 })

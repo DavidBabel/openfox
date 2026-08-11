@@ -14,8 +14,8 @@ export const SessionScopeProvider = SessionScopeContext.Provider
 
 export function useSessionScope(): string | null {
   const scoped = useContext(SessionScopeContext)
-  if (scoped) return scoped
-  return useSessionStore((state) => state.focusedSessionId ?? state.currentSession?.id ?? null)
+  const focused = useSessionStore((state) => state.focusedSessionId ?? state.currentSession?.id ?? null)
+  return scoped || focused
 }
 
 /**
