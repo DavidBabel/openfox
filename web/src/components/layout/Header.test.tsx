@@ -253,6 +253,63 @@ describe('Header', () => {
     expect(btn!.getAttribute('title')).toBe(longTitle)
   })
 
+  it('shows only the running task count in the green badge', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({
+      currentProject: { id: 'p1', name: 'P', workdir: '/tmp' },
+      projects: [{ id: 'p1', name: 'P', workdir: '/tmp' }],
+    })
+
+    const { useTasksStore } = await import('../../stores/tasks')
+    useTasksStore.setState({
+      counts: {
+        open: 5,
+        todo: 3,
+        inProgress: 2,
+        running: 2,
+        queued: 0,
+        done: 0,
+      },
+    })
+
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    const badge = container.querySelector('[aria-label="Open project tasks"] span')
+    expect(badge).toBeTruthy()
+    expect(badge!.textContent).toBe('2')
+    expect(badge!.className).toContain('bg-accent-success')
+  })
+
+  it('hides the task badge when no tasks are running', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({
+      currentProject: { id: 'p1', name: 'P', workdir: '/tmp' },
+      projects: [{ id: 'p1', name: 'P', workdir: '/tmp' }],
+    })
+
+    const { useTasksStore } = await import('../../stores/tasks')
+    useTasksStore.setState({
+      counts: {
+        open: 5,
+        todo: 3,
+        inProgress: 2,
+        running: 0,
+        queued: 2,
+        done: 0,
+      },
+    })
+
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    expect(container.querySelector('[aria-label="Open project tasks"] span')).toBeNull()
+  })
+
   it('shows the control panel toggle on the split-view route', async () => {
     const { useLocation } = await import('wouter')
     vi.mocked(useLocation).mockReturnValue(['/split-view', vi.fn()])

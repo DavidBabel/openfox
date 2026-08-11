@@ -40,7 +40,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement)
   const [location, setLocation] = useLocation()
   const [tasksModalOpen, setTasksModalOpen] = useState(false)
-  const openTaskCount = useTasksStore((state) => state.counts.open)
+  const runningTaskCount = useTasksStore((state) => state.counts.running)
   const loadCounts = useTasksStore((state) => state.loadCounts)
   const activeProjectId = useTasksStore((state) => state.activeProjectId)
   const lastAutoLaunch = useTasksStore((state) => state.lastAutoLaunch)
@@ -221,9 +221,9 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             aria-label="Open project tasks"
           >
             <TasksIcon className="w-4 h-4" />
-            {openTaskCount > 0 && (
-              <span className="absolute top-0.5 right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-accent-primary text-white text-[9px] font-semibold flex items-center justify-center">
-                {openTaskCount > 99 ? '99+' : openTaskCount}
+            {runningTaskCount > 0 && (
+              <span className="absolute top-0.5 right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-accent-success text-white text-[9px] font-semibold flex items-center justify-center">
+                {runningTaskCount > 99 ? '99+' : runningTaskCount}
               </span>
             )}
           </button>
