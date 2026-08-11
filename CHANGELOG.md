@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.116 - 2026-08-11
+
+### Features
+
+- **Split view for multiple sessions** — run independent sessions side-by-side in one window, each with its own feed, sidebar, and responsive layout
+- **Workflow steps retry automatically** — LLM-failed steps retry with escalating backoff and a clean history
+- **Changelog trimmed to your upgrade path** — release notes only show what changed since the version you last ran
+
+### Enhancements
+
+- **Bigger default response limit** — max response tokens raised from 4096 to 16384
+- **Header task badge tracks running work** — only actively running tasks count toward the green badge
+
+### Bug Fixes
+
+- **False path confirmations eliminated** — sed/awk/perl/ruby regex expressions no longer trip the file-access guard
+- **Sandbox escapes now flagged** — bare-root paths and dot-dot traversal outside the workdir are caught
+- **Context size survives failed calls** — a failed LLM query keeps the last known context size
+- **System-prompt warning scoped per pane** — the "prompt changed" banner only shows in the session that changed
+- **Setup workspace step stays scoped** — the workflow's first step only creates the workspace, no premature implementation
+- **Dependency vulnerabilities patched** — npm audit reports zero known issues
+
 ## 2.0.115 - 2026-08-11
 
 ### Features
