@@ -37,6 +37,9 @@ import {
 } from '../shared/AtMentionAutocomplete'
 import { SlashAutocomplete, type SlashAutocompleteHandle, type SlashSuggestion } from '../shared/SlashAutocomplete'
 
+const COMPOSER_MIN_HEIGHT = 24
+const COMPOSER_MAX_HEIGHT = 200
+
 interface ChatInputProps {
   input: string
   setInput: (value: string) => void
@@ -98,7 +101,6 @@ export function ChatInput({
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const prevLenRef = useRef(0)
   const cursorPosRef = useRef(0)
   const autocompleteRef = useRef<AtMentionAutocompleteHandle>(null)
   const slashAutocompleteRef = useRef<SlashAutocompleteHandle>(null)
@@ -163,12 +165,16 @@ export function ChatInput({
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current
     if (!textarea) return
-    const isGrowing = input.length >= prevLenRef.current
-    prevLenRef.current = input.length
-    if (!isGrowing) {
-      textarea.style.height = 'auto'
+    // Always measure from a collapsed height so a previously forced (possibly
+    // inflated) height can't skew scrollHeight and keep the box stuck.
+    textarea.style.height = 'auto'
+    // An empty textarea reports its wrapped placeholder in scrollHeight, which
+    // balloons the box on narrow layouts; reset it to the minimum height instead.
+    if (!input) {
+      textarea.style.height = `${COMPOSER_MIN_HEIGHT}px`
+      return
     }
-    textarea.style.height = `${Math.min(200, textarea.scrollHeight)}px`
+    textarea.style.height = `${Math.min(COMPOSER_MAX_HEIGHT, textarea.scrollHeight)}px`
   }, [input])
 
   useEffect(() => {
@@ -201,6 +207,23 @@ export function ChatInput({
   useEffect(() => {
     resizeTextarea()
   }, [input, resizeTextarea])
+
+  // Re-evaluate the height when the composer's column changes width (narrower or
+  // wider panes change how content wraps). Guarded to only fire on width changes
+  // so adjusting the textarea's own height doesn't loop.
+  useEffect(() => {
+    const container = textareaRef.current?.parentElement
+    if (!container || typeof ResizeObserver === 'undefined') return
+    let lastWidth = container.clientWidth
+    const observer = new ResizeObserver(() => {
+      const width = container.clientWidth
+      if (width === lastWidth) return
+      lastWidth = width
+      resizeTextarea()
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [resizeTextarea])
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -592,7 +615,7 @@ export function ChatInput({
               placeholder="What would you like to build?"
               data-testid="chat-input-textarea"
               className="w-full bg-transparent text-sm placeholder:text-text-muted resize-none overflow-y-auto focus:outline-none"
-              style={{ minHeight: '24px', maxHeight: '200px' }}
+              style={{ minHeight: `${COMPOSER_MIN_HEIGHT}px`, maxHeight: `${COMPOSER_MAX_HEIGHT}px` }}
               spellCheck={false}
             />
             <AtMentionAutocomplete
