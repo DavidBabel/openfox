@@ -109,7 +109,7 @@ export interface SessionState {
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
   pendingSessionCreate: boolean | string
-  pendingUpdate: boolean
+  pendingUpdate: string | null
   panes: Record<string, SessionPane>
   openSessionIds: string[]
   focusedSessionId: string | null
@@ -170,7 +170,7 @@ export interface SessionState {
   queueAsap: (sessionId: string, content: string, attachments?: Attachment[], messageKind?: string) => void
   queueCompletion: (sessionId: string, content: string, attachments?: Attachment[], messageKind?: string) => void
   cancelQueued: (sessionId: string, queueId: string) => void
-  queueUpdate: () => void
+  queueUpdate: (sessionId: string) => void
   triggerPendingUpdate: () => void
   clearError: () => void
   clearRestoredInput: (sessionId?: string | null) => void

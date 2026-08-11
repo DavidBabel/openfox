@@ -1136,12 +1136,13 @@ async function handleClientMessage(
     }
 
     case 'context.applyDynamic.preview': {
-      if (!client.activeSessionId) {
+      const payload = message.payload as { sessionId?: string } | undefined
+      const sessionId = payload?.sessionId ?? client.activeSessionId
+      if (!sessionId) {
         send(createErrorMessage('NO_SESSION', 'No active session', message.id))
         return
       }
 
-      const sessionId = client.activeSessionId
       const session = sessionManager.requireSession(sessionId)
 
       try {
@@ -1193,12 +1194,13 @@ async function handleClientMessage(
     }
 
     case 'context.applyDynamic': {
-      if (!client.activeSessionId) {
+      const payload = message.payload as { sessionId?: string } | undefined
+      const sessionId = payload?.sessionId ?? client.activeSessionId
+      if (!sessionId) {
         send(createErrorMessage('NO_SESSION', 'No active session', message.id))
         return
       }
 
-      const sessionId = client.activeSessionId
       const session = sessionManager.requireSession(sessionId)
 
       if (session.isRunning) {

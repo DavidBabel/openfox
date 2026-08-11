@@ -448,9 +448,9 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
           isRunning={session.isRunning}
           onApply={() => {
             if (session.isRunning) {
-              queueUpdate()
+              queueUpdate(session.id)
             } else {
-              wsClient.send('context.applyDynamic', {})
+              wsClient.send('context.applyDynamic', { sessionId: session.id })
             }
             setShowSystemPromptModal(false)
           }}

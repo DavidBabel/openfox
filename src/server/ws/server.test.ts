@@ -25,6 +25,7 @@ const {
   getRuntimeConfigMock,
   getGlobalConfigDirMock,
   createLLMClientMock,
+  applyDynamicContextMock,
 } = vi.hoisted(() => ({
   createProjectMock: vi.fn(),
   getProjectMock: vi.fn(),
@@ -47,6 +48,7 @@ const {
   getRuntimeConfigMock: vi.fn(),
   getGlobalConfigDirMock: vi.fn(),
   createLLMClientMock: vi.fn(),
+  applyDynamicContextMock: vi.fn(),
 }))
 
 vi.mock('../db/projects.js', () => ({
@@ -68,6 +70,13 @@ vi.mock('../db/settings.js', () => ({
 vi.mock('../context/instructions.js', () => ({
   getAllInstructions: getAllInstructionsMock,
   toInjectedFiles: (files: unknown[]) => files as unknown,
+}))
+
+vi.mock('../chat/dynamic-context.js', () => ({
+  computeSessionHash: vi.fn(),
+  computeUnifiedDiff: vi.fn(),
+  buildCachedPrompt: vi.fn(),
+  applyDynamicContext: applyDynamicContextMock,
 }))
 
 vi.mock('../skills/registry.js', () => ({
@@ -1013,6 +1022,51 @@ describe('createWebSocketServer', () => {
     expect(await harness.nextMessage((message) => message.id === 'path-invalid')).toMatchObject({
       payload: { code: 'DEPRECATED' },
     })
+
+    await harness.close()
+  })
+
+  it('routes context.applyDynamic to the session named in the payload', async () => {
+    applyDynamicContextMock.mockResolvedValue(undefined)
+    const sessionB: any = {
+      id: 'session-b',
+      projectId: 'project-1',
+      workdir: '/tmp/project',
+      mode: 'planner',
+      phase: 'plan',
+      isRunning: false,
+      criteria: [],
+    }
+    const sessionManager = createSessionManager({
+      getSession: vi.fn((id: string) => (id === 'session-b' ? sessionB : { ...sessionB, id: 'session-1' })),
+      requireSession: vi.fn((id: string) => (id === 'session-b' ? sessionB : { ...sessionB, id: 'session-1' })),
+      getContextState: vi.fn(() => ({
+        currentTokens: 10,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      })),
+    })
+    const harness = await createHarness({ sessionManager })
+
+    // Active WS session is session-1…
+    harness.send({ id: 'sl-1', type: 'session.load', payload: { sessionId: 'session-1' } })
+    await harness.nextMessage((message) => message.id === 'sl-1')
+
+    // …but the payload names session-b, so the update must target it.
+    harness.send({ id: 'apply-b', type: 'context.applyDynamic', payload: { sessionId: 'session-b' } })
+    expect(await harness.nextMessage((message) => message.id === 'apply-b')).toMatchObject({ type: 'ack' })
+    expect(applyDynamicContextMock).toHaveBeenCalledTimes(1)
+    expect(applyDynamicContextMock.mock.calls[0]![1]).toBe('session-b')
+
+    // Without a payload sessionId, fall back to the active session.
+    applyDynamicContextMock.mockClear()
+    harness.send({ id: 'apply-active', type: 'context.applyDynamic', payload: {} })
+    expect(await harness.nextMessage((message) => message.id === 'apply-active')).toMatchObject({ type: 'ack' })
+    expect(applyDynamicContextMock).toHaveBeenCalledTimes(1)
+    expect(applyDynamicContextMock.mock.calls[0]![1]).toBe('session-1')
 
     await harness.close()
   })

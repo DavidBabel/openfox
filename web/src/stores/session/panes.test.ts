@@ -39,7 +39,7 @@ function makeState(overrides: Partial<SessionState> = {}): SessionState {
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
     pendingSessionCreate: false,
-    pendingUpdate: false,
+    pendingUpdate: null,
     panes: {},
     openSessionIds: [],
     focusedSessionId: null,

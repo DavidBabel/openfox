@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { ProgressBar, LowTokenWarning } from '../shared/ProgressBar'
 import { formatTokens } from '../../lib/format-stats'
-import { wsClient } from '../../lib/ws'
 import { MoreIcon } from '../shared/icons'
 import { getTextColor } from './token-utils'
 import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
-import { useSessionScope, useScopedPaneState } from './session-scope'
+import { useApplyDynamicContext, useScopedContext } from './session-scope'
 
 interface ContextPopoverProps {
   variant?: 'popover' | 'sidebar'
@@ -14,21 +13,9 @@ interface ContextPopoverProps {
 }
 
 export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: ContextPopoverProps) {
-  const sessionId = useSessionScope()
-  const contextState = useScopedPaneState(
-    sessionId,
-    (pane) => pane.contextState ?? null,
-    (state) => state.contextState,
-    null,
-  )
-  const currentSession = useScopedPaneState(
-    sessionId,
-    (pane) => pane.session ?? null,
-    (state) => state.currentSession,
-    null,
-  )
+  const { sessionId, contextState, currentSession } = useScopedContext()
   const compactContext = useSessionStore((state) => state.compactContext)
-  const queueUpdate = useSessionStore((state) => state.queueUpdate)
+  const applyDynamicContext = useApplyDynamicContext()
 
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -40,11 +27,7 @@ export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: Co
   const isRunning = currentSession.isRunning
 
   const handleApplyDynamic = () => {
-    if (isRunning) {
-      queueUpdate()
-    } else {
-      wsClient.send('context.applyDynamic', {})
-    }
+    applyDynamicContext(isRunning)
     setShowApplyModal(false)
   }
 

@@ -1,5 +1,6 @@
-import { createContext, useContext } from 'react'
+import { createContext, useCallback, useContext } from 'react'
 import { useSessionStore } from '../../stores/session'
+import { wsClient } from '../../lib/ws'
 import type { SessionPane, SessionState } from '../../stores/session/types'
 
 /**
@@ -37,4 +38,46 @@ export function useScopedPaneState<T>(
     }
     return flatPick(state)
   })
+}
+
+/**
+ * Context state and session for the current pane (or the focused session when
+ * not inside a split pane). Shared by the components that render the dynamic
+ * context (system prompt) UI.
+ */
+export function useScopedContext() {
+  const sessionId = useSessionScope()
+  const contextState = useScopedPaneState(
+    sessionId,
+    (pane) => pane.contextState ?? null,
+    (state) => state.contextState,
+    null,
+  )
+  const currentSession = useScopedPaneState(
+    sessionId,
+    (pane) => pane.session ?? null,
+    (state) => state.currentSession,
+    null,
+  )
+  return { sessionId, contextState, currentSession }
+}
+
+/**
+ * Apply dynamic context changes for the current pane's session: queues the
+ * update while the session is running (applied when it stops) or sends it
+ * immediately otherwise.
+ */
+export function useApplyDynamicContext() {
+  const sessionId = useSessionScope()
+  const queueUpdate = useSessionStore((state) => state.queueUpdate)
+  return useCallback(
+    (isRunning: boolean) => {
+      if (isRunning) {
+        if (sessionId) queueUpdate(sessionId)
+      } else {
+        wsClient.send('context.applyDynamic', { ...(sessionId ? { sessionId } : {}) })
+      }
+    },
+    [sessionId, queueUpdate],
+  )
 }
