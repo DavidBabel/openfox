@@ -574,7 +574,9 @@ ${COMPACTION_PROMPT}`,
         throw new Error('Aborted')
       }
 
-      void drainQueue(sessionManager, sessionId, append, onMessage)
+      if (!config.subAgentMetadata) {
+        void drainQueue(sessionManager, sessionId, append, onMessage)
+      }
 
       retryLimiter.reset()
       continue
