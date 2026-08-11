@@ -188,7 +188,10 @@
     "semver": "7.7.4",
     "minimatch": "10.2.5",
     "micromatch": "4.0.8",
-    "@rollup/plugin-terser": "1.0.0"
+    "@rollup/plugin-terser": "1.0.0",
+    "tsup": {
+      "esbuild": "^0.28.2"
+    }
   },
   "allowScripts": {
     "better-sqlite3": true
