@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0.115 - 2026-08-11
+
+### Features
+
+- **Built-in Mark Task as Done command** — a bundled command that guides agents through completing a task
+- **Per-project default agent for new sessions** — choose the agent fresh chats start with in Project Settings
+
+### Enhancements
+
+- **Task board output renders as a kanban board** — project_tasks tool results show in the chat feed with columns, running/queued badges, and gate chips
+- **New custom agents default to top-level type** — instead of being created as sub-agents
+
+### Bug Fixes
+
+- **Partial thinking resumes cleanly on strict APIs** — content-less assistant messages now carry a space instead of null, clearing the "content or tool_calls must be set" 400
+- **Workspace edits honor reads from the original clone** — the write/edit guard no longer rejects after browsing files in the base workspace
+- **.openfox/ content resolves from the project root** — skills, commands, agents, and workflows scope to the session's project wherever it lives
+- **Custom agents save beside their project** — not the server directory
+- **session_metadata reads render real output** — the feed shows actual entries instead of a placeholder
+- **Task sessions get auto-generated names** — and Open session links to a real session
+
 ## 2.0.114 - 2026-08-10
 
 ### Features
