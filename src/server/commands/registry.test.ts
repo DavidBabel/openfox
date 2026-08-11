@@ -281,6 +281,8 @@ describe('mark-done default command', () => {
     expect(markDone!.metadata.agentMode).toBeUndefined()
     expect(markDone!.prompt.trim().length).toBeGreaterThan(0)
     expect(markDone!.prompt).toContain('project_tasks')
+    expect(markDone!.prompt).toContain("status='in_progress'")
+    expect(markDone!.prompt).toContain("status='done'")
   })
 })
 

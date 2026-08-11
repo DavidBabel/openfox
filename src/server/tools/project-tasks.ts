@@ -49,6 +49,8 @@ const VALID_ACTIONS: TaskAction[] = [
   'reorder',
 ]
 
+const LIST_STATUSES = ['todo', 'in_progress', 'done', 'all'] as const
+
 interface ProjectTasksArgs {
   action: TaskAction
   taskId?: string
@@ -62,7 +64,7 @@ interface ProjectTasksArgs {
   gateId?: string
   value?: string
   gates?: unknown[]
-  status?: 'todo' | 'in_progress' | 'done'
+  status?: 'todo' | 'in_progress' | 'done' | 'all'
   index?: number
   expectedVersion?: number
 }
@@ -82,7 +84,7 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
         'fields; set them with action=set_gate_value (filling proof/evidence as part of your work), then retry the move.\n' +
         '- All transitions are serialized server-side. If another actor changed the task, you get a CONFLICT error: re-list and retry.\n\n' +
         'Actions:\n' +
-        '- list: list all tasks (with gate values, status, queue position, bound session, audit trail)\n' +
+        '- list: list tasks (with gate values, status, queue position, bound session, audit trail). Defaults to open tasks (todo + in_progress); filter with status (todo | in_progress | done | all)\n' +
         '- get: fetch a single task (taskId)\n' +
         '- create: create a task in To Do (prompt must contain text or an attachment)\n' +
         '- edit: update prompt/attachments/agent/model (taskId + any fields)\n' +
@@ -113,7 +115,12 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
             type: 'array',
             description: 'Full replacement gate config: [{id, name, description, required, variant}]',
           },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'done'], description: 'Column for reorder' },
+          status: {
+            type: 'string',
+            enum: ['todo', 'in_progress', 'done', 'all'],
+            description:
+              'Column filter for action=list ("todo" | "in_progress" | "done" | "all"); also the destination column for action=reorder',
+          },
           index: { type: 'number', description: 'Zero-based target index within the column (reorder)' },
           expectedVersion: {
             type: 'number',
@@ -139,9 +146,19 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
     try {
       switch (action) {
         case 'list': {
+          const status = args.status
+          if (status !== undefined && !LIST_STATUSES.includes(status)) {
+            return helpers.error(
+              `Invalid "status" filter for action=list: "${String(status)}". Expected one of: todo, in_progress, done, all.`,
+            )
+          }
           const tasks = svc.list(projectId)
+          const filtered =
+            status === 'all'
+              ? tasks
+              : tasks.filter((t) => (status === undefined ? t.status !== 'done' : t.status === status))
           const gates = getGateConfig(projectId)
-          return helpers.success(JSON.stringify({ gates, tasks: tasks.map((t) => taskForAgent(t)) }, null, 2))
+          return helpers.success(JSON.stringify({ gates, tasks: filtered.map((t) => taskForAgent(t)) }, null, 2))
         }
 
         case 'get': {
@@ -247,6 +264,9 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
           if (!args.taskId) return helpers.error('Parameter "taskId" is required for action=reorder')
           if (!args.status || args.index === undefined) {
             return helpers.error('Parameters "status" and "index" are required for action=reorder')
+          }
+          if (args.status === 'all') {
+            return helpers.error('status="all" is not a valid column for action=reorder')
           }
           const task = svc.reorder(projectId, args.taskId, args.status, args.index)
           return helpers.success(JSON.stringify(taskForAgent(task), null, 2))

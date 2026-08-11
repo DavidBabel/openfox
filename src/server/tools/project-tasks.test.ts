@@ -86,6 +86,45 @@ describe('project_tasks tool', () => {
     expect(movedTask.status).toBe('in_progress')
   })
 
+  it('list excludes done tasks by default and supports a status filter', async () => {
+    const created = await execute('create', { prompt: 'Ship it' }, projectId)
+    const task = JSON.parse(created.output!) as { id: string }
+    await execute('move', { taskId: task.id, to: 'in_progress' }, projectId)
+    await execute('move', { taskId: task.id, to: 'done' }, projectId)
+
+    const open = await execute('list', {}, projectId)
+    const openParsed = JSON.parse(open.output!) as { tasks: unknown[] }
+    expect(openParsed.tasks).toHaveLength(0)
+
+    const done = await execute('list', { status: 'done' }, projectId)
+    const doneParsed = JSON.parse(done.output!) as { tasks: { id: string; status: string }[] }
+    expect(doneParsed.tasks).toHaveLength(1)
+    expect(doneParsed.tasks[0]!.status).toBe('done')
+
+    const all = await execute('list', { status: 'all' }, projectId)
+    const allParsed = JSON.parse(all.output!) as { tasks: unknown[] }
+    expect(allParsed.tasks).toHaveLength(1)
+  })
+
+  it('list with a single status column returns only that column', async () => {
+    const created = await execute('create', { prompt: 'Two states' }, projectId)
+    const task = JSON.parse(created.output!) as { id: string }
+    await execute('move', { taskId: task.id, to: 'in_progress' }, projectId)
+
+    const todo = await execute('list', { status: 'todo' }, projectId)
+    expect(JSON.parse(todo.output!) as { tasks: unknown[] }).toMatchObject({ tasks: [] })
+    const progress = await execute('list', { status: 'in_progress' }, projectId)
+    const parsed = JSON.parse(progress.output!) as { tasks: { id: string }[] }
+    expect(parsed.tasks).toHaveLength(1)
+    expect(parsed.tasks[0]!.id).toBe(task.id)
+  })
+
+  it('rejects an invalid status filter with a clear error', async () => {
+    const result = await execute('list', { status: 'archived' }, projectId)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('status')
+  })
+
   it('surfaces the queue position of a queued task in list', async () => {
     // Agent moves always run, so seed the queued state via a human move:
     // first task occupies the single slot, the second queues behind it.
