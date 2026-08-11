@@ -366,19 +366,23 @@ export async function runTopLevelAgentLoop(
       throw new Error('Aborted')
     }
 
-    turnMetrics.addLLMCall(
-      result.timing,
-      result.usage.promptTokens,
-      result.usage.completionTokens,
-      previousContextTokens,
-      result.modelParams,
-    )
-    sessionManager.setCurrentContextSize(
-      sessionId,
-      result.usage.promptTokens,
-      result.usage.completionTokens,
-      config.subAgentMetadata?.subAgentId,
-    )
+    // A failed LLM call yields zero usage — updating context from it would wipe
+    // out the last known context size. Keep the previous value intact instead.
+    if (!result.error) {
+      turnMetrics.addLLMCall(
+        result.timing,
+        result.usage.promptTokens,
+        result.usage.completionTokens,
+        previousContextTokens,
+        result.modelParams,
+      )
+      sessionManager.setCurrentContextSize(
+        sessionId,
+        result.usage.promptTokens,
+        result.usage.completionTokens,
+        config.subAgentMetadata?.subAgentId,
+      )
+    }
 
     // Check compaction threshold with fresh promptTokens from LLM.
     // When exceeded, append compaction prompt and let the next iteration

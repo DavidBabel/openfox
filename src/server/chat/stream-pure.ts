@@ -74,6 +74,8 @@ export interface PureStreamResult {
   finishReason: 'stop' | 'tool_calls' | 'length' | 'content_filter'
   /** Set when a retry pattern matched mid-stream */
   patternMatch?: RetryPatternMatch
+  /** Set when the LLM stream reported an error — the call failed, so no usable usage exists */
+  error?: string
 }
 
 type StreamMessageInput = {
@@ -120,6 +122,7 @@ function createEmptyStreamResult(
   aborted: boolean,
   modelParams: ModelParams,
   patternMatch?: RetryPatternMatch,
+  error?: string,
 ): PureStreamResult {
   return {
     content: '',
@@ -131,6 +134,7 @@ function createEmptyStreamResult(
     modelParams,
     finishReason: 'stop',
     ...(patternMatch ? { patternMatch } : {}),
+    ...(error ? { error } : {}),
   }
 }
 
@@ -215,6 +219,7 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
 
   let result: Awaited<ReturnType<typeof stream.next>>['value'] = null
   let aborted = false
+  let streamError: string | undefined
   let accumulatedContent = ''
   let accumulatedThinking = ''
   let patternMatch: RetryPatternMatch | undefined
@@ -346,6 +351,7 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
           // Suppress chat.error when user-initiated abort caused the error —
           // the agent loop handles abort gracefully via signal check + emitPartialDoneEvents.
           if (signal?.aborted) break
+          streamError = value.error
           yield {
             type: 'chat.error',
             data: { error: value.error, recoverable: true },
@@ -378,7 +384,7 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
 
   // Return result (available via generator.value after iteration)
   if (!result) {
-    return createEmptyStreamResult(aborted, modelParams)
+    return createEmptyStreamResult(aborted, modelParams, undefined, streamError)
   }
 
   const baseResult: PureStreamResult = {

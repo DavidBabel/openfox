@@ -155,6 +155,26 @@ describe('stream-pure', () => {
     expect(result.content).toBe('')
   })
 
+  it('emits chat.error and marks the result as errored when the stream reports an error', async () => {
+    const client = createMockClient([{ type: 'error', error: 'boom' }])
+
+    const gen = streamLLMPure({
+      messageId: 'msg-error',
+      systemPrompt: 'system',
+      llmClient: client,
+      messages: [{ role: 'user', content: 'hello' }],
+    })
+
+    const events: Array<{ type: string; data: unknown }> = []
+    const result = await consumeStreamGenerator(gen, (event) => {
+      events.push(event)
+    })
+
+    expect(events).toEqual([{ type: 'chat.error', data: { error: 'boom', recoverable: true } }])
+    expect(result.error).toBe('boom')
+    expect(result.usage).toEqual({ promptTokens: 0, completionTokens: 0 })
+  })
+
   it('does not emit chat.error when aborted mid-stream', async () => {
     vi.useFakeTimers()
 

@@ -668,6 +668,58 @@ describe('maxTokens clamping', () => {
     expect(mockSessionManager.setCurrentContextSize).toHaveBeenCalledWith('test-session', 55100, 6030, undefined)
   })
 
+  it('does not reset context size to zero when the LLM query fails', async () => {
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 78100,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    // Simulate a failed LLM call — the stream reports an error and yields zero usage
+    ;(consumeStreamGenerator as any).mockResolvedValue({
+      content: '',
+      toolCalls: [],
+      segments: [],
+      usage: { promptTokens: 0, completionTokens: 0 },
+      timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
+      aborted: false,
+      finishReason: 'stop',
+      modelParams: {},
+      error: 'boom',
+    })
+
+    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+
+    // A failed query must NOT overwrite the last known context size with zero.
+    expect(mockSessionManager.setCurrentContextSize).not.toHaveBeenCalled()
+    expect(mockTurnMetrics.addLLMCall).not.toHaveBeenCalled()
+  })
+
   it('passes undefined modelSettings when getCurrentModelSettings returns undefined', async () => {
     mockSessionManager = {
       requireSession: vi.fn().mockReturnValue({
