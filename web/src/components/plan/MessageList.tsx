@@ -14,8 +14,32 @@ import { useClickOutside } from '../../hooks/useClickOutside'
 import { useSessionScope, useScopedPaneState } from './session-scope'
 import type { DisplayItem } from './groupMessages.js'
 import type { MetadataEntry, WorkflowScope } from '@shared/types.js'
+import type { WorkflowRetryState } from '../../stores/session/types'
 
 const EMPTY_CRITERIA: MetadataEntry[] = []
+
+/** Live countdown pill shown while a workflow step is backing off before its next retry. */
+function RetryIndicator({ retry }: { retry: WorkflowRetryState }) {
+  const [receivedAt] = useState(Date.now())
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(timer)
+  }, [])
+
+  const remainingSec = Math.max(0, Math.ceil((retry.retryInMs - (now - receivedAt)) / 1000))
+  const suffix = remainingSec > 0 ? ` — next try in ${remainingSec}s…` : '…'
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-tertiary/60 border border-border text-xs text-text-secondary">
+      <span className="w-2 h-2 rounded-full bg-accent-primary animate-pulse" />
+      <span>
+        LLM call failed — retrying “{retry.stepName}” (attempt {retry.attempt}){suffix}
+      </span>
+    </div>
+  )
+}
 
 interface MessageListProps {
   displayItems: DisplayItem[]
@@ -77,6 +101,8 @@ export const MessageList = memo(function MessageList({
     null,
   )
   const continueWorkflow = useSessionStore((state) => state.continueWorkflow)
+  const retryWorkflowStep = useSessionStore((state) => state.retryWorkflowStep)
+  const workflowRetry = useSessionStore((state) => state.workflowRetry)
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
@@ -194,6 +220,12 @@ export const MessageList = memo(function MessageList({
             <div className="flex flex-1 items-center justify-center px-2 @md:px-4 py-4">{emptyState}</div>
           )}
           <div className="px-2 @md:px-4 pb-4">
+            {workflowRetry && isRunning && (
+              <div className="flex justify-center feed-item" data-testid="workflow-retry-indicator">
+                <RetryIndicator key={workflowRetry.attempt} retry={workflowRetry} />
+              </div>
+            )}
+
             {error && (
               <div className="feed-item bg-text-tool-error/10 border border-text-tool-error/50 rounded p-2">
                 <div className="flex items-start justify-between gap-2">
@@ -207,6 +239,18 @@ export const MessageList = memo(function MessageList({
                     size="sm"
                   />
                 </div>
+              </div>
+            )}
+
+            {activeWorkflowExecution?.status === 'blocked' && activeWorkflowExecution.currentStepId && (
+              <div className="flex justify-center gap-2 feed-item flex-wrap">
+                <button
+                  onClick={() => sessionId && retryWorkflowStep(sessionId)}
+                  disabled={isRunning}
+                  className="px-4 py-1.5 text-sm font-medium rounded bg-accent-primary/15 text-accent-primary border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isRunning ? '⏳ Resuming...' : '↻ Retry step'}
+                </button>
               </div>
             )}
 

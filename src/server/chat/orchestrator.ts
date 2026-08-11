@@ -108,6 +108,12 @@ export interface OrchestratorOptions {
   initialCompacting?: boolean
   /** When true, only warm up the LLM cache — no events, no messages, no tools. */
   warmup?: boolean
+  /** When true, transient per-attempt LLM errors are not surfaced as chat.error
+   *  events — the caller owns the failure UX (workflow executor). */
+  suppressRecoverableErrors?: boolean
+  /** When true, the agent-definition reminder is not re-injected at turn start
+   *  (already present in history — used for workflow retries/resumes). */
+  skipAgentReminder?: boolean
 }
 
 function resolveStatsIdentity(options: OrchestratorOptions): StatsIdentity {
@@ -333,7 +339,7 @@ export async function runAgentTurn(
     injectKickoff?: () => void
     onToolExecuted?: (toolCall: ToolCall, toolResult: ToolResult) => void
   },
-): Promise<{ returnValueContent?: string; returnValueResult?: string }> {
+): Promise<{ returnValueContent?: string; returnValueResult?: string; failed?: { error: string } }> {
   const allAgents = await loadAllAgentsDefault(options.sessionManager.getProjectWorkdir(options.sessionId))
   const agentDef = findAgentById(agentId, allAgents) ?? findAgentById(resolveDefaultAgentId(), allAgents)!
 
@@ -342,7 +348,7 @@ export async function runAgentTurn(
   const agentLlmClient = options.sessionManager.createClientForAgent(agentId, options.llmClient)
   const statsIdentity = resolveStatsIdentity({ ...options, llmClient: agentLlmClient })
 
-  if (!options.warmup) {
+  if (!options.warmup && !options.skipAgentReminder) {
     injectAgentReminder(options.sessionId, agentDef)
   }
 
@@ -413,6 +419,7 @@ export async function runAgentTurn(
       ...(options.initialCompacting ? { initialCompacting: true } : {}),
       ...(callbacks?.injectKickoff ? { injectKickoff: callbacks.injectKickoff } : {}),
       ...(callbacks?.onToolExecuted ? { onToolExecuted: callbacks.onToolExecuted } : {}),
+      ...(options.suppressRecoverableErrors ? { suppressChatError: true } : {}),
       ...(options.warmup ? { warmup: true } : {}),
     },
     turnMetrics,

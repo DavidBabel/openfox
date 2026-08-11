@@ -242,6 +242,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           unreadSessionIds: s.unreadSessionIds.filter((id) => id !== sessionId),
           crossSessionConfirmations: crossCleanup,
           sessionsWithPendingConfirmations: Object.keys(crossCleanup),
+          workflowRetry: null,
           pendingSessionCreate: false as boolean | string,
         }
       })
@@ -346,6 +347,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     restoredInput: null,
     error: null,
     activeWorkflowExecution: null,
+    workflowRetry: null,
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
     pendingSessionCreate: false as boolean | string,
@@ -915,6 +917,16 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const exec = pane?.activeWorkflowExecution
       if (!exec || exec.status !== 'waiting') return
       wsClient.send('runner.launch', buildResumePayload(exec, undefined, undefined, undefined, choiceId))
+    },
+
+    retryWorkflowStep: (sessionId) => {
+      const pane = paneFor(get(), sessionId)
+      const exec = pane?.activeWorkflowExecution
+      if (!exec || !exec.currentStepId) return
+      if (pane?.session?.isRunning) return
+      set({ workflowRetry: null })
+      set((s) => updatePane(s, sessionId, (p) => ({ ...p, error: null })))
+      wsClient.send('runner.launch', buildResumePayload(exec, undefined, undefined, undefined))
     },
 
     exitWorkflow: (sessionId) => {

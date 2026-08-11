@@ -1236,6 +1236,19 @@ describe('createWebSocketServer', () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       })),
+      getLatestWorkflowExecution: vi.fn(() => ({
+        id: 'exec-1',
+        sessionId: 'session-1',
+        workflowId: 'default',
+        workflowName: 'Build & Verify',
+        status: 'waiting',
+        currentStepId: 'work_location',
+        stepOutput: {},
+        params: {},
+        subGroup: 'verify',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })),
       resumeWorkflow: vi.fn(() => ({ params: {}, stepOutput: {} })),
     })
 

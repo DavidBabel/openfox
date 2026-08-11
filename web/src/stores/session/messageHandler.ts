@@ -15,6 +15,8 @@ import type {
   ChatTodoPayload,
   ChatMessagePayload,
   ChatMessageUpdatedPayload,
+  ChatMessageRemovedPayload,
+  ChatStepRetryPayload,
   ChatDonePayload,
   ChatErrorPayload,
   ChatPathConfirmationPayload,
@@ -259,6 +261,7 @@ export function handleServerMessage(
           unreadSessionIds: removeUnreadSessionId(base.unreadSessionIds, sessionId),
           crossSessionConfirmations: crossCleanup,
           sessionsWithPendingConfirmations: Object.keys(crossCleanup),
+          workflowRetry: null,
           ...(wasPendingCreate ? { pendingSessionCreate: sessionId } : {}),
         }
       })
@@ -649,6 +652,35 @@ export function handleServerMessage(
           visionFallbackByMessage: {},
         })),
       )
+      if (payload.reason !== 'error') {
+        set({ workflowRetry: null })
+      }
+      break
+    }
+
+    case 'chat.message_removed': {
+      const sessionId = message.sessionId
+      const payload = message.payload as ChatMessageRemovedPayload
+      const removed = new Set(payload.messageIds)
+      applyChat(set, get, sessionId, (pane) => ({
+        ...pane,
+        messages: pane.messages.filter((m) => !removed.has(m.id)),
+        error: null,
+      }))
+      break
+    }
+
+    case 'chat.step_retry': {
+      const sessionId = message.sessionId
+      const payload = message.payload as ChatStepRetryPayload
+      if (!isLivePane(get(), sessionId)) {
+        markBackgroundSessionUnread(set, message)
+        break
+      }
+      applyChat(set, get, sessionId, (pane) => ({ ...pane, error: null }))
+      set({
+        workflowRetry: { stepName: payload.stepName, attempt: payload.attempt, retryInMs: payload.retryInMs },
+      })
       break
     }
 
@@ -850,6 +882,9 @@ export function handleServerMessage(
         })
       ) {
         markBackgroundSessionUnread(set, message)
+      }
+      if (payload.status !== 'running') {
+        set({ workflowRetry: null })
       }
       break
     }

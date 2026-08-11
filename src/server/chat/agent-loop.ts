@@ -153,6 +153,9 @@ export interface TopLevelLoopConfig {
   /** When true, only warm up the LLM cache by sending system prompt + tools.
    *  Skips message creation, event emission, tool execution — just prefills the KV cache. */
   warmup?: boolean
+  /** When true, a soft LLM stream error is NOT surfaced as a chat.error event —
+   *  the caller handles failure reporting (workflow executor). */
+  suppressChatError?: boolean
 }
 
 // ============================================================================
@@ -165,7 +168,7 @@ const CONTINUE_PROMPT = 'Continue your previous response. Do NOT repeat what you
 export async function runTopLevelAgentLoop(
   config: TopLevelLoopConfig,
   turnMetrics: TurnMetrics,
-): Promise<{ returnValueContent?: string; returnValueResult?: string }> {
+): Promise<{ returnValueContent?: string; returnValueResult?: string; failed?: { error: string } }> {
   const { mode, sessionManager, sessionId, llmClient, signal, onMessage, statsIdentity } = config
   const append = config.append
   const agentType = config.subAgentMetadata ? ('sub-agent' as const) : undefined
@@ -309,6 +312,7 @@ export async function runTopLevelAgentLoop(
       signal,
       subAgentAliases,
       ...(config.retryPatterns ? { retryPatterns: config.retryPatterns } : {}),
+      ...(config.suppressChatError ? { suppressChatError: true } : {}),
       ...(modelSettings && { modelSettings }),
     })
 
@@ -364,6 +368,24 @@ export async function runTopLevelAgentLoop(
     if (result.aborted) {
       emitPartialDoneEvents(sessionId, assistantMsgId, statsIdentity, mode, turnMetrics, append, agentType)
       throw new Error('Aborted')
+    }
+
+    // The LLM call itself failed (soft stream error). Close the empty assistant
+    // message as an error and surface the failure to the caller — the workflow
+    // executor rolls the attempt back and retries, rather than treating the
+    // empty result as a legitimate completion. Checked before the metrics/
+    // compaction/truncation handling so an errored call is never mistaken for
+    // a legitimately compactable or truncatable turn.
+    if (result.error) {
+      const stats = turnMetrics.buildStats(statsIdentity, mode)
+      append(
+        createMessageDoneEvent(assistantMsgId, {
+          segments: result.segments,
+          stats,
+        }),
+      )
+      append(createChatDoneEvent(assistantMsgId, 'error', stats, agentType))
+      return { failed: { error: result.error } }
     }
 
     // A failed LLM call yields zero usage — updating context from it would wipe

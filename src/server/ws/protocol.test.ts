@@ -783,6 +783,32 @@ describe('ws/protocol', () => {
       })
     })
 
+    it('maps message.removed to chat.message_removed', () => {
+      const event: StoredEvent = {
+        ...baseEvent,
+        type: 'message.removed',
+        data: { messageIds: ['failed-1', 'failed-2'] },
+      }
+      const result = storedEventToServerMessage(event)
+      expect(result).toEqual({
+        type: 'chat.message_removed',
+        payload: { messageIds: ['failed-1', 'failed-2'] },
+      })
+    })
+
+    it('maps workflow.step_retry to chat.step_retry', () => {
+      const event: StoredEvent = {
+        ...baseEvent,
+        type: 'workflow.step_retry',
+        data: { stepName: 'Implement', attempt: 2, retryInMs: 4000 },
+      }
+      const result = storedEventToServerMessage(event)
+      expect(result).toEqual({
+        type: 'chat.step_retry',
+        payload: { stepName: 'Implement', attempt: 2, retryInMs: 4000 },
+      })
+    })
+
     it('extracts subAgentId from context.state data to payload top level', () => {
       const event: StoredEvent = {
         ...baseEvent,

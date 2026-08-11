@@ -615,6 +615,19 @@ export function getActiveWorkflowExecution(sessionId: string): WorkflowExecution
   return row
 }
 
+/**
+ * Latest execution for a session regardless of status. Used to re-activate a
+ * blocked execution when the user retries its step (blocked rows are excluded
+ * from getActiveWorkflowExecution).
+ */
+export function getLatestWorkflowExecution(sessionId: string): WorkflowExecutionRow | undefined {
+  const db = getDatabase()
+  const row = db
+    .prepare(`SELECT * FROM workflow_executions WHERE session_id = ? ORDER BY updated_at DESC LIMIT 1`)
+    .get(sessionId) as WorkflowExecutionRow | undefined
+  return row
+}
+
 export function clearWorkflowExecution(executionId: string): void {
   const db = getDatabase()
   const now = Date.now()

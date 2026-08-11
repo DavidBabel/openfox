@@ -29,6 +29,13 @@ export interface PendingQuestion {
   options: ChoiceOption[] | undefined
 }
 
+export interface WorkflowRetryState {
+  stepName: string
+  attempt: number
+  /** Delay in ms until the next retry attempt (drives the UI countdown). */
+  retryInMs: number
+}
+
 export interface StreamingBuffer {
   messageId: string | null
   deltaContent: string
@@ -97,6 +104,8 @@ export interface SessionState {
   restoredInput: string | null
   activeWorkflowExecution: WorkflowExecution | null
   error: { code: string; message: string } | null
+  /** Live status of an in-flight workflow-step LLM retry (cleared on completion). */
+  workflowRetry: WorkflowRetryState | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
   pendingSessionCreate: boolean | string
@@ -145,6 +154,8 @@ export interface SessionState {
     scope?: WorkflowLaunchScope,
   ) => void
   continueWorkflow: (sessionId: string, choiceId?: string) => void
+  /** Re-launch the workflow at its current step after a step failure (blocked execution). */
+  retryWorkflowStep: (sessionId: string) => void
   exitWorkflow: (sessionId: string) => void
   switchMode: (sessionId: string, mode: SessionMode) => void
   switchDangerLevel: (sessionId: string, dangerLevel: 'normal' | 'dangerous') => void

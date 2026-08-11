@@ -60,6 +60,9 @@ export interface PureStreamOptions {
    *  When a preparing event matches, the name is shown as "call_sub_agent"
    *  instead of the hallucinated name. */
   subAgentAliases?: Set<string>
+  /** When true, a stream error is recorded on the result but not emitted as a
+   *  chat.error event — the caller reports the failure itself. */
+  suppressChatError?: boolean
 }
 
 export interface PureStreamResult {
@@ -352,6 +355,9 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
           // the agent loop handles abort gracefully via signal check + emitPartialDoneEvents.
           if (signal?.aborted) break
           streamError = value.error
+          // The caller owns failure reporting (e.g. workflow retry UX) — still
+          // record the error on the result, but don't emit a chat.error event.
+          if (options.suppressChatError) break
           yield {
             type: 'chat.error',
             data: { error: value.error, recoverable: true },

@@ -17,6 +17,7 @@ describe('launchWorkflowRun', () => {
   let sessionManager: {
     setRunning: ReturnType<typeof vi.fn>
     getActiveWorkflowExecution: ReturnType<typeof vi.fn>
+    getLatestWorkflowExecution: ReturnType<typeof vi.fn>
     resumeWorkflow: ReturnType<typeof vi.fn>
   }
   let broadcast: ReturnType<typeof vi.fn>
@@ -28,6 +29,7 @@ describe('launchWorkflowRun', () => {
     sessionManager = {
       setRunning: vi.fn(),
       getActiveWorkflowExecution: vi.fn(() => null),
+      getLatestWorkflowExecution: vi.fn(() => null),
       resumeWorkflow: vi.fn(),
     }
     broadcast = vi.fn()
@@ -134,6 +136,38 @@ describe('launchWorkflowRun', () => {
     run({ workflowId: 'wf' })
     await flush()
     expect(onFinished).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-activates a blocked execution when retrying its step', async () => {
+    runOrchestratorMock.mockResolvedValue({ finalAction: { type: 'DONE' }, iterations: 1, totalTime: 1 })
+    sessionManager.getLatestWorkflowExecution = vi.fn(() => ({
+      id: 'exec-1',
+      sessionId: 'sess-1',
+      workflowId: 'default',
+      workflowName: 'Build & Verify',
+      status: 'blocked',
+      currentStepId: 'build',
+      currentStepName: 'Implement',
+      stepOutput: { content: 'x' },
+      params: { feature: 'f' },
+    }))
+    sessionManager.resumeWorkflow = vi.fn(() => ({ params: { feature: 'f' }, stepOutput: { content: 'x' } }))
+
+    run({ workflowId: 'default', resumeFrom: 'build' })
+    await flush()
+
+    // The blocked execution is flipped back to 'running' (reused id)
+    expect(sessionManager.resumeWorkflow).toHaveBeenCalledWith(
+      'sess-1',
+      'exec-1',
+      'default',
+      'Build & Verify',
+      undefined,
+    )
+    const options = runOrchestratorMock.mock.calls[0]![0]
+    expect(options.resumeFromStep).toBe('build')
+    expect(options.params).toEqual({ feature: 'f' })
+    expect(options.initialStepOutput).toEqual({ content: 'x' })
   })
 })
 

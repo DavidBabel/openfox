@@ -636,7 +636,7 @@ export function createWebSocketServer(
       const { messages, hiddenCount } = buildMessagesFromStoredEvents(events, maxVisible || undefined)
       const pendingConfirmations = foldPendingConfirmations(events)
       const pendingQuestions = getPendingQuestionsForSession(updatedSession.id)
-      const activeWorkflowExecution = sessionManager.getActiveWorkflowExecution(updatedSession.id)
+      const activeWorkflowExecution = sessionManager.getDisplayWorkflowExecution(updatedSession.id)
 
       // Update activeWorkdir when workspace changed so git polling picks up the right dir
       const effectiveWorkdir = updatedSession.workspace ?? updatedSession.workdir

@@ -83,10 +83,13 @@ export function launchWorkflowRun(deps: LaunchWorkflowRunDeps, payload: Workflow
     ...(payload.userChoice ? { userChoice: payload.userChoice } : {}),
     ...(payload.resumeFrom
       ? (() => {
-          const exec = sessionManager.getActiveWorkflowExecution(sessionId)
+          const exec = sessionManager.getLatestWorkflowExecution(sessionId)
           if (!exec) return {}
 
-          if (exec.status === 'waiting') {
+          if (exec.status === 'waiting' || exec.status === 'blocked') {
+            // Re-activate a paused (waiting) or failed-and-blocked execution so
+            // the resumed/retried run stays tracked: status flips back to
+            // 'running' (same execution id) and params/step output are restored.
             const resumed = sessionManager.resumeWorkflow(
               sessionId,
               exec.id,

@@ -27,7 +27,12 @@ const { mockRunAgentTurn } = vi.hoisted(() => ({ mockRunAgentTurn: vi.fn() }))
 // ============================================================================
 
 vi.mock('../events/index.js', () => ({
-  getEventStore: () => ({ append: mockAppend }),
+  getEventStore: () => ({
+    append: mockAppend,
+    getLatestSeq: vi.fn(() => 0),
+    getEvents: vi.fn(() => []),
+    deleteEventsAfterSeq: vi.fn(),
+  }),
   getCurrentContextWindowId: vi.fn(() => undefined),
 }))
 

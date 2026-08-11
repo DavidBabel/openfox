@@ -15,6 +15,9 @@ import type { MetadataEntry } from '../../shared/types.js'
 vi.mock('../events/index.js', () => ({
   getEventStore: () => ({
     append: vi.fn(),
+    getLatestSeq: vi.fn(() => 0),
+    getEvents: vi.fn(() => []),
+    deleteEventsAfterSeq: vi.fn(),
   }),
   getCurrentContextWindowId: vi.fn(() => undefined),
 }))

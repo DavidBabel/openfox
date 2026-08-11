@@ -54,12 +54,47 @@ export interface OrchestratorOptions {
   userMessage?: { content: string; attachments?: Attachment[] }
   /** For path confirmation dialogs (sent directly, not through EventStore) */
   onMessage?: (msg: ServerMessage) => void
+  /**
+   * When true, transient per-attempt LLM errors are not surfaced as chat.error
+   * events — the caller owns the failure UX (used by the workflow executor,
+   * which rolls back + retries and reports only the final outcome).
+   */
+  suppressRecoverableErrors?: boolean
+  /** Overrides for the LLM-failure retry backoff policy. */
+  llmRetryPolicy?: Partial<LLMRetryPolicy>
 }
 
 export interface OrchestratorResult {
   finalAction: NextAction
   iterations: number
   totalTime: number
+}
+
+// ============================================================================
+// LLM-Failure Retry Policy
+// ============================================================================
+
+/**
+ * Backoff policy for retrying a workflow agent step whose LLM call failed.
+ * The step retries with escalating delays, then settles into a steady
+ * cadence, until the retry window elapses (or the attempt backstop is hit).
+ */
+export interface LLMRetryPolicy {
+  /** Delay before attempt N+1: backoffMs[0] = before attempt 2, etc. */
+  backoffMs: number[]
+  /** Steady-state delay between attempts once the backoff ladder is exhausted. */
+  minIntervalMs: number
+  /** Total window from the first failure; retrying stops when it elapses. */
+  maxDurationMs: number
+  /** Hard cap on consecutive failed attempts for this step. */
+  maxAttempts: number
+}
+
+export const DEFAULT_LLM_RETRY_POLICY: LLMRetryPolicy = {
+  backoffMs: [1000, 5000, 30_000],
+  minIntervalMs: 60_000,
+  maxDurationMs: 30 * 60_000,
+  maxAttempts: 40,
 }
 
 // ============================================================================

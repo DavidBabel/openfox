@@ -921,7 +921,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const queueState = sessionManager.getQueueState(req.params.id)
     const pendingQuestions = getPendingQuestionsForSession(req.params.id)
     const pendingConfirmations = foldPendingConfirmations(events)
-    const activeWorkflowExecution = sessionManager.getActiveWorkflowExecution(req.params.id)
+    const activeWorkflowExecution = sessionManager.getDisplayWorkflowExecution(req.params.id)
 
     res.json({
       session: toClientSession(session!),

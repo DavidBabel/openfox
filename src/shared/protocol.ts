@@ -102,6 +102,8 @@ export type ServerMessageType =
   // Vision fallback events
   | 'chat.vision_fallback' // Vision model is describing an image
   | 'chat.error' // Error during generation
+  | 'chat.message_removed' // One or more messages were rolled back and must be dropped from the feed
+  | 'chat.step_retry' // A workflow step's LLM call failed — reporting a retry in progress
   | 'chat.path_confirmation' // Request user confirmation for outside-workdir path access
   | 'chat.ask_user' // Request user answer to a question
   // Mode events
@@ -324,6 +326,17 @@ export interface ChatDonePayload {
 export interface ChatErrorPayload {
   error: string
   recoverable: boolean
+}
+
+export interface ChatMessageRemovedPayload {
+  messageIds: string[]
+}
+
+export interface ChatStepRetryPayload {
+  stepName: string
+  attempt: number
+  /** Delay in ms until the next retry attempt (drives the UI countdown). */
+  retryInMs: number
 }
 
 // Path confirmation payloads
