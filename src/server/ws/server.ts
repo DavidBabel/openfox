@@ -87,13 +87,13 @@ function hashContent(content: string): string {
 function moduleGitDiff(cwd: string): Promise<{ hash: string; files: GitDiffFile[] }> {
   return new Promise((resolve) => {
     const env = gitSpawnEnv()
-    const diffProc = spawn('git', ['diff', '--name-status', 'HEAD'], {
+    const diffProc = spawn('git', ['diff', '--ignore-submodules=none', '--name-status', 'HEAD'], {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     })
-    const statusProc = spawn('git', ['status', '--porcelain'], {
+    const statusProc = spawn('git', ['status', '--porcelain', '--ignore-submodules=none'], {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
