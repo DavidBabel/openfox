@@ -77,6 +77,7 @@ vi.mock('../../stores/agents', () => ({
 }))
 
 import { AgentsModal } from './AgentsModal'
+import { useAgentsStore } from '../../stores/agents'
 
 describe('AgentsModal', () => {
   beforeEach(() => {
@@ -98,5 +99,19 @@ describe('AgentsModal', () => {
 
     expect(agentButton.className).toContain('bg-accent-primary/25')
     expect(subAgentButton.className).not.toContain('bg-accent-primary/25')
+  })
+
+  it('finishes saving a new agent and returns to the list view', async () => {
+    vi.mocked(useAgentsStore.getState().createAgent).mockResolvedValue({ success: true })
+    const user = userEvent.setup()
+    render(<AgentsModal isOpen onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: /New/i }))
+    await user.type(screen.getByPlaceholderText('My Agent'), 'Helper')
+    await user.type(screen.getByPlaceholderText('Instructions for this agent...'), 'Helps with things.')
+
+    await user.click(screen.getByRole('button', { name: /Save/i }))
+
+    expect(screen.getByRole('button', { name: /New/i })).toBeTruthy()
   })
 })

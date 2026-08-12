@@ -57,6 +57,8 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
 
   const [modelModalAgentId, setModelModalAgentId] = useState<string | null>(null)
 
+  const sessionScopeId = useSessionScope()
+
   const [availableTools, setAvailableTools] = useState<{ name: string; actions: string[]; topLevelOnly?: boolean }[]>(
     [],
   )
@@ -244,7 +246,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
 
     // Propagate to current session if this agent is active
     const agentId = editingId ?? formId
-    const sessionId = useSessionScope()
+    const sessionId = sessionScopeId
     const currentSession = sessionId
       ? (useSessionStore.getState().panes[sessionId]?.session ?? null)
       : useSessionStore.getState().currentSession
@@ -470,6 +472,7 @@ function BuiltInModelModal({
   const agents = [...defaults, ...userItems, ...projectItems]
   const agent = agentId ? agents.find((a) => a.id === agentId) : undefined
   const providers = useConfigStore((s) => s.providers)
+  const sessionScopeId = useSessionScope()
 
   useEffect(() => {
     if (!agentId) return
@@ -491,7 +494,7 @@ function BuiltInModelModal({
       await saveAgentModelOverride(agentId, value)
 
       // Propagate to current session if this agent is active
-      const sessionId = useSessionScope()
+      const sessionId = sessionScopeId
       const currentSession = sessionId
         ? (useSessionStore.getState().panes[sessionId]?.session ?? null)
         : useSessionStore.getState().currentSession

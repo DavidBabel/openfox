@@ -11,6 +11,7 @@ import { mcpStatusColor, mcpStatusDot } from '../../lib/mcp-utils'
 import { wsClient } from '../../lib/ws'
 import { authFetch } from '../../lib/api'
 import { formatRootDir, getRootDirBlockReason, suggestRootDirChild } from '@shared/workspace.js'
+import { dedupById } from '../../lib/modal-utils'
 
 interface ProjectSettingsModalProps {
   isOpen: boolean
@@ -26,8 +27,28 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   const saveWsConfig = useWorkspaceConfigStore((s) => s.saveConfig)
   const defaultAgents = useAgentsStore((s) => s.defaults)
   const userAgents = useAgentsStore((s) => s.userItems)
+  const projectAgents = useAgentsStore((s) => s.projectItems)
   const fetchAgents = useAgentsStore((s) => s.fetchAgents)
-  const topLevelAgents = [...defaultAgents, ...userAgents].filter((a) => !a.subagent)
+  const topLevelByScope = {
+    builtin: defaultAgents.filter((a) => !a.subagent),
+    user: userAgents.filter((a) => !a.subagent),
+    project: projectAgents.filter((a) => !a.subagent),
+  }
+  const topLevelAgents = dedupById(dedupById(topLevelByScope.builtin, topLevelByScope.user), topLevelByScope.project)
+  const scopeOrder = [
+    { label: 'Project', agents: topLevelByScope.project },
+    { label: 'User', agents: topLevelByScope.user },
+    { label: 'Built-in', agents: topLevelByScope.builtin },
+  ]
+  const groupedAgents = scopeOrder.map((scope) => ({
+    label: scope.label,
+    agents: scope.agents.filter(
+      (agent) =>
+        !scopeOrder
+          .slice(0, scopeOrder.indexOf(scope))
+          .some((higher) => higher.agents.some((candidate) => candidate.id === agent.id)),
+    ),
+  }))
 
   const handleClose = () => {
     try {
@@ -78,7 +99,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       setMcpDirty(false)
       setExpandedServers(new Set())
       fetchWsConfig(project.workdir)
-      fetchAgents().catch(() => {})
+      fetchAgents(project.workdir).catch(() => {})
     }
   }, [isOpen, project, fetchWsConfig, fetchAgents])
 
@@ -432,11 +453,18 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
           >
             <option value="">Use system default</option>
             {currentAgentMissing && <option value={defaultAgent}>{defaultAgent} (missing agent)</option>}
-            {topLevelAgents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.name}
-              </option>
-            ))}
+            {groupedAgents.map(
+              ({ label, agents }) =>
+                agents.length > 0 && (
+                  <optgroup key={label} label={label}>
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ),
+            )}
           </select>
           {currentAgentMissing && (
             <p className="text-xs text-red-400 mt-1">
