@@ -101,6 +101,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const prevLenRef = useRef(0)
   const cursorPosRef = useRef(0)
   const autocompleteRef = useRef<AtMentionAutocompleteHandle>(null)
   const slashAutocompleteRef = useRef<SlashAutocompleteHandle>(null)
@@ -162,20 +163,36 @@ export function ChatInput({
     }
   }, [restoredInput, setInput, clearRestoredInput])
 
-  const resizeTextarea = useCallback(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-    // Always measure from a collapsed height so a previously forced (possibly
-    // inflated) height can't skew scrollHeight and keep the box stuck.
-    textarea.style.height = 'auto'
-    // An empty textarea reports its wrapped placeholder in scrollHeight, which
-    // balloons the box on narrow layouts; reset it to the minimum height instead.
-    if (!input) {
-      textarea.style.height = `${COMPOSER_MIN_HEIGHT}px`
-      return
-    }
-    textarea.style.height = `${Math.min(COMPOSER_MAX_HEIGHT, textarea.scrollHeight)}px`
-  }, [input])
+  const resizeTextarea = useCallback(
+    (opts: { force?: boolean } = {}) => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      // An empty textarea reports its wrapped placeholder in scrollHeight, which
+      // balloons the box on narrow layouts; pin it to the minimum height instead.
+      if (!input) {
+        textarea.style.height = `${COMPOSER_MIN_HEIGHT}px`
+        return
+      }
+      // While typing (content growing), avoid collapsing to 'auto' on every
+      // keystroke: that forces a full re-layout of the collapsed box and makes the
+      // pane jump. Reset to 'auto' only when the content shrinks, or when forced
+      // (e.g. the column width changed and wrapping needs re-measuring).
+      const isGrowing = input.length >= prevLenRef.current
+      prevLenRef.current = input.length
+      if (opts.force || !isGrowing) {
+        textarea.style.height = 'auto'
+      }
+      textarea.style.height = `${Math.min(COMPOSER_MAX_HEIGHT, textarea.scrollHeight)}px`
+    },
+    [input],
+  )
+
+  // Latest resizeTextarea for the (stable) width observer, so the observer isn't
+  // torn down and rebuilt on every keystroke.
+  const resizeTextareaRef = useRef(resizeTextarea)
+  useEffect(() => {
+    resizeTextareaRef.current = resizeTextarea
+  }, [resizeTextarea])
 
   useEffect(() => {
     if (!sessionId) return
@@ -209,8 +226,9 @@ export function ChatInput({
   }, [input, resizeTextarea])
 
   // Re-evaluate the height when the composer's column changes width (narrower or
-  // wider panes change how content wraps). Guarded to only fire on width changes
-  // so adjusting the textarea's own height doesn't loop.
+  // wider panes change how content wraps). Forces a fresh 'auto' measurement so a
+  // previously measured height can't keep the box stale. Guarded to only fire on
+  // width changes so adjusting the textarea's own height doesn't loop.
   useEffect(() => {
     const container = textareaRef.current?.parentElement
     if (!container || typeof ResizeObserver === 'undefined') return
@@ -219,11 +237,11 @@ export function ChatInput({
       const width = container.clientWidth
       if (width === lastWidth) return
       lastWidth = width
-      resizeTextarea()
+      resizeTextareaRef.current({ force: true })
     })
     observer.observe(container)
     return () => observer.disconnect()
-  }, [resizeTextarea])
+  }, [])
 
   useEffect(() => {
     const textarea = textareaRef.current

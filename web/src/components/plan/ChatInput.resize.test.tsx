@@ -85,38 +85,58 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+function chatProps(input: string) {
+  return {
+    input,
+    setInput: vi.fn(),
+    attachments: [] as never[],
+    setAttachments: vi.fn(),
+    dragOver: false,
+    setDragOver: vi.fn(),
+    errorMessage: null,
+    setErrorMessage: vi.fn(),
+    scrollToBottom: vi.fn(),
+    sessionId: 's1',
+    showHistory: false,
+    history: [] as never[],
+    selectedIndex: 0,
+    openHistory: vi.fn(),
+    closeHistory: vi.fn(),
+    navigateUp: vi.fn(),
+    navigateDown: vi.fn(),
+    selectCurrent: vi.fn(),
+    isAutoScrollActive: true,
+    setAutoScroll: vi.fn(),
+    onOpenMessageSearch: vi.fn(),
+    onOpenCommandsModal: vi.fn(),
+    onOpenWorkflowsModal: vi.fn(),
+    onSelectWorkflow: vi.fn(),
+    onSelectWorkflowWithSubGroup: vi.fn(),
+    onSendCommand: vi.fn(),
+    clearInput: vi.fn(),
+  }
+}
+
 function renderChatInput(input = '') {
-  return render(
-    <ChatInput
-      input={input}
-      setInput={vi.fn()}
-      attachments={[]}
-      setAttachments={vi.fn()}
-      dragOver={false}
-      setDragOver={vi.fn()}
-      errorMessage={null}
-      setErrorMessage={vi.fn()}
-      scrollToBottom={vi.fn()}
-      sessionId="s1"
-      showHistory={false}
-      history={[]}
-      selectedIndex={0}
-      openHistory={vi.fn()}
-      closeHistory={vi.fn()}
-      navigateUp={vi.fn()}
-      navigateDown={vi.fn()}
-      selectCurrent={vi.fn()}
-      isAutoScrollActive={true}
-      setAutoScroll={vi.fn()}
-      onOpenMessageSearch={vi.fn()}
-      onOpenCommandsModal={vi.fn()}
-      onOpenWorkflowsModal={vi.fn()}
-      onSelectWorkflow={vi.fn()}
-      onSelectWorkflowWithSubGroup={vi.fn()}
-      onSendCommand={vi.fn()}
-      clearInput={vi.fn()}
-    />,
-  )
+  return render(<ChatInput {...chatProps(input)} />)
+}
+
+// Records every assignment to the textarea's style.height so tests can assert
+// whether the composer collapsed to 'auto' in between (layout churn while typing).
+function trackHeightWrites(textarea: HTMLTextAreaElement): string[] {
+  const writes: string[] = []
+  const protoDesc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'height')
+  Object.defineProperty(textarea.style, 'height', {
+    configurable: true,
+    get() {
+      return textarea.style.getPropertyValue('height')
+    },
+    set(value: string) {
+      writes.push(value)
+      protoDesc?.set?.call(this, value)
+    },
+  })
+  return writes
 }
 
 describe('ChatInput auto-resize', () => {
@@ -144,5 +164,29 @@ describe('ChatInput auto-resize', () => {
 
     const textarea = screen.getByTestId<HTMLTextAreaElement>('chat-input-textarea')
     expect(textarea.style.height).toBe('200px')
+  })
+
+  it('growing while typing does not collapse to auto (no layout churn per keystroke)', () => {
+    mockScrollHeight = 184
+    const { rerender } = renderChatInput('line one\nline two')
+    const textarea = screen.getByTestId<HTMLTextAreaElement>('chat-input-textarea')
+    const writes = trackHeightWrites(textarea)
+
+    rerender(<ChatInput {...chatProps('line one\nline two\nline three')} />)
+
+    expect(writes).not.toContain('auto')
+    expect(writes.at(-1)).toBe('184px')
+  })
+
+  it('collapses to auto before measuring when content shrinks', () => {
+    mockScrollHeight = 124
+    const { rerender } = renderChatInput('line one\nline two\nline three')
+    const textarea = screen.getByTestId<HTMLTextAreaElement>('chat-input-textarea')
+    const writes = trackHeightWrites(textarea)
+
+    rerender(<ChatInput {...chatProps('line one')} />)
+
+    expect(writes).toContain('auto')
+    expect(writes.at(-1)).toBe('124px')
   })
 })
