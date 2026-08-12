@@ -1,18 +1,29 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { SplitControlPanel } from './SplitControlPanel'
 
-const { focusPaneMock, closePaneMock, reorderPaneMock, openPaneMock, isPaneOpenMock, onLayoutChangeMock } = vi.hoisted(
-  () => ({
-    focusPaneMock: vi.fn(),
-    closePaneMock: vi.fn(),
-    reorderPaneMock: vi.fn(),
-    openPaneMock: vi.fn(async () => undefined),
-    isPaneOpenMock: vi.fn((_id?: string) => false),
-    onLayoutChangeMock: vi.fn(),
-  }),
-)
+const {
+  focusPaneMock,
+  closePaneMock,
+  reorderPaneMock,
+  openPaneMock,
+  isPaneOpenMock,
+  onLayoutChangeMock,
+  createSessionMock,
+  resetPendingSessionCreateMock,
+  listProjectsMock,
+} = vi.hoisted(() => ({
+  focusPaneMock: vi.fn(),
+  closePaneMock: vi.fn(),
+  reorderPaneMock: vi.fn(),
+  openPaneMock: vi.fn(async () => undefined),
+  isPaneOpenMock: vi.fn((_id?: string) => false),
+  onLayoutChangeMock: vi.fn(),
+  createSessionMock: vi.fn(),
+  resetPendingSessionCreateMock: vi.fn(),
+  listProjectsMock: vi.fn(async () => undefined),
+}))
 
 let storeState: Record<string, unknown> = {}
 
@@ -23,7 +34,14 @@ vi.mock('../../stores/session', () => ({
 }))
 
 vi.mock('../../stores/project', () => ({
-  useProjectStore: (selector: (state: unknown) => unknown) => selector({ projects: [{ id: 'p1', name: 'acme-app' }] }),
+  useProjectStore: (selector: (state: unknown) => unknown) =>
+    selector({
+      projects: [
+        { id: 'p1', name: 'acme-app', workdir: '/home/dev/acme-app' },
+        { id: 'p2', name: 'other-repo', workdir: '/home/dev/other-repo' },
+      ],
+      listProjects: listProjectsMock,
+    }),
 }))
 
 const pane = (id: string, title: string, messages: unknown[] = []) => ({
@@ -81,6 +99,8 @@ describe('SplitControlPanel', () => {
       reorderPane: reorderPaneMock,
       openPane: openPaneMock,
       isPaneOpen: isPaneOpenMock,
+      createSession: createSessionMock,
+      resetPendingSessionCreate: resetPendingSessionCreateMock,
     }
     focusPaneMock.mockClear()
     closePaneMock.mockClear()
@@ -89,6 +109,9 @@ describe('SplitControlPanel', () => {
     isPaneOpenMock.mockReset()
     isPaneOpenMock.mockImplementation(() => false)
     onLayoutChangeMock.mockClear()
+    createSessionMock.mockClear()
+    resetPendingSessionCreateMock.mockClear()
+    listProjectsMock.mockClear()
   })
 
   afterEach(() => cleanup())
@@ -196,5 +219,38 @@ describe('SplitControlPanel', () => {
     expect(section).toBeDefined()
     expect(screen.getByText('No generation in the last 30 min')).toBeDefined()
     expect(section.querySelector('svg')).toBeNull()
+  })
+
+  it('opens the project picker from the plus button and refreshes projects', () => {
+    renderPanel()
+    fireEvent.click(screen.getByLabelText('New session'))
+    expect(listProjectsMock).toHaveBeenCalled()
+    expect(screen.getByText('acme-app')).toBeDefined()
+    expect(screen.getByText('other-repo')).toBeDefined()
+  })
+
+  it('creates a session in the chosen project and opens it as a focused pane', async () => {
+    createSessionMock.mockResolvedValue({ id: 's9', projectId: 'p2' })
+    renderPanel()
+    fireEvent.click(screen.getByLabelText('New session'))
+    fireEvent.click(screen.getByText('other-repo'))
+
+    await waitFor(() => expect(createSessionMock).toHaveBeenCalledWith('p2'))
+    await waitFor(() => expect(openPaneMock).toHaveBeenCalledWith('s9', { focus: true }))
+    expect(resetPendingSessionCreateMock).toHaveBeenCalled()
+  })
+
+  it('keeps the picker open with an inline error when session creation fails', async () => {
+    createSessionMock.mockResolvedValue(null)
+    renderPanel()
+    fireEvent.click(screen.getByLabelText('New session'))
+    fireEvent.click(screen.getByText('other-repo'))
+
+    await waitFor(() => expect(createSessionMock).toHaveBeenCalledWith('p2'))
+    expect(openPaneMock).not.toHaveBeenCalled()
+    expect(resetPendingSessionCreateMock).not.toHaveBeenCalled()
+    // The picker stays open and surfaces the failure instead of silently closing
+    expect(screen.getByText(/could not create/i)).toBeDefined()
+    expect(screen.getByText('other-repo')).toBeDefined()
   })
 })

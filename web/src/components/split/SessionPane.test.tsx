@@ -3,6 +3,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { SessionPane } from './SessionPane'
 
+const { authFetchMock, tasksModalProps, settingsModalProps } = vi.hoisted(() => ({
+  authFetchMock: vi.fn(async () => ({ ok: true })),
+  tasksModalProps: { isOpen: false, projectId: '' },
+  settingsModalProps: { isOpen: false },
+}))
+
 let storeState: Record<string, unknown> = {}
 
 vi.mock('../../stores/session', () => ({
@@ -11,6 +17,23 @@ vi.mock('../../stores/session', () => ({
 
 vi.mock('../../stores/project', () => ({
   useProjectStore: (selector: (state: unknown) => unknown) => selector({ projects: [{ id: 'p1', name: 'acme-app' }] }),
+}))
+
+vi.mock('../../lib/api', () => ({ authFetch: authFetchMock }))
+
+vi.mock('../tasks/TasksModal', () => ({
+  TasksModal: (props: { isOpen: boolean; projectId: string }) => {
+    tasksModalProps.isOpen = props.isOpen
+    tasksModalProps.projectId = props.projectId
+    return <div data-testid="tasks-modal" />
+  },
+}))
+
+vi.mock('../settings/ProjectSettingsModal', () => ({
+  ProjectSettingsModal: (props: { isOpen: boolean }) => {
+    settingsModalProps.isOpen = props.isOpen
+    return <div data-testid="settings-modal" />
+  },
 }))
 
 const planPanelProps = { sessionId: '', criteriaSidebarOpen: true }
@@ -46,6 +69,10 @@ describe('SessionPane', () => {
     storeState = { panes: { s1: makePane('s1') } }
     planPanelProps.sessionId = ''
     planPanelProps.criteriaSidebarOpen = false
+    tasksModalProps.isOpen = false
+    tasksModalProps.projectId = ''
+    settingsModalProps.isOpen = false
+    authFetchMock.mockClear()
     props.onFocus.mockClear()
     props.onClose.mockClear()
   })
@@ -105,5 +132,45 @@ describe('SessionPane', () => {
   it('marks the pane as focused', () => {
     render(<SessionPane {...props} focused={true} />)
     expect(document.querySelector('[data-focused="true"]')).not.toBeNull()
+  })
+
+  it('turns the project tag into a dropdown with project actions', () => {
+    render(<SessionPane {...props} />)
+    fireEvent.click(screen.getByTitle('acme-app'))
+    expect(screen.getByText('Manage tasks')).toBeDefined()
+    expect(screen.getByText('Open project folder')).toBeDefined()
+    expect(screen.getByText('Edit project settings')).toBeDefined()
+  })
+
+  it('opens the tasks modal scoped to the pane project from the dropdown', () => {
+    render(<SessionPane {...props} />)
+    fireEvent.click(screen.getByTitle('acme-app'))
+    fireEvent.click(screen.getByText('Manage tasks'))
+    expect(tasksModalProps.isOpen).toBe(true)
+    expect(tasksModalProps.projectId).toBe('p1')
+  })
+
+  it('fires the open-folder endpoint for the pane project from the dropdown', () => {
+    render(<SessionPane {...props} />)
+    fireEvent.click(screen.getByTitle('acme-app'))
+    fireEvent.click(screen.getByText('Open project folder'))
+    expect(authFetchMock).toHaveBeenCalledWith('/api/projects/p1/open-folder')
+  })
+
+  it('opens the project settings modal for the pane project from the dropdown', () => {
+    render(<SessionPane {...props} />)
+    fireEvent.click(screen.getByTitle('acme-app'))
+    fireEvent.click(screen.getByText('Edit project settings'))
+    expect(settingsModalProps.isOpen).toBe(true)
+  })
+
+  it('falls back to a plain project-id tag when the project record is unknown', () => {
+    storeState.panes = {
+      s1: makePane('s1', { session: { id: 's1', projectId: 'ghost-project', metadata: { title: 'Ghost' } } }),
+    }
+    render(<SessionPane {...props} />)
+    expect(screen.getByText('ghost-proj')).toBeDefined()
+    expect(screen.queryByTitle('ghost-proj')).toBeNull()
+    expect(screen.queryByText('Manage tasks')).toBeNull()
   })
 })

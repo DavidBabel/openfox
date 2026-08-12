@@ -16,11 +16,29 @@ export function SplitView({ controlOpen = true }: SplitViewProps) {
   const focusedSessionId = useSessionStore((state) => state.focusedSessionId ?? state.currentSession?.id)
   const focusPane = useSessionStore((state) => state.focusPane)
   const closePane = useSessionStore((state) => state.closePane)
+  const listHomeSessions = useSessionStore((state) => state.listHomeSessions)
   const [layout, setLayout] = useState(readSplitLayoutMode)
 
   useEffect(() => {
     writeSplitLayoutMode(layout)
   }, [layout])
+
+  // Keep the control-panel session list fresh while the split view is the
+  // active route. Sessions created, renamed or deleted in other windows — and
+  // in other projects, which the server's session.created broadcast skips for
+  // a differently-focused client — only reach this window via a poll.
+  useEffect(() => {
+    void listHomeSessions()
+    const interval = setInterval(() => void listHomeSessions(), 20_000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void listHomeSessions()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [listHomeSessions])
 
   // Navigate home only when the user closes the last pane. A fresh visit with
   // no panes stays put and shows an empty state so the control panel can open

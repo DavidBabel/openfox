@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { useProjectStore } from '../../stores/project'
 import { PlanPanel } from '../plan/PlanPanel'
-import { XCloseIcon, MenuIcon } from '../shared/icons'
+import { TasksModal } from '../tasks/TasksModal'
+import { ProjectSettingsModal } from '../settings/ProjectSettingsModal'
+import { DropdownMenu } from '../shared/DropdownMenu'
+import { authFetch } from '../../lib/api'
+import { XCloseIcon, MenuIcon, ChevronDownIcon, TasksIcon, FolderIcon, GearIcon } from '../shared/icons'
 
 // Container-query threshold is 768px; leave margin so the inline sidebar fits.
 const CRITERIA_MIN_WIDTH = 788
@@ -47,6 +51,8 @@ export function SessionPane({ sessionId, focused, onFocus, onClose, className }:
   const isRunning = pane?.session?.isRunning ?? false
   const confirmationsCount = pane?.pendingPathConfirmations.length ?? 0
   const questionsCount = pane?.pendingQuestions.length ?? 0
+  const [tasksOpen, setTasksOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const attention = useMemo(() => {
     const badges: string[] = []
@@ -70,9 +76,44 @@ export function SessionPane({ sessionId, focused, onFocus, onClose, className }:
           className={`w-2 h-2 rounded-full shrink-0 ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-text-muted/40'}`}
           title={isRunning ? 'Running' : 'Not running'}
         />
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-primary shrink-0 max-w-[80px] truncate">
-          {project?.name ?? (projectId ? projectId.slice(0, 10) : '…')}
-        </span>
+        {project ? (
+          <DropdownMenu
+            items={[
+              {
+                label: 'Manage tasks',
+                icon: <TasksIcon className="w-4 h-4" />,
+                onClick: () => setTasksOpen(true),
+              },
+              {
+                label: 'Open project folder',
+                icon: <FolderIcon className="w-4 h-4" />,
+                onClick: () => {
+                  void authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {})
+                },
+              },
+              {
+                label: 'Edit project settings',
+                icon: <GearIcon className="w-4 h-4" />,
+                onClick: () => setSettingsOpen(true),
+              },
+            ]}
+            minWidth="170px"
+            trigger={
+              <button
+                type="button"
+                title={project.name}
+                className="text-[10px] font-semibold uppercase tracking-wide text-accent-primary shrink-0 max-w-[110px] flex items-center gap-0.5 hover:underline"
+              >
+                <span className="truncate">{project.name}</span>
+                <ChevronDownIcon className="w-3 h-3 shrink-0" />
+              </button>
+            }
+          />
+        ) : (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-primary shrink-0 max-w-[80px] truncate">
+            {projectId ? projectId.slice(0, 10) : '…'}
+          </span>
+        )}
         <span className="text-xs text-text-primary truncate flex-1 min-w-0" title={title}>
           {title}
         </span>
@@ -120,6 +161,13 @@ export function SessionPane({ sessionId, focused, onFocus, onClose, className }:
           }}
         />
       </div>
+
+      {project && (
+        <>
+          <TasksModal isOpen={tasksOpen} onClose={() => setTasksOpen(false)} projectId={project.id} />
+          <ProjectSettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} project={project} />
+        </>
+      )}
     </div>
   )
 }

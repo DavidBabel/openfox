@@ -3,11 +3,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { SplitView } from './SplitView'
 
-const { focusPaneMock, closePaneMock, navigateMock, controlCollapsedMock } = vi.hoisted(() => ({
+const { focusPaneMock, closePaneMock, navigateMock, controlCollapsedMock, listHomeSessionsMock } = vi.hoisted(() => ({
   focusPaneMock: vi.fn(),
   closePaneMock: vi.fn(),
   navigateMock: vi.fn(),
   controlCollapsedMock: vi.fn(),
+  listHomeSessionsMock: vi.fn(async () => undefined),
 }))
 
 let storeState: Record<string, unknown> = {}
@@ -57,14 +58,20 @@ describe('SplitView', () => {
       panes: {},
       focusPane: focusPaneMock,
       closePane: closePaneMock,
+      listHomeSessions: listHomeSessionsMock,
     }
     focusPaneMock.mockClear()
     closePaneMock.mockClear()
     navigateMock.mockClear()
     controlCollapsedMock.mockClear()
+    listHomeSessionsMock.mockClear()
   })
 
-  afterEach(() => cleanup())
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+  })
 
   it('renders the control column next to the panes', () => {
     storeState.openSessionIds = ['s1']
@@ -144,5 +151,27 @@ describe('SplitView', () => {
     storeState.panes = { s1: makePane('s1') }
     render(<SplitView controlOpen={false} />)
     expect(controlCollapsedMock).toHaveBeenCalledWith(true)
+  })
+
+  it('refreshes the session list on mount, on an interval and when the tab refocuses', () => {
+    vi.useFakeTimers()
+    storeState.openSessionIds = ['s1']
+    storeState.focusedSessionId = 's1'
+    storeState.panes = { s1: makePane('s1') }
+    render(<SplitView />)
+
+    // Immediate refresh on mount
+    expect(listHomeSessionsMock).toHaveBeenCalledTimes(1)
+
+    // Periodic refresh while the route stays mounted
+    vi.advanceTimersByTime(20_000)
+    expect(listHomeSessionsMock).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(20_000)
+    expect(listHomeSessionsMock).toHaveBeenCalledTimes(3)
+
+    // Refocusing the tab triggers an immediate refresh
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(listHomeSessionsMock).toHaveBeenCalledTimes(4)
   })
 })

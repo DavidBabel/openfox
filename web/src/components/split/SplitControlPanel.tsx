@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { useProjectStore } from '../../stores/project'
-import { ChevronUpIcon, ChevronDownIcon, XCloseIcon } from '../shared/icons'
+import { ChevronUpIcon, ChevronDownIcon, XCloseIcon, PlusIcon } from '../shared/icons'
 import { AggregateStats } from './AggregateStats'
+import { SplitNewSessionModal } from './SplitNewSessionModal'
 import type { SplitLayoutMode } from '../../lib/splitPersistence'
 import type { SessionSummary } from '@shared/types.js'
 
@@ -22,6 +23,7 @@ interface SplitControlPanelProps {
  * then most recent. Clicking a session opens it as a pane.
  */
 export function SplitControlPanel({ collapsed = false, layout, onLayoutChange }: SplitControlPanelProps) {
+  const [newSessionOpen, setNewSessionOpen] = useState(false)
   const openSessionIds = useSessionStore((state) => state.openSessionIds)
   const focusedSessionId = useSessionStore((state) => state.focusedSessionId ?? state.currentSession?.id)
   const panes = useSessionStore((state) => state.panes)
@@ -171,7 +173,18 @@ export function SplitControlPanel({ collapsed = false, layout, onLayoutChange }:
         </div>
 
         <div className="px-3 pt-3 pb-4 border-t border-border">
-          <h2 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-1">Sessions</h2>
+          <div className="flex items-center mb-1">
+            <h2 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Sessions</h2>
+            <button
+              type="button"
+              onClick={() => setNewSessionOpen(true)}
+              className="ml-auto p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+              title="New session"
+              aria-label="New session"
+            >
+              <PlusIcon className="w-3.5 h-3.5" />
+            </button>
+          </div>
           {sortedSessions.length === 0 ? (
             <p className="text-xs text-text-muted">No sessions yet.</p>
           ) : (
@@ -204,6 +217,7 @@ export function SplitControlPanel({ collapsed = false, layout, onLayoutChange }:
           )}
         </div>
       </div>
+      <SplitNewSessionModal isOpen={newSessionOpen} onClose={() => setNewSessionOpen(false)} />
     </aside>
   )
 }
