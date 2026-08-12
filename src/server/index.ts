@@ -1300,6 +1300,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         undefined,
         undefined,
         hiddenCount,
+        sessionManager.getDisplayWorkflowExecution(sessionId) ?? undefined,
       )
       wssExports.broadcastForSession(sessionId, { ...stateMsg, sessionId })
     }
