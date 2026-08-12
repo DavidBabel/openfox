@@ -3,6 +3,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '../../stores/session'
 import { SETTINGS_KEYS, useSettingsStore } from '../../stores/settings'
+import { SessionScopeProvider } from '../plan/session-scope'
 import { ToolCallDisplay } from './ToolCallDisplay'
 
 vi.mock('./RunCommandView', () => ({
@@ -209,6 +210,48 @@ describe('ToolCallDisplay — PathConfirmationButtons placement', () => {
     expect(previewPos).not.toBe(-1)
     expect(denyPos).not.toBe(-1)
     expect(denyPos).toBeGreaterThan(previewPos)
+  })
+
+  it('renders PathConfirmationButtons for a non-focused split pane without focusing it', () => {
+    useSessionStore.setState({
+      focusedSessionId: 's1',
+      pendingPathConfirmations: [],
+      panes: {
+        s2: {
+          session: null,
+          messages: [],
+          hiddenCount: 0,
+          currentTodos: [],
+          contextState: null,
+          subAgentContextStates: {},
+          pendingPathConfirmations: [pendingConfirmation],
+          pendingQuestions: [],
+          visionFallbackByMessage: {},
+          queuedMessages: [],
+          abortInProgress: false,
+          restoredInput: null,
+          activeWorkflowExecution: null,
+          gitStatus: null,
+          error: null,
+        },
+      },
+    })
+
+    const { container } = render(
+      <SessionScopeProvider value="s2">
+        <ToolCallDisplay
+          tool="run_command"
+          args={{ command: 'echo hello' }}
+          status="pending"
+          variant="expandable"
+          callId="call-run-1"
+        />
+      </SessionScopeProvider>,
+    )
+
+    expect(container.textContent).toContain('Deny')
+    expect(container.textContent).toContain('Allow')
+    expect(container.textContent).toContain('Allow Everything')
   })
 })
 

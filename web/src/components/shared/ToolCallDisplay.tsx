@@ -14,7 +14,8 @@ import { WorkspaceView } from './WorkspaceView'
 import { ProjectTasksView } from './ProjectTasksView'
 import { PathConfirmationButtons } from './PathConfirmationButtons'
 import { formatToolArgsFull, formatToolArgsWithMetadata } from '../../lib/formatToolArgs'
-import { useSessionStore, type PendingPathConfirmation } from '../../stores/session'
+import { type PendingPathConfirmation } from '../../stores/session'
+import { useSessionScope, useScopedPaneState } from '../plan/session-scope'
 import { useSettingsStore, SETTINGS_KEYS } from '../../stores/settings'
 import { buildEditorUrl } from '../../lib/editor-link'
 import { detectRemoteExecution } from '../../lib/remote-execution'
@@ -145,7 +146,15 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
 
   // Check if there's a pending path confirmation matching this tool call.
   // Confirmations use composite callIds: `${toolCallId}-${seq}` so we match by prefix.
-  const pendingPathConfirmations = useSessionStore((state) => state.pendingPathConfirmations)
+  // In split view confirmations live on the owning pane, not the flat focused
+  // state — read them from the scoped pane so they appear instantly.
+  const scopeId = useSessionScope()
+  const pendingPathConfirmations = useScopedPaneState(
+    scopeId,
+    (pane) => pane.pendingPathConfirmations,
+    (state) => state.pendingPathConfirmations,
+    [],
+  )
   const pendingConfirmation: PendingPathConfirmation | null = callId
     ? (pendingPathConfirmations.find((pc) => pc.callId === callId || pc.callId.startsWith(callId + '-')) ?? null)
     : null

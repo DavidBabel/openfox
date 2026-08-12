@@ -169,12 +169,14 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
   function buildResumePayload(
     exec: import('@shared/types.js').WorkflowExecution,
+    sessionId: string,
     content?: string,
     attachments?: import('@shared/types.js').Attachment[],
     messageKind?: string,
     userChoice?: string,
   ): Record<string, unknown> {
     return {
+      sessionId,
       workflowId: exec.workflowId,
       resumeFrom: exec.currentStepId,
       stepOutput: exec.stepOutput,
@@ -841,7 +843,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       // route the message as a workflow resume instead of a normal chat message.
       const exec = pane.activeWorkflowExecution
       if (exec && exec.status === 'running') {
-        wsClient.send('runner.launch', buildResumePayload(exec, content, attachments, opts?.messageKind))
+        wsClient.send('runner.launch', buildResumePayload(exec, sessionId, content, attachments, opts?.messageKind))
         return
       }
 
@@ -902,7 +904,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
     launchWorkflow: (sessionId, content?, attachments?, workflowId?, subGroup?, params?, scope?) => {
       if (!paneFor(get(), sessionId)?.session) return
-      const payload: Record<string, unknown> = {}
+      const payload: Record<string, unknown> = { sessionId }
       if (content?.trim()) payload.content = content
       if (attachments && attachments.length > 0) payload.attachments = attachments
       if (workflowId) payload.workflowId = workflowId
@@ -916,7 +918,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const pane = paneFor(get(), sessionId)
       const exec = pane?.activeWorkflowExecution
       if (!exec || exec.status !== 'waiting') return
-      wsClient.send('runner.launch', buildResumePayload(exec, undefined, undefined, undefined, choiceId))
+      wsClient.send('runner.launch', buildResumePayload(exec, sessionId, undefined, undefined, undefined, choiceId))
     },
 
     retryWorkflowStep: (sessionId) => {
@@ -926,12 +928,12 @@ export const useSessionStore = create<SessionState>((set, get) => {
       if (pane?.session?.isRunning) return
       set({ workflowRetry: null })
       set((s) => updatePane(s, sessionId, (p) => ({ ...p, error: null })))
-      wsClient.send('runner.launch', buildResumePayload(exec, undefined, undefined, undefined))
+      wsClient.send('runner.launch', buildResumePayload(exec, sessionId, undefined, undefined, undefined))
     },
 
     exitWorkflow: (sessionId) => {
       if (!paneFor(get(), sessionId)?.session) return
-      wsClient.send('workflow.exit', {})
+      wsClient.send('workflow.exit', { sessionId })
     },
 
     switchMode: async (sessionId, mode) => {
@@ -1003,7 +1005,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
     compactContext: (sessionId) => {
       if (!paneFor(get(), sessionId)?.session) return
-      wsClient.send('context.compact', {})
+      wsClient.send('context.compact', { sessionId })
     },
 
     setSessionProvider: async (sessionId, providerId, model) => {

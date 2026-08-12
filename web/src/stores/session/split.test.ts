@@ -362,4 +362,136 @@ describe('split view store', () => {
     // Focused pane untouched
     expect(useSessionStore.getState().pendingQuestions).toHaveLength(0)
   })
+
+  it('launches workflows against the owning pane, not the focused session', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    wsSendMock.mockClear()
+    useSessionStore.getState().launchWorkflow('s2', 'ship it', undefined, 'wf-1')
+
+    expect(wsSendMock).toHaveBeenCalledWith(
+      'runner.launch',
+      expect.objectContaining({ sessionId: 's2', workflowId: 'wf-1', content: 'ship it', scope: 'auto' }),
+    )
+  })
+
+  it('routes a workflow resume triggered by a message to the owning pane session', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'workflow.execution_changed',
+      sessionId: 's2',
+      payload: {
+        executionId: 'exec-1',
+        workflowId: 'wf-1',
+        workflowName: 'Review',
+        status: 'running',
+        currentStepId: 'step-1',
+      },
+    })
+
+    wsSendMock.mockClear()
+    useSessionStore.getState().sendMessage('s2', 'go on')
+
+    expect(wsSendMock).toHaveBeenCalledWith(
+      'runner.launch',
+      expect.objectContaining({ sessionId: 's2', resumeFrom: 'step-1', content: 'go on' }),
+    )
+  })
+
+  it('routes continue workflow to the owning pane session', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'workflow.execution_changed',
+      sessionId: 's2',
+      payload: {
+        executionId: 'exec-1',
+        workflowId: 'wf-1',
+        workflowName: 'Review',
+        status: 'waiting',
+        currentStepId: 'step-2',
+      },
+    })
+
+    wsSendMock.mockClear()
+    useSessionStore.getState().continueWorkflow('s2')
+
+    expect(wsSendMock).toHaveBeenCalledWith(
+      'runner.launch',
+      expect.objectContaining({ sessionId: 's2', resumeFrom: 'step-2' }),
+    )
+  })
+
+  it('routes workflow step retries to the owning pane session', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'workflow.execution_changed',
+      sessionId: 's2',
+      payload: {
+        executionId: 'exec-1',
+        workflowId: 'wf-1',
+        workflowName: 'Review',
+        status: 'blocked',
+        currentStepId: 'step-3',
+      },
+    })
+    useSessionStore.setState((state) => ({
+      panes: {
+        ...state.panes,
+        s2: { ...state.panes['s2']!, session: { ...state.panes['s2']!.session!, isRunning: false } },
+      },
+    }))
+
+    wsSendMock.mockClear()
+    useSessionStore.getState().retryWorkflowStep('s2')
+
+    expect(wsSendMock).toHaveBeenCalledWith(
+      'runner.launch',
+      expect.objectContaining({ sessionId: 's2', resumeFrom: 'step-3' }),
+    )
+  })
+
+  it('compacts context for the owning pane session', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    wsSendMock.mockClear()
+    useSessionStore.getState().compactContext('s2')
+
+    expect(wsSendMock).toHaveBeenCalledWith('context.compact', { sessionId: 's2' })
+  })
+
+  it('exits workflows for the owning pane session', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    wsSendMock.mockClear()
+    useSessionStore.getState().exitWorkflow('s2')
+
+    expect(wsSendMock).toHaveBeenCalledWith('workflow.exit', { sessionId: 's2' })
+  })
 })

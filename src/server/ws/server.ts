@@ -1007,13 +1007,14 @@ async function handleClientMessage(
     // =========================================================================
 
     case 'context.compact': {
-      if (!client.activeSessionId) {
+      const payload = message.payload as { sessionId?: string } | undefined
+      const sessionId = payload?.sessionId ?? client.activeSessionId
+      if (!sessionId) {
         send(createErrorMessage('NO_SESSION', 'No active session', message.id))
         return
       }
 
-      const session = sessionManager.requireSession(client.activeSessionId)
-      const sessionId = client.activeSessionId
+      const session = sessionManager.requireSession(sessionId)
 
       // Check if session is running
       if (session.isRunning) {
@@ -1237,12 +1238,15 @@ async function handleClientMessage(
     // =========================================================================
 
     case 'runner.launch': {
-      if (!client.activeSessionId) {
+      const launchPayloadEarly = message.payload as
+        { workflowId?: string; resumeFrom?: string; sessionId?: string } | undefined
+      const sessionId = launchPayloadEarly?.sessionId ?? client.activeSessionId
+      if (!sessionId) {
         send(createErrorMessage('NO_SESSION', 'No active session', message.id))
         return
       }
 
-      const session = sessionManager.requireSession(client.activeSessionId)
+      const session = sessionManager.requireSession(sessionId)
 
       // If running, queue for later processing instead of rejecting
       if (session.isRunning) {
@@ -1260,20 +1264,18 @@ async function handleClientMessage(
         }
 
         // Queue as ASAP message - will be processed at next turn boundary
-        sessionManager.queueMessage(client.activeSessionId, 'asap', fullContent, attachments, 'workflow-launch')
+        sessionManager.queueMessage(sessionId, 'asap', fullContent, attachments, 'workflow-launch')
 
-        // Return success with queue state
-        const queueState = sessionManager.getQueueState(client.activeSessionId)
-        send({
+        // Return success with queue state, tagged with the target session so
+        // the client attributes the queue feedback to the launching pane.
+        const queueState = sessionManager.getQueueState(sessionId)
+        sendForSession(sessionId, {
           type: 'queue.state',
           payload: { success: true, queueState },
           id: message.id,
         })
         return
       }
-
-      // Parse launch payload early to check for resume
-      const launchPayloadEarly = message.payload as { workflowId?: string; resumeFrom?: string } | undefined
 
       // Skip criteria check when resuming from a user step
       if (!launchPayloadEarly?.resumeFrom) {
@@ -1283,8 +1285,6 @@ async function handleClientMessage(
           return
         }
       }
-
-      const sessionId = client.activeSessionId
 
       // Check if session is blocked - user intervention resets it
       if (session.phase === 'blocked') {
@@ -1447,12 +1447,13 @@ async function handleClientMessage(
     // =========================================================================
 
     case 'workflow.exit': {
-      if (!client.activeSessionId) {
+      const payload = message.payload as { sessionId?: string } | undefined
+      const exitSessionId = payload?.sessionId ?? client.activeSessionId
+      if (!exitSessionId) {
         send(createErrorMessage('NO_SESSION', 'No active session', message.id))
         return
       }
 
-      const exitSessionId = client.activeSessionId
       const exitSession = sessionManager.getSession(exitSessionId)
       if (!exitSession) {
         send(createErrorMessage('NOT_FOUND', 'Session not found', message.id))
