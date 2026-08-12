@@ -94,7 +94,7 @@ describe('TaskEditor', () => {
     })
   })
 
-  it('saves via Enter and clears the draft', async () => {
+  it('saves via Shift+Enter and clears the draft', async () => {
     vi.mocked(authFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ task: task({ prompt: 'Save me' }) }),
@@ -111,9 +111,30 @@ describe('TaskEditor', () => {
     render(<TaskEditor projectId="proj-1" initialTask={task()} onClose={() => {}} onSaved={() => {}} />)
     const promptEl = screen.getByPlaceholderText(/Describe the task/i) as HTMLTextAreaElement
     fireEvent.change(promptEl, { target: { value: 'Save me' } })
-    fireEvent.keyDown(promptEl, { key: 'Enter' })
+    fireEvent.keyDown(promptEl, { key: 'Enter', shiftKey: true })
     await waitFor(() => {
       expect(localStorage.getItem('openfox:task-draft:proj-1:t-edit')).toBeNull()
+    })
+  })
+
+  it('lets plain Enter insert a newline without saving', async () => {
+    render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+    const promptEl = screen.getByPlaceholderText(/Describe the task/i) as HTMLTextAreaElement
+    fireEvent.change(promptEl, { target: { value: 'First line' } })
+    fireEvent.keyDown(promptEl, { key: 'Enter' })
+    // Simulate the browser's default newline insertion — the handler must not
+    // swallow Enter, so no task create/update is dispatched.
+    fireEvent.change(promptEl, { target: { value: 'First line\nSecond line' } })
+    expect(promptEl.value).toBe('First line\nSecond line')
+    await waitFor(() => {
+      expect(vi.mocked(authFetch)).not.toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks',
+        expect.objectContaining({ method: 'POST' }),
+      )
+      expect(vi.mocked(authFetch)).not.toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/t-edit',
+        expect.objectContaining({ method: 'PUT' }),
+      )
     })
   })
 
@@ -160,7 +181,7 @@ describe('TaskEditor', () => {
 
       render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter' })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
       await waitFor(() => expect(postedBody()).toBeTruthy())
       expect(postedBody()).not.toHaveProperty('agentId')
     })
@@ -182,7 +203,7 @@ describe('TaskEditor', () => {
       render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
       fireEvent.change(agentSelect(), { target: { value: 'explorer' } })
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter' })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
       await waitFor(() => expect(postedBody()).toBeTruthy())
       expect(postedBody().agentId).toBe('explorer')
     })
@@ -223,7 +244,7 @@ describe('TaskEditor', () => {
       )
       fireEvent.change(agentSelect(), { target: { value: '' } })
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter' })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
       await waitFor(() => expect(putBody()).toBeTruthy())
       expect(putBody().agentId).toBeNull()
     })
@@ -284,7 +305,7 @@ describe('TaskEditor', () => {
       )
       await clearModelViaPicker()
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter' })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
       await waitFor(() => expect(putBody()).toBeTruthy())
       expect(putBody().model).toBeNull()
       expect(putBody().providerId).toBeNull()

@@ -32,9 +32,10 @@ interface TaskEditorProps {
 const DRAFT_KEY = 'openfox:task-draft'
 
 /**
- * Task create/edit composer. Mirrors the chat composer's capabilities: drafts,
- * undo, Enter-to-submit / Shift-Enter newline, slash commands & workflows with
- * inline parameter hints, @-mentions, attachments, and agent/model selection.
+ * Task create/edit composer. Mirrors the chat composer's capabilities — drafts,
+ * undo, slash commands & workflows with inline parameter hints, @-mentions,
+ * attachments, and agent/model selection — with one deliberate difference:
+ * Shift+Enter submits, while plain Enter inserts a newline (inverted from chat).
  */
 export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEditorProps) {
   const isEdit = !!initialTask
@@ -254,7 +255,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
       undoPrompt()
       return
     }
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       void save()
     }
@@ -290,7 +291,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
           <span className="text-sm text-text-muted truncate">
             {isAlreadyRunning
               ? 'This task is already in progress — changes apply to the next run.'
-              : 'Enter to save · Shift+Enter for a new line'}
+              : 'Shift+Enter to save · Enter for a new line'}
           </span>
           <div className="flex items-center gap-2 shrink-0">
             <Button onClick={onClose}>Cancel</Button>
