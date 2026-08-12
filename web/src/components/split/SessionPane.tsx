@@ -7,6 +7,7 @@ import { ProjectSettingsModal } from '../settings/ProjectSettingsModal'
 import { DropdownMenu } from '../shared/DropdownMenu'
 import { authFetch } from '../../lib/api'
 import { XCloseIcon, MenuIcon, ChevronDownIcon, TasksIcon, FolderIcon, GearIcon } from '../shared/icons'
+import { Link } from 'wouter'
 
 // Container-query threshold is 768px; leave margin so the inline sidebar fits.
 const CRITERIA_MIN_WIDTH = 788
@@ -114,9 +115,20 @@ export function SessionPane({ sessionId, focused, onFocus, onClose, className }:
             {projectId ? projectId.slice(0, 10) : '…'}
           </span>
         )}
-        <span className="text-xs text-text-primary truncate flex-1 min-w-0" title={title}>
-          {title}
-        </span>
+        {projectId ? (
+          <Link
+            href={`/p/${projectId}/s/${sessionId}`}
+            className="text-xs text-text-primary truncate flex-1 min-w-0 hover:underline"
+            title={title}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {title}
+          </Link>
+        ) : (
+          <span className="text-xs text-text-primary truncate flex-1 min-w-0" title={title}>
+            {title}
+          </span>
+        )}
         {attention.length > 0 && (
           <span className="flex items-center gap-1 text-[10px] text-amber-400 shrink-0" title={attention.join(' · ')}>
             {attention.join(' · ')}

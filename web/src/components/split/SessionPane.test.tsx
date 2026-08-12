@@ -21,6 +21,10 @@ vi.mock('../../stores/project', () => ({
 
 vi.mock('../../lib/api', () => ({ authFetch: authFetchMock }))
 
+vi.mock('wouter', () => ({
+  Link: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a>,
+}))
+
 vi.mock('../tasks/TasksModal', () => ({
   TasksModal: (props: { isOpen: boolean; projectId: string }) => {
     tasksModalProps.isOpen = props.isOpen
@@ -86,6 +90,22 @@ describe('SessionPane', () => {
     expect(screen.getByTestId('plan-panel')).toBeDefined()
     // Legacy phase labels are not part of the pane header
     expect(screen.queryByText('Build')).toBeNull()
+  })
+
+  it('links the session title to the session page', () => {
+    render(<SessionPane {...props} />)
+    const link = screen.getByRole('link', { name: 'Auth refactor' })
+    expect(link.getAttribute('href')).toBe('/p/p1/s/s1')
+  })
+
+  it('keeps a plain title span when the pane project is unknown', () => {
+    storeState.panes = {
+      s1: makePane('s1', { session: { id: 's1', metadata: { title: 'Orphan' } } }),
+    }
+    render(<SessionPane {...props} />)
+    const title = screen.getByText('Orphan')
+    expect(title.tagName).toBe('SPAN')
+    expect(screen.queryByRole('link', { name: 'Orphan' })).toBeNull()
   })
 
   it('merges extra classes onto the pane root (flex sizing in columns mode)', () => {
