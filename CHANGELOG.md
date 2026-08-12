@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.117 - 2026-08-12
+
+### Features
+
+- **New-session picker in split view** — pick any project, create a session, and open it as a pane
+- **Project dropdown in split panes** — open the folder, manage tasks, or edit settings straight from a pane header
+
+### Enhancements
+
+- **Live session list in split view** — the control panel refreshes automatically and on tab focus
+- **Breadcrumb modal titles** — Tasks and Project Settings now read "project › action"
+
+### Bug Fixes
+
+- **Tail smartness off for chained commands** — `&&`/`||` chains are no longer misread as piped output
+- **Queued messages survive sub-agent runs** — no longer drained into a sub-agent context mid-run
+- **Composer stays compact on narrow layouts** — and re-sizes when the pane width changes
+- **Split-view actions target the owning pane** — launch, resume, retry, compact, and exit stay in their pane
+- **Path confirmations land in the right pane** — allow/deny prompts appear instantly where they were asked
+- **Each split pane shows its own workspace** — branch, git diff, and context no longer bleed between panes
+- **Adding a split pane mid-stream no longer crashes** — the "maximum update depth" blank-screen error is gone
+- **Project-scoped agents in the default agent list** — grouped by Project, User, and Built-in
+- **Saving a new agent no longer hangs** — the settings modal no longer sticks on "saving"
+
 ## 2.0.116 - 2026-08-11
 
 ### Features
