@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.118 - 2026-08-12
+
+### Features
+
+- **LLM failures retry automatically** — chat, workflow steps, and sub-agents back off and retry, with a live countdown and "Retry now" to skip the wait
+- **Searchable new-session modal in split view** — live case-insensitive project search with autofocus, arrow-key navigation, Enter to select, Esc to dismiss
+
+### Enhancements
+
+- **LLM retries recover smoothly** — partial replies continue where they left off, provider switches apply on the next attempt, and failed calls leave no ghost messages
+
+### Bug Fixes
+
+- **Paused workflow steps no longer vanish** — the choose-workspace pause survives late session refreshes
+- **Composer no longer jumps while typing** — the input stays put on every keystroke
+
 ## 2.0.117 - 2026-08-12
 
 ### Features
