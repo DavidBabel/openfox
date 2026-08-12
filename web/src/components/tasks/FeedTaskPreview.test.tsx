@@ -67,7 +67,7 @@ describe('FeedTaskPreview', () => {
 
   it('shows nothing when no unclaimed To Do task exists', () => {
     useTasksStore.setState({ tasks: [], activeProjectId: 'proj-1' })
-    const { container } = render(<FeedTaskPreview projectId="proj-1" />)
+    const { container } = render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     expect(container.textContent).not.toContain('Up next')
     expect(container.textContent).not.toContain('Manage tasks')
   })
@@ -83,7 +83,7 @@ describe('FeedTaskPreview', () => {
       ],
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     expect(screen.getByText('Investigate the redirect bug')).toBeTruthy()
     expect(screen.getByText('Middle task')).toBeTruthy()
     expect(screen.getByText('Later task')).toBeTruthy()
@@ -96,7 +96,7 @@ describe('FeedTaskPreview', () => {
       tasks: Array.from({ length: 7 }, (_, i) => task({ id: `t${i}`, prompt: `Task ${i}`, position: i })),
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     expect(screen.getAllByRole('button', { name: /^Start$/ }).length).toBe(4)
   })
 
@@ -109,7 +109,7 @@ describe('FeedTaskPreview', () => {
       ],
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     fireEvent.click(screen.getByText('Later task').closest('li')!.querySelector('button')!)
 
     await waitFor(() => {
@@ -120,12 +120,12 @@ describe('FeedTaskPreview', () => {
     })
   })
 
-  it('navigates to the new session when a claim launches immediately', async () => {
+  it('claims the task into the current session without navigating', async () => {
     vi.mocked(authFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         task: task({ id: 'top', status: 'in_progress', runState: 'running' }),
-        sessionId: 'sess-new',
+        sessionId: 'sess-current',
       }),
     } as unknown as Response)
     useTasksStore.setState({
@@ -133,12 +133,19 @@ describe('FeedTaskPreview', () => {
       tasks: [task({ id: 'top', prompt: 'Investigate the redirect bug', position: 0 })],
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     fireEvent.click(screen.getByText('Investigate the redirect bug').closest('li')!.querySelector('button')!)
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/p/proj-1/s/sess-new')
+      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/top/move',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"sessionId":"sess-current"'),
+        }),
+      )
     })
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 
   it('surfaces a dismissible queued notice without hiding the list', async () => {
@@ -147,7 +154,7 @@ describe('FeedTaskPreview', () => {
       tasks: [task({ id: 'top', prompt: 'Investigate the redirect bug', position: 0 })],
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     vi.mocked(authFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ task: task({ id: 'top', status: 'in_progress', runState: 'queued', queuePosition: 1 }) }),
@@ -170,7 +177,7 @@ describe('FeedTaskPreview', () => {
       tasks: [task({ id: 'top', prompt: 'Investigate the redirect bug', position: 0 })],
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     expect(capturedModalProps.isOpen).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: /manage tasks/i }))
@@ -195,7 +202,7 @@ describe('FeedTaskPreview', () => {
       ],
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     expect(screen.getByText(/1 running/i)).toBeTruthy()
   })
 
@@ -215,7 +222,7 @@ describe('FeedTaskPreview', () => {
       ],
     })
 
-    render(<FeedTaskPreview projectId="proj-1" />)
+    render(<FeedTaskPreview projectId="proj-1" sessionId="sess-current" />)
     expect(screen.queryByText(/running/i)).toBeNull()
   })
 })

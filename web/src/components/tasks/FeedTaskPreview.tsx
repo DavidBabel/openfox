@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'wouter'
 import { useTasksStore } from '../../stores/tasks'
 import { Button } from '../shared/Button'
 import { TasksIcon, ArrowRightIcon } from '../shared/icons'
@@ -10,6 +9,8 @@ const MAX_VISIBLE_TASKS = 4
 
 interface FeedTaskPreviewProps {
   projectId: string
+  /** The session whose empty feed shows the launchpad — Start hosts the task here. */
+  sessionId: string
 }
 
 /**
@@ -18,8 +19,7 @@ interface FeedTaskPreviewProps {
  * unclaimed To Do cards (not bound to a session); each row claims and starts
  * its task with one click, and a Manage tasks button opens the full board.
  */
-export function FeedTaskPreview({ projectId }: FeedTaskPreviewProps) {
-  const [, navigate] = useLocation()
+export function FeedTaskPreview({ projectId, sessionId }: FeedTaskPreviewProps) {
   const tasks = useTasksStore((state) => state.tasks)
   const activeProjectId = useTasksStore((state) => state.activeProjectId)
   const loadBoard = useTasksStore((state) => state.loadBoard)
@@ -53,10 +53,11 @@ export function FeedTaskPreview({ projectId }: FeedTaskPreviewProps) {
 
   const startTask = async (task: ProjectTask) => {
     setQueuedNotice(null)
-    const result = await moveTask(projectId, task.id, 'in_progress')
-    if (result?.sessionId) {
-      navigate(`/p/${projectId}/s/${result.sessionId}`)
-    } else if (result?.task && result.task.status === 'in_progress' && result.task.runState === 'queued') {
+    // Host the task in the session we're already in — no orphan session, no
+    // navigation. If it queues, the server keeps the earmark so auto-launch
+    // still lands here.
+    const result = await moveTask(projectId, task.id, 'in_progress', { sessionId })
+    if (result?.task && result.task.status === 'in_progress' && result.task.runState === 'queued') {
       setQueuedNotice({ label: task.prompt.split('\n')[0]?.slice(0, 60) || 'This task' })
     }
   }

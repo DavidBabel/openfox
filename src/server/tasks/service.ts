@@ -15,7 +15,14 @@
  * service stays testable and free of singletons.
  */
 
-import type { Config, ProjectTask, ProjectTaskCounts, ProjectTaskSettings, TaskStatus } from '../../shared/types.js'
+import type {
+  Config,
+  ProjectTask,
+  ProjectTaskCounts,
+  ProjectTaskSettings,
+  TaskStatus,
+  Session,
+} from '../../shared/types.js'
 import type { SessionManager } from '../session/manager.js'
 import type { TasksUpdatePayload } from '../../shared/protocol.js'
 import type { Attachment, WorkflowLaunchScope } from '../../shared/types.js'
@@ -33,6 +40,7 @@ import {
   setTaskStatus as dbSetTaskStatus,
   setTaskRunState as dbSetTaskRunState,
   addTaskLink as dbAddTaskLink,
+  listTaskLinks as dbListTaskLinks,
   removeTaskLinks as dbRemoveTaskLinks,
   clearActiveTaskLink as dbClearActiveTaskLink,
   appendToBottom as dbAppendToBottom,
@@ -202,6 +210,18 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
     })
   }
 
+  /**
+   * A target session is reusable only when it belongs to this project AND is
+   * still fresh (no messages) — reusing a session mid-conversation would
+   * inject task content into unrelated context.
+   */
+  function reusableTarget(projectId: string, sessionId: string | undefined): string | undefined {
+    if (!sessionId) return undefined
+    const session = sessionManager.getSession(sessionId)
+    if (!session || session.projectId !== projectId || session.messages.length > 0) return undefined
+    return sessionId
+  }
+
   function list(projectId: string) {
     return dbListTasks(projectId)
   }
@@ -336,7 +356,9 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
           const launched = runningCount < settings.slotLimit && !settings.queuePaused
           dbSetTaskRunState(taskId, launched ? 'running' : 'queued')
           if (launched) {
-            const seeded = await seedSession(projectId, task, from)
+            // Reuse the session the human is already in when it's still fresh
+            // (Up-next Start) — otherwise seed a new one.
+            const seeded = await seedSession(projectId, task, from, reusableTarget(projectId, opts.sessionId))
             dbAddTaskLink(taskId, seeded.session.id, true)
             dbAddAuditEntry(taskId, 'human', 'move', `Moved to In Progress (running)`, opts.actorName)
             sessionId = seeded.session.id
@@ -344,6 +366,10 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
             // Queued: append at the bottom of In Progress so FIFO order (oldest
             // first) matches the visible stacking and the per-task queue rank.
             dbAppendToBottom(taskId, 'in_progress')
+            // Remember where the human wants it to run (Up-next Start) so a
+            // later auto-launch lands in the same session, not an orphan.
+            const earmarked = reusableTarget(projectId, opts.sessionId)
+            if (earmarked) dbAddTaskLink(taskId, earmarked, false)
             dbAddAuditEntry(taskId, 'human', 'move', `Moved to In Progress (queued)`, opts.actorName)
           }
         }
@@ -489,15 +515,32 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
   }
 
   /**
-   * Seed a brand-new session for a claimed task: reminder first (opening
-   * context), then the task's work — the plain prompt queued, a slash command
-   * expanded into its command prompt, or a slash workflow launched directly.
+   * Seed a session for a claimed task: reminder first (opening context), then
+   * the task's work — the plain prompt queued, a slash command expanded into
+   * its command prompt, or a slash workflow launched directly. When a target
+   * session is supplied it is reused (bind-in-place, no orphan session);
+   * otherwise a brand-new session is created.
    */
-  async function seedSession(projectId: string, task: ProjectTask, from: TaskStatus | 'queued') {
-    const defaults = parseDefaultModelSelection(config.defaultModelSelection)
-    const providerId = task.providerId ?? defaults.providerId ?? null
-    const model = task.model ?? defaults.model ?? null
-    const session = sessionManager.createSession(projectId, undefined, providerId, model)
+  async function seedSession(
+    projectId: string,
+    task: ProjectTask,
+    from: TaskStatus | 'queued',
+    targetSessionId?: string,
+  ) {
+    let session: Session
+    if (targetSessionId) {
+      const existing = sessionManager.getSession(targetSessionId)
+      if (!existing) {
+        // Target vanished concurrently — fall back to seeding a fresh one.
+        return seedSession(projectId, task, from)
+      }
+      session = existing
+    } else {
+      const defaults = parseDefaultModelSelection(config.defaultModelSelection)
+      const providerId = task.providerId ?? defaults.providerId ?? null
+      const model = task.model ?? defaults.model ?? null
+      session = sessionManager.createSession(projectId, undefined, providerId, model)
+    }
     if (task.agentId) {
       try {
         sessionManager.setMode(session.id, task.agentId)
@@ -556,7 +599,11 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
     if (!next) return undefined
 
     dbSetTaskRunState(next.id, 'running')
-    const seeded = await seedSession(projectId, next, 'queued')
+    // Honor the session a human earmarked at Start (Up-next) while it's still
+    // fresh; otherwise seed a new one.
+    const earmarks = dbListTaskLinks(next.id)
+    const target = reusableTarget(projectId, earmarks[0]?.session_id)
+    const seeded = await seedSession(projectId, next, 'queued', target)
     dbAddTaskLink(next.id, seeded.session.id, true)
     dbAddAuditEntry(next.id, 'system', 'auto_launch', `Auto-launched into session ${seeded.session.id}`, 'system')
     return {

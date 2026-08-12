@@ -17,6 +17,12 @@ export interface TaskMoveResult {
   autoLaunched?: { taskId: string; taskTitle: string; sessionId: string; projectId: string }
 }
 
+export interface TaskMoveOptions {
+  reason?: string
+  /** Bind the task to this session (Up-next Start reuses the current one). */
+  sessionId?: string
+}
+
 interface TasksState {
   tasks: ProjectTask[]
   settings: ProjectTaskSettings
@@ -45,7 +51,12 @@ interface TasksState {
   ) => Promise<ProjectTask | null>
   deleteTask: (projectId: string, taskId: string) => Promise<boolean>
   duplicateTask: (projectId: string, taskId: string) => Promise<ProjectTask | null>
-  moveTask: (projectId: string, taskId: string, to: TaskStatus, reason?: string) => Promise<TaskMoveResult | null>
+  moveTask: (
+    projectId: string,
+    taskId: string,
+    to: TaskStatus,
+    options?: TaskMoveOptions,
+  ) => Promise<TaskMoveResult | null>
   setGateValue: (projectId: string, taskId: string, gateId: string, value: string) => Promise<ProjectTask | null>
   setGateConfig: (projectId: string, gates: TaskGateConfig[]) => Promise<boolean>
   setSettings: (projectId: string, settings: Partial<ProjectTaskSettings>) => Promise<boolean>
@@ -220,12 +231,16 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     }
   },
 
-  moveTask: async (projectId, taskId, to, reason) => {
+  moveTask: async (projectId, taskId, to, options) => {
     try {
       const res = await authFetch(`/api/projects/${projectId}/tasks/${taskId}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, ...(reason ? { reason } : {}) }),
+        body: JSON.stringify({
+          to,
+          ...(options?.reason ? { reason: options.reason } : {}),
+          ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+        }),
       })
       const data = await res.json()
       if (!res.ok) {

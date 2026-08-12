@@ -14,6 +14,7 @@ interface FakeSession {
   id: string
   projectId: string
   title?: string
+  messages?: unknown[]
 }
 
 interface FakeSessionManager {
@@ -266,6 +267,83 @@ describe('project tasks service', () => {
       expect(service.get(projectId, third.id)!.queuePosition).toBe(2)
       // Running tasks have no queue position
       expect(service.get(projectId, first.id)!.queuePosition).toBeUndefined()
+    })
+
+    it('human move with an explicit project sessionId binds to it instead of seeding a new session', async () => {
+      const task = create('Start me here')
+      sm.sessions.set('sess-current', { id: 'sess-current', projectId, messages: [] })
+
+      const result = await service.move(projectId, task.id, 'in_progress', {
+        actor: 'human',
+        sessionId: 'sess-current',
+      })
+
+      expect(sm.createdSessions).toHaveLength(0)
+      expect(result.sessionId).toBe('sess-current')
+      expect(result.task.status).toBe('in_progress')
+      expect(result.task.runState).toBe('running')
+      expect(result.task.activeSessionId).toBe('sess-current')
+      // Reminder + queued prompt land in the bound session, like a seeded one.
+      expect(sm.reminders[0]?.sessionId).toBe('sess-current')
+      expect(sm.reminders[0]?.content).toContain('<system-reminder>')
+      expect(sm.queued[0]?.sessionId).toBe('sess-current')
+      expect(sm.queued[0]?.content).toBe('Start me here')
+    })
+
+    it('falls back to seeding a new session when the supplied sessionId is foreign', async () => {
+      const task = create('Foreign target')
+      sm.sessions.set('sess-foreign', { id: 'sess-foreign', projectId: 'another-project', messages: [] })
+
+      const result = await service.move(projectId, task.id, 'in_progress', {
+        actor: 'human',
+        sessionId: 'sess-foreign',
+      })
+
+      expect(sm.createdSessions).toHaveLength(1)
+      const seeded = sm.createdSessions[0]!
+      expect(result.sessionId).toBe(seeded.id)
+      expect(result.task.activeSessionId).toBe(seeded.id)
+      expect(sm.reminders[0]?.sessionId).toBe(seeded.id)
+    })
+
+    it('does not reuse a target session that already has messages (seeds fresh instead)', async () => {
+      const task = create('Busy session')
+      sm.sessions.set('sess-busy', { id: 'sess-busy', projectId, messages: [{ id: 'm1' }] })
+
+      const result = await service.move(projectId, task.id, 'in_progress', {
+        actor: 'human',
+        sessionId: 'sess-busy',
+      })
+
+      expect(sm.createdSessions).toHaveLength(1)
+      const seeded = sm.createdSessions[0]!
+      expect(result.sessionId).toBe(seeded.id)
+      expect(result.task.activeSessionId).toBe(seeded.id)
+      expect(result.task.sessionIds).toEqual([seeded.id])
+    })
+
+    it('honors the earmarked session when a queued task auto-launches later', async () => {
+      const first = create('Occupying the slot')
+      const second = create('Queued with a home')
+      sm.sessions.set('sess-home', { id: 'sess-home', projectId, messages: [] })
+
+      await service.move(projectId, first.id, 'in_progress', { actor: 'human' })
+      const queued = await service.move(projectId, second.id, 'in_progress', {
+        actor: 'human',
+        sessionId: 'sess-home',
+      })
+      expect(queued.task.runState).toBe('queued')
+      expect(queued.task.sessionIds).toEqual(['sess-home'])
+      expect(sm.createdSessions).toHaveLength(1) // nothing seeded at queue time
+
+      // Free the slot — the queued task launches INTO its earmarked session.
+      await service.move(projectId, first.id, 'todo', { actor: 'human' })
+      const launched = service.get(projectId, second.id)!
+      expect(launched.runState).toBe('running')
+      expect(launched.activeSessionId).toBe('sess-home')
+      expect(sm.createdSessions).toHaveLength(1) // still no orphan session
+      expect(sm.reminders.some((r) => r.sessionId === 'sess-home')).toBe(true)
+      expect(sm.queued.some((q) => q.sessionId === 'sess-home')).toBe(true)
     })
 
     it('agent move binds the current session and never creates a new one', async () => {

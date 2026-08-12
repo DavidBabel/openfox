@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { TasksModal } from './TasksModal'
 import { useTasksStore } from '../../stores/tasks'
 import type { ProjectTask, ProjectTaskSettings, ProjectTaskCounts } from '@shared/types.js'
@@ -221,6 +221,45 @@ describe('TasksModal', () => {
     expect(screen.getByText('Pause')).toBeTruthy()
     // The full-width bottom create button is gone.
     expect(screen.queryByText(/New task$/)).toBeNull()
+  })
+
+  it('stays on the board when a task moves to In Progress and returns a session', async () => {
+    vi.mocked(authFetch).mockImplementation(async (url: string) => {
+      if (url.endsWith('/move')) {
+        return {
+          ok: true,
+          json: async () => ({
+            task: task({
+              id: 't1',
+              prompt: 'Investigate and fix the flaky test in CI',
+              status: 'in_progress',
+              runState: 'running',
+              sessionIds: ['sess-new'],
+              activeSessionId: 'sess-new',
+            }),
+            sessionId: 'sess-new',
+          }),
+        } as unknown as Response
+      }
+      if (url.endsWith('/tasks/gates')) {
+        return { ok: true, json: async () => ({ gates: [] }) } as unknown as Response
+      }
+      return { ok: true, json: async () => board } as unknown as Response
+    })
+    render(<TasksModal isOpen onClose={() => {}} projectId="proj-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: /actions for investigate/i }))
+    const menu = await screen.findByTestId('session-dropdown-menu')
+    fireEvent.click(within(menu).getByText('In Progress'))
+
+    await waitFor(() => {
+      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/t1/move',
+        expect.objectContaining({ method: 'POST' }),
+      )
+    })
+    // No autonavigation: the board stays mounted instead of leaving for the session.
+    expect(screen.getByPlaceholderText('Search tasks…')).toBeTruthy()
   })
 
   it('drops column collapse affordances and the extra hints', () => {

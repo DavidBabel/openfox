@@ -189,7 +189,7 @@ export function registerTaskRoutes(router: Router, tasksService: TasksService): 
   router.post('/projects/:projectId/tasks/:taskId/move', (req: Request, res: Response) => {
     const projectId = requireProject(req, res)
     if (!projectId) return
-    const { to, reason, expectedVersion } = req.body
+    const { to, reason, expectedVersion, sessionId } = req.body
     if (!['todo', 'in_progress', 'done'].includes(to)) {
       return res.status(400).json({ error: 'to must be one of: todo, in_progress, done' })
     }
@@ -197,6 +197,7 @@ export function registerTaskRoutes(router: Router, tasksService: TasksService): 
       .move(projectId, req.params['taskId'] as string, to, {
         actor: HUMAN,
         ...(typeof reason === 'string' ? { reason } : {}),
+        ...(typeof sessionId === 'string' ? { sessionId } : {}),
         ...(typeof expectedVersion === 'number' ? { expectedVersion } : {}),
       })
       .then((result) => res.json(result))

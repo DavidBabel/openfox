@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useLocation } from 'wouter'
 import { Modal } from '../shared/SelfContainedModal'
 import { Button } from '../shared/Button'
 import { Input } from '../shared/Input'
@@ -21,7 +20,6 @@ interface TasksModalProps {
 }
 
 export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
-  const [, navigate] = useLocation()
   const tasks = useTasksStore((state) => state.tasks)
   const settings = useTasksStore((state) => state.settings)
   const loadBoard = useTasksStore((state) => state.loadBoard)
@@ -103,13 +101,11 @@ export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
 
   const handleMove = useCallback(
     async (task: ProjectTask, to: TaskStatus) => {
-      const result = await moveTask(projectId, task.id, to)
-      // Human drag/Start-task claims a NEW session — navigate the user to it.
-      if (result?.sessionId) {
-        navigate(`/p/${projectId}/s/${result.sessionId}`)
-      }
+      // No autonavigation: switching a task to In Progress keeps the user on
+      // the board — the card's "Open session" link is there if they want in.
+      await moveTask(projectId, task.id, to)
     },
-    [moveTask, projectId, navigate],
+    [moveTask, projectId],
   )
 
   const handleDropOnColumn = useCallback(

@@ -354,7 +354,9 @@ export function PlanPanel({
           hiddenCount={hiddenCount}
           onScrollbarGesture={handleScrollbarGesture}
           emptyState={
-            messages.length === 0 && session?.projectId ? <FeedTaskPreview projectId={session.projectId} /> : undefined
+            messages.length === 0 && session?.projectId ? (
+              <FeedTaskPreview projectId={session.projectId} sessionId={session.id} />
+            ) : undefined
           }
         />
 
