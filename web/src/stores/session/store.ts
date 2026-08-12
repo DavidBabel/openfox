@@ -244,7 +244,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           unreadSessionIds: s.unreadSessionIds.filter((id) => id !== sessionId),
           crossSessionConfirmations: crossCleanup,
           sessionsWithPendingConfirmations: Object.keys(crossCleanup),
-          workflowRetry: null,
+          llmRetry: null,
           pendingSessionCreate: false as boolean | string,
         }
       })
@@ -298,6 +298,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           pendingPathConfirmations: (data.pendingConfirmations ?? []) as PendingPathConfirmation[],
           pendingQuestions: (data.pendingQuestions ?? []) as PendingQuestionPayload[],
           activeWorkflowExecution: (data.activeWorkflowExecution as WorkflowExecution | undefined) ?? null,
+          llmRetry: null,
         }
         return {
           ...replacePane(s, sessionId, nextPane),
@@ -349,7 +350,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     restoredInput: null,
     error: null,
     activeWorkflowExecution: null,
-    workflowRetry: null,
+    llmRetry: null,
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
     pendingSessionCreate: false as boolean | string,
@@ -921,14 +922,23 @@ export const useSessionStore = create<SessionState>((set, get) => {
       wsClient.send('runner.launch', buildResumePayload(exec, sessionId, undefined, undefined, undefined, choiceId))
     },
 
-    retryWorkflowStep: (sessionId) => {
+    retryLLMNow: (sessionId) => {
+      wsClient.send('chat.llm_retry_now', { sessionId })
+      set((s) => updatePane(s, sessionId, (p) => ({ ...p, llmRetry: null })))
+    },
+
+    retryLLM: (sessionId) => {
       const pane = paneFor(get(), sessionId)
+      set((s) => updatePane(s, sessionId, (p) => ({ ...p, llmRetry: null, error: null })))
+      // Blocked workflow execution → re-launch the step through the resume path
+      // (the step prompt is already in history — nothing is re-injected).
       const exec = pane?.activeWorkflowExecution
-      if (!exec || !exec.currentStepId) return
-      if (pane?.session?.isRunning) return
-      set({ workflowRetry: null })
-      set((s) => updatePane(s, sessionId, (p) => ({ ...p, error: null })))
-      wsClient.send('runner.launch', buildResumePayload(exec, sessionId, undefined, undefined, undefined))
+      if (exec && exec.status === 'blocked' && exec.currentStepId && !pane?.session?.isRunning) {
+        wsClient.send('runner.launch', buildResumePayload(exec, sessionId, undefined, undefined, undefined))
+        return
+      }
+      // Regular chat → re-run the last turn without re-adding the user message.
+      wsClient.send('chat.retry', { sessionId })
     },
 
     exitWorkflow: (sessionId) => {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
 import WebSocket from 'ws'
+import { recordLLMFailure, clearLLMFailure, sleepThroughRetryBackoff } from '../chat/stream-pure.js'
 
 const {
   createProjectMock,
@@ -374,6 +375,7 @@ function createSessionManager(overrides: Record<string, unknown> = {}) {
     createSession: vi.fn(() => session),
     getSession: vi.fn(() => session),
     requireSession: vi.fn(() => session),
+    getLatestWorkflowExecution: vi.fn(() => null),
     getContextState: vi.fn(() => ({
       currentTokens: 10,
       maxTokens: 200000,
@@ -1791,6 +1793,155 @@ describe('createWebSocketServer', () => {
       }),
     )
     expect(createLLMClientMock).not.toHaveBeenCalled()
+
+    await harness.close()
+  })
+
+  it('guards chat.retry — session state, recorded failure, and active workflow', async () => {
+    const sessionState: any = {
+      id: 'session-1',
+      projectId: 'project-1',
+      workdir: '/tmp/project',
+      mode: 'planner',
+      phase: 'build',
+      isRunning: false,
+      criteria: [],
+    }
+    const sessionManager = createSessionManager({
+      createSession: vi.fn(() => sessionState),
+      getSession: vi.fn(() => sessionState),
+      requireSession: vi.fn(() => structuredClone(sessionState)),
+      getLatestWorkflowExecution: vi.fn(() => null),
+    })
+    runChatTurnMock.mockResolvedValue(undefined)
+    const harness = await createHarness({ sessionManager })
+
+    // No active session → NO_SESSION
+    harness.send({ id: 'retry-none', type: 'chat.retry', payload: {} })
+    expect(await harness.nextMessage((message) => message.id === 'retry-none')).toMatchObject({
+      payload: { code: 'NO_SESSION' },
+    })
+
+    harness.send({ id: 'sl-ok', type: 'session.load', payload: { sessionId: 'session-1' } })
+    await harness.nextMessage((message) => message.id === 'sl-ok')
+
+    // Session not found → NOT_FOUND
+    ;(sessionManager.getSession as any).mockReturnValue(null)
+    harness.send({ id: 'retry-notfound', type: 'chat.retry', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'retry-notfound')).toMatchObject({
+      payload: { code: 'NOT_FOUND' },
+    })
+    ;(sessionManager.getSession as any).mockReturnValue(sessionState)
+
+    // Session running → SESSION_RUNNING
+    sessionState.isRunning = true
+    harness.send({ id: 'retry-running', type: 'chat.retry', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'retry-running')).toMatchObject({
+      payload: { code: 'SESSION_RUNNING' },
+    })
+    sessionState.isRunning = false
+
+    // No recorded LLM failure → NO_FAILED_TURN (prevents unsolicited turns)
+    harness.send({ id: 'retry-nofail', type: 'chat.retry', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'retry-nofail')).toMatchObject({
+      payload: { code: 'NO_FAILED_TURN' },
+    })
+
+    // Recorded failure but an active (blocked) workflow → WORKFLOW_ACTIVE
+    recordLLMFailure('session-1')
+    ;(sessionManager.getLatestWorkflowExecution as any).mockReturnValue({
+      id: 'exec-1',
+      sessionId: 'session-1',
+      workflowId: 'default',
+      workflowName: 'Build & Verify',
+      status: 'blocked',
+      currentStepId: 'build',
+      stepOutput: {},
+      params: {},
+    })
+    harness.send({ id: 'retry-wf', type: 'chat.retry', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'retry-wf')).toMatchObject({
+      payload: { code: 'WORKFLOW_ACTIVE' },
+    })
+
+    // Recorded failure, no workflow → ack + turn starts without re-adding a message
+    ;(sessionManager.getLatestWorkflowExecution as any).mockReturnValue(null)
+    harness.send({ id: 'retry-ok', type: 'chat.retry', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'retry-ok')).toMatchObject({ type: 'ack' })
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(runChatTurnMock).toHaveBeenCalled()
+    expect(runChatTurnMock.mock.calls[0]![0].sessionId).toBe('session-1')
+
+    clearLLMFailure('session-1')
+    await harness.close()
+  })
+
+  it('handles chat.llm_retry_now with no active backoff wait', async () => {
+    const sessionState: any = {
+      id: 'session-1',
+      projectId: 'project-1',
+      workdir: '/tmp/project',
+      mode: 'planner',
+      phase: 'build',
+      isRunning: false,
+      criteria: [],
+    }
+    const sessionManager = createSessionManager({
+      createSession: vi.fn(() => sessionState),
+      getSession: vi.fn(() => sessionState),
+      requireSession: vi.fn(() => sessionState),
+    })
+    const harness = await createHarness({ sessionManager })
+
+    harness.send({ id: 'rn-none', type: 'chat.llm_retry_now', payload: {} })
+    expect(await harness.nextMessage((message) => message.id === 'rn-none')).toMatchObject({
+      payload: { code: 'NO_SESSION' },
+    })
+
+    harness.send({ id: 'sl-ok', type: 'session.load', payload: { sessionId: 'session-1' } })
+    await harness.nextMessage((message) => message.id === 'sl-ok')
+
+    harness.send({ id: 'rn-idle', type: 'chat.llm_retry_now', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'rn-idle')).toMatchObject({
+      type: 'ack',
+      payload: { interrupted: false },
+    })
+
+    await harness.close()
+  })
+
+  it('chat.llm_retry_now interrupts an active backoff wait', async () => {
+    const sessionState: any = {
+      id: 'session-1',
+      projectId: 'project-1',
+      workdir: '/tmp/project',
+      mode: 'planner',
+      phase: 'build',
+      isRunning: false,
+      criteria: [],
+    }
+    const sessionManager = createSessionManager({
+      createSession: vi.fn(() => sessionState),
+      getSession: vi.fn(() => sessionState),
+      requireSession: vi.fn(() => sessionState),
+    })
+    const harness = await createHarness({ sessionManager })
+
+    harness.send({ id: 'sl-ok', type: 'session.load', payload: { sessionId: 'session-1' } })
+    await harness.nextMessage((message) => message.id === 'sl-ok')
+
+    // Start a real backoff wait for session-1 (registered in the retry-waiters map)
+    const waitPromise = sleepThroughRetryBackoff(60_000, 'session-1')
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    harness.send({ id: 'rn-live', type: 'chat.llm_retry_now', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'rn-live')).toMatchObject({
+      type: 'ack',
+      payload: { interrupted: true },
+    })
+
+    // The wait resolves immediately as interrupted
+    expect(await waitPromise).toBe('retry-now')
 
     await harness.close()
   })

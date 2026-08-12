@@ -82,11 +82,11 @@ async function buildRetryPatterns(): Promise<{ retryPatterns: RetryPatternConfig
 
 function buildGetConversationMessages(
   sessionId: string,
-  llmClient: LLMClientWithModel,
+  resolveLLMClient: () => LLMClientWithModel,
   append: (event: import('../events/types.js').TurnEvent) => void,
 ): () => Promise<RequestContextMessage[]> {
   return async () => {
-    const processedEvents = await processEventsForConversation(sessionId, llmClient, (event) => append(event))
+    const processedEvents = await processEventsForConversation(sessionId, resolveLLMClient(), (event) => append(event))
     return getConversationMessages({ type: 'toplevel', sessionId }, { events: processedEvents })
   }
 }
@@ -99,6 +99,10 @@ export interface OrchestratorOptions {
   sessionManager: SessionManager
   sessionId: string
   llmClient: LLMClientWithModel
+  /** Re-resolve the session's LLM client per retry attempt so a provider
+   *  switch made mid-turn takes effect on the next attempt. Falls back to
+   *  `llmClient` when absent. */
+  getSessionLLMClient?: () => LLMClientWithModel
   statsIdentity?: StatsIdentity
   signal?: AbortSignal
   /** Optional callback for WebSocket forwarding (temporary, until WS layer is refactored) */
@@ -108,9 +112,8 @@ export interface OrchestratorOptions {
   initialCompacting?: boolean
   /** When true, only warm up the LLM cache — no events, no messages, no tools. */
   warmup?: boolean
-  /** When true, transient per-attempt LLM errors are not surfaced as chat.error
-   *  events — the caller owns the failure UX (workflow executor). */
-  suppressRecoverableErrors?: boolean
+  /** Overrides for the LLM-failure retry backoff policy (retried inside streamLLMPure). */
+  llmRetryPolicy?: Partial<import('../runner/types.js').LLMRetryPolicy>
   /** When true, the agent-definition reminder is not re-injected at turn start
    *  (already present in history — used for workflow retries/resumes). */
   skipAgentReminder?: boolean
@@ -345,7 +348,14 @@ export async function runAgentTurn(
 
   // Resolve per-agent model override (dedicated LLM client if configured).
   // Pass options.llmClient as preferred fallback so mock/test clients are preserved.
-  const agentLlmClient = options.sessionManager.createClientForAgent(agentId, options.llmClient)
+  // resolveAgentClient is re-called per retry attempt so a mid-turn provider
+  // switch (e.g. during backoff) is honored by the next attempt.
+  const resolveAgentClient = (): LLMClientWithModel =>
+    options.sessionManager.createClientForAgent(
+      agentId,
+      options.getSessionLLMClient ? options.getSessionLLMClient() : options.llmClient,
+    )
+  const agentLlmClient = resolveAgentClient()
   const statsIdentity = resolveStatsIdentity({ ...options, llmClient: agentLlmClient })
 
   if (!options.warmup && !options.skipAgentReminder) {
@@ -367,6 +377,7 @@ export async function runAgentTurn(
       sessionManager: options.sessionManager,
       sessionId: options.sessionId,
       llmClient: agentLlmClient,
+      getLLMClient: resolveAgentClient,
       statsIdentity,
       providerManager: options.sessionManager.getProviderManager(),
       signal: options.signal,
@@ -379,7 +390,7 @@ export async function runAgentTurn(
             instructionContent ?? '',
             skills,
             toolFingerprint,
-            agentLlmClient.getModel(),
+            resolveAgentClient().getModel(),
           )
           if (cached.hash !== currentHash) {
             logger.debug('assembleRequest: hash mismatch', {
@@ -414,12 +425,12 @@ export async function runAgentTurn(
         })
       },
       getToolRegistry: () => getToolRegistryForAgent(agentDef, options.sessionId),
-      getConversationMessages: buildGetConversationMessages(options.sessionId, agentLlmClient, append),
+      getConversationMessages: buildGetConversationMessages(options.sessionId, resolveAgentClient, append),
       injectAgentReminder: () => injectAgentReminder(options.sessionId, agentDef),
       ...(options.initialCompacting ? { initialCompacting: true } : {}),
       ...(callbacks?.injectKickoff ? { injectKickoff: callbacks.injectKickoff } : {}),
       ...(callbacks?.onToolExecuted ? { onToolExecuted: callbacks.onToolExecuted } : {}),
-      ...(options.suppressRecoverableErrors ? { suppressChatError: true } : {}),
+      ...(options.llmRetryPolicy ? { llmRetryPolicy: options.llmRetryPolicy } : {}),
       ...(options.warmup ? { warmup: true } : {}),
     },
     turnMetrics,

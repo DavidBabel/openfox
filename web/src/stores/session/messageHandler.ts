@@ -15,8 +15,8 @@ import type {
   ChatTodoPayload,
   ChatMessagePayload,
   ChatMessageUpdatedPayload,
-  ChatMessageRemovedPayload,
-  ChatStepRetryPayload,
+  ChatLLMRetryPayload,
+  ChatLLMRetryFailedPayload,
   ChatDonePayload,
   ChatErrorPayload,
   ChatPathConfirmationPayload,
@@ -180,6 +180,22 @@ function applyChat(
   return true
 }
 
+/**
+ * Drop the "waiting to retry" pill once a retried LLM attempt actually
+ * streams. Stream activity means the backoff is over — the pill would
+ * otherwise linger until the whole turn ends.
+ */
+function dismissRetryPill(
+  set: (fn: (state: SessionState) => Partial<SessionState> | SessionState) => void,
+  get: () => SessionState,
+  sessionId: string | undefined,
+): void {
+  if (!sessionId) return
+  const pane = get().panes?.[sessionId]
+  if (pane?.llmRetry?.status !== 'retrying') return
+  applyChat(set, get, sessionId, (p) => ({ ...p, llmRetry: null }))
+}
+
 export function handleServerMessage(
   message: ServerMessage,
   set: (partial: Partial<SessionState> | ((state: SessionState) => Partial<SessionState>)) => void,
@@ -253,6 +269,7 @@ export function handleServerMessage(
           activeWorkflowExecution:
             (payload.activeWorkflowExecution as import('@shared/types.js').WorkflowExecution | undefined) ?? null,
           queuedMessages: prior.queuedMessages,
+          llmRetry: null,
         }
         const base = replacePane(state, sessionId, nextPane)
         return {
@@ -261,7 +278,6 @@ export function handleServerMessage(
           unreadSessionIds: removeUnreadSessionId(base.unreadSessionIds, sessionId),
           crossSessionConfirmations: crossCleanup,
           sessionsWithPendingConfirmations: Object.keys(crossCleanup),
-          workflowRetry: null,
           ...(wasPendingCreate ? { pendingSessionCreate: sessionId } : {}),
         }
       })
@@ -422,6 +438,7 @@ export function handleServerMessage(
       ) {
         markBackgroundSessionUnread(set, message)
       }
+      dismissRetryPill(set, get, sessionId)
       break
     }
 
@@ -439,6 +456,7 @@ export function handleServerMessage(
       ) {
         markBackgroundSessionUnread(set, message)
       }
+      dismissRetryPill(set, get, sessionId)
       break
     }
 
@@ -478,6 +496,7 @@ export function handleServerMessage(
       ) {
         markBackgroundSessionUnread(set, message)
       }
+      dismissRetryPill(set, get, sessionId)
       break
     }
 
@@ -527,6 +546,7 @@ export function handleServerMessage(
       ) {
         markBackgroundSessionUnread(set, message)
       }
+      dismissRetryPill(set, get, sessionId)
       break
     }
 
@@ -549,6 +569,7 @@ export function handleServerMessage(
       ) {
         markBackgroundSessionUnread(set, message)
       }
+      dismissRetryPill(set, get, sessionId)
       break
     }
 
@@ -650,37 +671,39 @@ export function handleServerMessage(
               : m,
           ),
           visionFallbackByMessage: {},
+          ...(payload.reason !== 'error' ? { llmRetry: null } : {}),
         })),
       )
-      if (payload.reason !== 'error') {
-        set({ workflowRetry: null })
-      }
       break
     }
 
-    case 'chat.message_removed': {
+    case 'chat.llm_retry': {
       const sessionId = message.sessionId
-      const payload = message.payload as ChatMessageRemovedPayload
-      const removed = new Set(payload.messageIds)
-      applyChat(set, get, sessionId, (pane) => ({
-        ...pane,
-        messages: pane.messages.filter((m) => !removed.has(m.id)),
-        error: null,
-      }))
-      break
-    }
-
-    case 'chat.step_retry': {
-      const sessionId = message.sessionId
-      const payload = message.payload as ChatStepRetryPayload
+      const payload = message.payload as ChatLLMRetryPayload
       if (!isLivePane(get(), sessionId)) {
         markBackgroundSessionUnread(set, message)
         break
       }
-      applyChat(set, get, sessionId, (pane) => ({ ...pane, error: null }))
-      set({
-        workflowRetry: { stepName: payload.stepName, attempt: payload.attempt, retryInMs: payload.retryInMs },
-      })
+      applyChat(set, get, sessionId, (pane) => ({
+        ...pane,
+        error: null,
+        llmRetry: { status: 'retrying', attempt: payload.attempt, retryInMs: payload.retryInMs },
+      }))
+      break
+    }
+
+    case 'chat.llm_retry_failed': {
+      const sessionId = message.sessionId
+      const payload = message.payload as ChatLLMRetryFailedPayload
+      if (!isLivePane(get(), sessionId)) {
+        markBackgroundSessionUnread(set, message)
+        break
+      }
+      applyChat(set, get, sessionId, (pane) => ({
+        ...pane,
+        error: null,
+        llmRetry: { status: 'failed', error: payload.error },
+      }))
       break
     }
 
@@ -882,9 +905,6 @@ export function handleServerMessage(
         })
       ) {
         markBackgroundSessionUnread(set, message)
-      }
-      if (payload.status !== 'running') {
-        set({ workflowRetry: null })
       }
       break
     }

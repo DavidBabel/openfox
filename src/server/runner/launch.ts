@@ -39,6 +39,8 @@ export interface LaunchWorkflowRunDeps {
   sessionId: string
   controller: AbortController
   llmClient: LLMClientWithModel
+  /** Re-resolve the session's LLM client per retry attempt (provider switch mid-run). */
+  getSessionLLMClient?: () => LLMClientWithModel
   statsIdentity: StatsIdentity
   broadcastForSession: (sessionId: string, msg: ServerMessage) => void
   /** Turn-bookkeeping cleanup after the run settles (queue drain, restart, …). */
@@ -56,7 +58,16 @@ export function abortRunnerRun(sessionId: string): boolean {
 }
 
 export function launchWorkflowRun(deps: LaunchWorkflowRunDeps, payload: WorkflowLaunchPayload): void {
-  const { sessionManager, sessionId, controller, llmClient, statsIdentity, broadcastForSession, onFinished } = deps
+  const {
+    sessionManager,
+    sessionId,
+    controller,
+    llmClient,
+    getSessionLLMClient,
+    statsIdentity,
+    broadcastForSession,
+    onFinished,
+  } = deps
   const signal = controller.signal
 
   activeRuns.set(sessionId, controller)
@@ -73,6 +84,7 @@ export function launchWorkflowRun(deps: LaunchWorkflowRunDeps, payload: Workflow
     sessionManager,
     sessionId,
     llmClient,
+    ...(getSessionLLMClient ? { getSessionLLMClient } : {}),
     statsIdentity,
     scope: normalizeWorkflowScope(payload.scope),
     ...(payload.workflowId ? { workflowId: payload.workflowId } : {}),

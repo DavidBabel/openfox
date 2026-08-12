@@ -24,8 +24,8 @@ import type {
   ChatMessageUpdatedPayload,
   ChatDonePayload,
   ChatErrorPayload,
-  ChatMessageRemovedPayload,
-  ChatStepRetryPayload,
+  ChatLLMRetryPayload,
+  ChatLLMRetryFailedPayload,
   ChatPathConfirmationPayload,
   ChatAskUserPayload,
   PathConfirmPayload,
@@ -290,16 +290,15 @@ export function createChatErrorMessage(error: string, recoverable: boolean): Ser
   return createServerMessage('chat.error', { error, recoverable })
 }
 
-export function createChatMessageRemovedMessage(messageIds: string[]): ServerMessage<ChatMessageRemovedPayload> {
-  return createServerMessage('chat.message_removed', { messageIds })
+export function createChatLLMRetryMessage(attempt: number, retryInMs: number): ServerMessage<ChatLLMRetryPayload> {
+  return createServerMessage('chat.llm_retry', { attempt, retryInMs })
 }
 
-export function createChatStepRetryMessage(
-  stepName: string,
-  attempt: number,
-  retryInMs: number,
-): ServerMessage<ChatStepRetryPayload> {
-  return createServerMessage('chat.step_retry', { stepName, attempt, retryInMs })
+export function createChatLLMRetryFailedMessage(
+  error: string,
+  attempts: number,
+): ServerMessage<ChatLLMRetryFailedPayload> {
+  return createServerMessage('chat.llm_retry_failed', { error, attempts })
 }
 
 // Path confirmation messages
@@ -602,16 +601,6 @@ export function storedEventToServerMessage(event: StoredEvent): ServerMessage | 
     case 'pattern.retry': {
       const data = event.data as Extract<TurnEvent, { type: 'pattern.retry' }>['data']
       return createChatFormatRetryMessage(data.attempt, data.maxAttempts, data.pattern, data.field, data.matchedContent)
-    }
-
-    case 'message.removed': {
-      const data = event.data as Extract<TurnEvent, { type: 'message.removed' }>['data']
-      return createChatMessageRemovedMessage(data.messageIds)
-    }
-
-    case 'workflow.step_retry': {
-      const data = event.data as Extract<TurnEvent, { type: 'workflow.step_retry' }>['data']
-      return createChatStepRetryMessage(data.stepName, data.attempt, data.retryInMs)
     }
 
     case 'path.confirmation_pending':

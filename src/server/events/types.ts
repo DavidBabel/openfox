@@ -360,20 +360,6 @@ export type TurnEvent =
         matchedContent: string
       }
     }
-  | {
-      type: 'message.removed'
-      data: {
-        messageIds: string[]
-      }
-    }
-  | {
-      type: 'workflow.step_retry'
-      data: {
-        stepName: string
-        attempt: number
-        retryInMs: number
-      }
-    }
 
   // ----------------------------------------------------------------------------
   // Vision fallback (image description by fallback model)

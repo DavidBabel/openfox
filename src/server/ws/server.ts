@@ -16,6 +16,7 @@ import { getMaxVisibleItems } from '../db/settings.js'
 import type { Message, Provider, ProviderBackend, StatsIdentity, Attachment } from '../../shared/types.js'
 import type { ProviderManager } from '../provider-manager.js'
 import { runChatTurn } from '../chat/orchestrator.js'
+import { interruptLLMRetryWait, hasRecentLLMFailure } from '../chat/stream-pure.js'
 
 import { launchWorkflowRun } from '../runner/launch.js'
 import { appendCompactionPrompt } from '../context/compactor.js'
@@ -530,6 +531,7 @@ export function createWebSocketServer(
       sessionManager,
       sessionId,
       llmClient: llmForSession(sessionId),
+      getSessionLLMClient: () => llmForSession(sessionId),
       statsIdentity: statsForSession(sessionId),
       signal: controller.signal,
       onMessage: (msg) => broadcastForSession(sessionId, msg),
@@ -1042,6 +1044,7 @@ async function handleClientMessage(
         sessionManager,
         sessionId,
         llmClient: llmForSession(sessionId),
+        getSessionLLMClient: () => llmForSession(sessionId),
         statsIdentity: statsForSession(sessionId),
         signal: controller.signal,
         onMessage: (msg) => _broadcastForSession(sessionId, msg),
@@ -1367,6 +1370,7 @@ async function handleClientMessage(
           sessionId,
           controller,
           llmClient: llmForSession(sessionId),
+          getSessionLLMClient: () => llmForSession(sessionId),
           statsIdentity: statsForSession(sessionId),
           broadcastForSession: (sid, msg) => _broadcastForSession(sid, msg),
           onFinished: () => cleanupAfterTurn(sessionId, controller, sendForSession, true),
@@ -1488,6 +1492,77 @@ async function handleClientMessage(
       }
 
       send({ type: 'ack', payload: {}, id: message.id })
+      break
+    }
+
+    // =========================================================================
+    // LLM Retry
+    // =========================================================================
+
+    case 'chat.llm_retry_now': {
+      const payload = message.payload as import('../../shared/protocol.js').ChatLLMRetryNowPayload | undefined
+      const retrySessionId = payload?.sessionId ?? client.activeSessionId
+      if (!retrySessionId) {
+        send(createErrorMessage('NO_SESSION', 'No active session', message.id))
+        return
+      }
+      // Interrupt the in-flight backoff wait — the stream's next attempt starts immediately
+      const interrupted = interruptLLMRetryWait(retrySessionId)
+      send({ type: 'ack', payload: { interrupted }, id: message.id })
+      break
+    }
+
+    case 'chat.retry': {
+      const payload = message.payload as import('../../shared/protocol.js').ChatRetryPayload | undefined
+      const retrySessionId = payload?.sessionId ?? client.activeSessionId
+      if (!retrySessionId) {
+        send(createErrorMessage('NO_SESSION', 'No active session', message.id))
+        return
+      }
+
+      const retrySession = sessionManager.getSession(retrySessionId)
+      if (!retrySession) {
+        send(createErrorMessage('NOT_FOUND', 'Session not found', message.id))
+        return
+      }
+      if (retrySession.isRunning) {
+        send(createErrorMessage('SESSION_RUNNING', 'Session is already running', message.id))
+        return
+      }
+      // Only allow a retry when the last turn actually failed (definitive LLM
+      // failure recorded within the retry window) — never an unsolicited turn.
+      if (!hasRecentLLMFailure(retrySessionId, 30 * 60_000)) {
+        send(createErrorMessage('NO_FAILED_TURN', 'No failed turn to retry', message.id))
+        return
+      }
+      // The workflow resume path owns retries for blocked/running workflow
+      // executions — a plain turn would fight the workflow state machine
+      const latestExec = sessionManager.getLatestWorkflowExecution(retrySessionId)
+      if (
+        latestExec &&
+        (latestExec.status === 'blocked' || latestExec.status === 'running' || latestExec.status === 'waiting')
+      ) {
+        send(createErrorMessage('WORKFLOW_ACTIVE', 'A workflow run is active', message.id))
+        return
+      }
+
+      // User intervention resets a blocked phase
+      if (retrySession.phase === 'blocked') {
+        sessionManager.setPhase(retrySessionId, 'build')
+      }
+
+      // Re-run the last turn WITHOUT re-adding the user message — the context is
+      // already in history, untouched by the failed attempt.
+      const controller = new AbortController()
+      const existingController = activeAgents.get(retrySessionId)
+      if (existingController) {
+        logger.warn('Aborting existing agent before retrying turn', { sessionId: retrySessionId })
+        existingController.abort()
+      }
+      activeAgents.set(retrySessionId, controller)
+
+      send({ type: 'ack', payload: {}, id: message.id })
+      _startTurnWithCompletionChain(retrySessionId, controller)
       break
     }
 

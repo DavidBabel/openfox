@@ -29,12 +29,9 @@ export interface PendingQuestion {
   options: ChoiceOption[] | undefined
 }
 
-export interface WorkflowRetryState {
-  stepName: string
-  attempt: number
-  /** Delay in ms until the next retry attempt (drives the UI countdown). */
-  retryInMs: number
-}
+/** Live status of an LLM failure: backing off before a retry, or the window exhausted. */
+export type LLMRetryState =
+  { status: 'retrying'; attempt: number; retryInMs: number } | { status: 'failed'; error: string }
 
 export interface StreamingBuffer {
   messageId: string | null
@@ -78,6 +75,8 @@ export interface SessionPane {
   activeWorkflowExecution: WorkflowExecution | null
   gitStatus: GitStatus
   error: { code: string; message: string } | null
+  /** Live status of an LLM failure: backing off before a retry, or the window exhausted. */
+  llmRetry: LLMRetryState | null
 }
 
 export interface SessionState {
@@ -104,8 +103,8 @@ export interface SessionState {
   restoredInput: string | null
   activeWorkflowExecution: WorkflowExecution | null
   error: { code: string; message: string } | null
-  /** Live status of an in-flight workflow-step LLM retry (cleared on completion). */
-  workflowRetry: WorkflowRetryState | null
+  /** Live status of an LLM failure: backing off before a retry, or the window exhausted. */
+  llmRetry: LLMRetryState | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
   pendingSessionCreate: boolean | string
@@ -154,8 +153,11 @@ export interface SessionState {
     scope?: WorkflowLaunchScope,
   ) => void
   continueWorkflow: (sessionId: string, choiceId?: string) => void
-  /** Re-launch the workflow at its current step after a step failure (blocked execution). */
-  retryWorkflowStep: (sessionId: string) => void
+  /** Interrupt the current LLM-retry backoff wait and retry immediately. */
+  retryLLMNow: (sessionId: string) => void
+  /** Definitive retry after the LLM retry window is exhausted: re-runs the last
+   *  turn (regular chat) or re-launches the blocked workflow step (resume). */
+  retryLLM: (sessionId: string) => void
   exitWorkflow: (sessionId: string) => void
   switchMode: (sessionId: string, mode: SessionMode) => void
   switchDangerLevel: (sessionId: string, dangerLevel: 'normal' | 'dangerous') => void

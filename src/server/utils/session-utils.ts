@@ -39,6 +39,8 @@ export interface RunChatTurnParams {
   sessionManager: SessionManager
   sessionId: string
   llmClient: LLMClientWithModel
+  /** Re-resolve the session's LLM client per retry attempt (provider switch mid-turn). */
+  getSessionLLMClient?: () => LLMClientWithModel
   statsIdentity?: StatsIdentity
   signal: AbortSignal
   onMessage: (msg: ServerMessage) => void
@@ -48,6 +50,7 @@ export function buildRunChatTurnParams(params: RunChatTurnParams): {
   sessionManager: SessionManager
   sessionId: string
   llmClient: LLMClientWithModel
+  getSessionLLMClient?: () => LLMClientWithModel
   statsIdentity?: StatsIdentity
   signal: AbortSignal
   onMessage: (msg: ServerMessage) => void
@@ -56,6 +59,7 @@ export function buildRunChatTurnParams(params: RunChatTurnParams): {
     sessionManager: params.sessionManager,
     sessionId: params.sessionId,
     llmClient: params.llmClient,
+    ...(params.getSessionLLMClient ? { getSessionLLMClient: params.getSessionLLMClient } : {}),
     signal: params.signal,
     onMessage: params.onMessage,
     ...(params.statsIdentity ? { statsIdentity: params.statsIdentity } : {}),

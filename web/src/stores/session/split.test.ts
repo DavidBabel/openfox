@@ -461,7 +461,7 @@ describe('split view store', () => {
     }))
 
     wsSendMock.mockClear()
-    useSessionStore.getState().retryWorkflowStep('s2')
+    useSessionStore.getState().retryLLM('s2')
 
     expect(wsSendMock).toHaveBeenCalledWith(
       'runner.launch',
@@ -493,5 +493,81 @@ describe('split view store', () => {
     useSessionStore.getState().exitWorkflow('s2')
 
     expect(wsSendMock).toHaveBeenCalledWith('workflow.exit', { sessionId: 's2' })
+  })
+
+  it('keeps llmRetry per pane: a failure in one pane never leaks to the sibling or flat aliases', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.llm_retry',
+      sessionId: 's2',
+      payload: { attempt: 1, retryInMs: 4000 },
+    })
+
+    const state = useSessionStore.getState()
+    expect(state.panes['s2']?.llmRetry).toEqual({ status: 'retrying', attempt: 1, retryInMs: 4000 })
+    // Focused sibling and flat aliases stay clean
+    expect(state.panes['s1']?.llmRetry).toBeNull()
+    expect(state.llmRetry).toBeNull()
+  })
+
+  it('mirrors llmRetry to the flat aliases only when the focused pane owns it', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.llm_retry',
+      sessionId: 's1',
+      payload: { attempt: 2, retryInMs: 8000 },
+    })
+
+    const state = useSessionStore.getState()
+    expect(state.panes['s1']?.llmRetry).toEqual({ status: 'retrying', attempt: 2, retryInMs: 8000 })
+    expect(state.llmRetry).toEqual({ status: 'retrying', attempt: 2, retryInMs: 8000 })
+    expect(state.panes['s2']?.llmRetry).toBeNull()
+  })
+
+  it('clears llmRetry only on the owning pane, leaving siblings intact', async () => {
+    const useSessionStore = await loadSessionStore()
+    mockSessionApis()
+
+    await useSessionStore.getState().openPane('s1', { focus: true })
+    await useSessionStore.getState().openPane('s2', { focus: false })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.llm_retry',
+      sessionId: 's1',
+      payload: { attempt: 1, retryInMs: 90_000 },
+    })
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.llm_retry_failed',
+      sessionId: 's2',
+      payload: { error: 'boom', attempts: 3 },
+    })
+
+    expect(useSessionStore.getState().panes['s1']?.llmRetry).toEqual({
+      status: 'retrying',
+      attempt: 1,
+      retryInMs: 90_000,
+    })
+    expect(useSessionStore.getState().panes['s2']?.llmRetry).toEqual({ status: 'failed', error: 'boom' })
+
+    wsSendMock.mockClear()
+    useSessionStore.getState().retryLLMNow('s2')
+
+    expect(useSessionStore.getState().panes['s2']?.llmRetry).toBeNull()
+    expect(useSessionStore.getState().panes['s1']?.llmRetry).toEqual({
+      status: 'retrying',
+      attempt: 1,
+      retryInMs: 90_000,
+    })
+    expect(useSessionStore.getState().llmRetry).toEqual({ status: 'retrying', attempt: 1, retryInMs: 90_000 })
   })
 })

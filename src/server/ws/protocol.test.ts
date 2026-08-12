@@ -5,6 +5,8 @@ import {
   createChatDeltaMessage,
   createChatErrorMessage,
   createChatFormatRetryMessage,
+  createChatLLMRetryFailedMessage,
+  createChatLLMRetryMessage,
   createChatMessageMessage,
   createChatMessageUpdatedMessage,
   createChatPathConfirmationMessage,
@@ -387,6 +389,14 @@ describe('ws/protocol', () => {
       expect(createChatFormatRetryMessage(2, 10)).toEqual({
         type: 'chat.format_retry',
         payload: { attempt: 2, maxAttempts: 10 },
+      })
+      expect(createChatLLMRetryMessage(2, 4000)).toEqual({
+        type: 'chat.llm_retry',
+        payload: { attempt: 2, retryInMs: 4000 },
+      })
+      expect(createChatLLMRetryFailedMessage('LLM boom', 3)).toEqual({
+        type: 'chat.llm_retry_failed',
+        payload: { error: 'LLM boom', attempts: 3 },
       })
       expect(
         createChatMessageMessage({
@@ -780,32 +790,6 @@ describe('ws/protocol', () => {
       expect(result).toEqual({
         type: 'chat.done',
         payload: { messageId: 'm1', reason: 'complete' },
-      })
-    })
-
-    it('maps message.removed to chat.message_removed', () => {
-      const event: StoredEvent = {
-        ...baseEvent,
-        type: 'message.removed',
-        data: { messageIds: ['failed-1', 'failed-2'] },
-      }
-      const result = storedEventToServerMessage(event)
-      expect(result).toEqual({
-        type: 'chat.message_removed',
-        payload: { messageIds: ['failed-1', 'failed-2'] },
-      })
-    })
-
-    it('maps workflow.step_retry to chat.step_retry', () => {
-      const event: StoredEvent = {
-        ...baseEvent,
-        type: 'workflow.step_retry',
-        data: { stepName: 'Implement', attempt: 2, retryInMs: 4000 },
-      }
-      const result = storedEventToServerMessage(event)
-      expect(result).toEqual({
-        type: 'chat.step_retry',
-        payload: { stepName: 'Implement', attempt: 2, retryInMs: 4000 },
       })
     })
 

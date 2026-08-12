@@ -702,7 +702,8 @@ describe('maxTokens clamping', () => {
       updateMessage: vi.fn(),
     } as any
 
-    // Simulate a failed LLM call — the stream reports an error and yields zero usage
+    // Simulate a failed LLM call — the stream reports an error and yields zero usage.
+    // Give up immediately so the test doesn't ride the real 30-min retry window.
     ;(consumeStreamGenerator as any).mockResolvedValue({
       content: '',
       toolCalls: [],
@@ -715,7 +716,10 @@ describe('maxTokens clamping', () => {
       error: 'boom',
     })
 
-    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+    await runTopLevelAgentLoop(
+      makeConfig({ llmRetryPolicy: { backoffMs: [0], minIntervalMs: 0, maxDurationMs: 60_000, maxAttempts: 1 } }),
+      mockTurnMetrics,
+    ).catch(() => {})
 
     // A failed query must NOT overwrite the last known context size with zero.
     expect(mockSessionManager.setCurrentContextSize).not.toHaveBeenCalled()

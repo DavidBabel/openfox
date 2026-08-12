@@ -31,6 +31,7 @@ import { computeAggregatedStats } from './stats.js'
 import { getModelProfile } from '../llm/profiles.js'
 import { getBackendCapabilities } from '../llm/backend.js'
 import { logger } from '../utils/logger.js'
+import type { LLMRetryPolicy } from '../runner/types.js'
 
 // ============================================================================
 // Types
@@ -60,9 +61,6 @@ export interface PureStreamOptions {
    *  When a preparing event matches, the name is shown as "call_sub_agent"
    *  instead of the hallucinated name. */
   subAgentAliases?: Set<string>
-  /** When true, a stream error is recorded on the result but not emitted as a
-   *  chat.error event — the caller reports the failure itself. */
-  suppressChatError?: boolean
 }
 
 export interface PureStreamResult {
@@ -146,17 +144,21 @@ function createEmptyStreamResult(
 // ============================================================================
 
 /**
- * Pure generator that streams an LLM response and yields TurnEvents.
+ * Pure generator that streams a SINGLE LLM request and yields TurnEvents live.
  *
  * Does NOT:
  * - Create or update messages in database
  * - Emit WebSocket messages
  * - Execute tools
+ * - Retry failed requests (the caller owns retries — see agent-loop.ts)
  *
  * DOES:
- * - Yield events for message deltas, thinking, tool preparation
+ * - Yield events for message deltas, thinking, tool preparation as they arrive
  * - Check retry patterns mid-stream and abort on match
  * - Return the final result with content, tool calls, usage stats
+ *
+ * Stream errors are recorded on the result (result.error) but never emitted
+ * as chat.error events — retry decisions belong to the caller.
  */
 export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator<TurnEvent, PureStreamResult> {
   const { messageId, systemPrompt, llmClient, messages, tools, toolChoice, signal, reasoningEffort, retryPatterns } =
@@ -355,13 +357,6 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
           // the agent loop handles abort gracefully via signal check + emitPartialDoneEvents.
           if (signal?.aborted) break
           streamError = value.error
-          // The caller owns failure reporting (e.g. workflow retry UX) — still
-          // record the error on the result, but don't emit a chat.error event.
-          if (options.suppressChatError) break
-          yield {
-            type: 'chat.error',
-            data: { error: value.error, recoverable: true },
-          }
           break
       }
 
@@ -413,6 +408,130 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
   }
 
   return baseResult
+}
+
+// ============================================================================
+// LLM Failure Retry helpers (shared by the agent loop's per-request retry)
+// ============================================================================
+
+/**
+ * Decide what to do after a failed LLM attempt, per the retry policy.
+ *
+ * Delays escalate through `backoffMs` (before attempt 2, 3, …) and then hold
+ * at `minIntervalMs`; retrying stops once `maxDurationMs` has elapsed since
+ * the first failure or `maxAttempts` consecutive failures are reached.
+ */
+export function evaluateLLMRetry(
+  failures: number,
+  firstFailureAt: number,
+  now: number,
+  policy: LLMRetryPolicy,
+): { retry: true; delayMs: number; attempt: number } | { retry: false } {
+  if (now - firstFailureAt >= policy.maxDurationMs) return { retry: false }
+  if (failures >= policy.maxAttempts) return { retry: false }
+  const delayMs = failures <= policy.backoffMs.length ? policy.backoffMs[failures - 1]! : policy.minIntervalMs
+  return { retry: true, delayMs, attempt: failures + 1 }
+}
+
+/** AbortControllers for in-flight backoff waits, keyed by session. */
+const retryWaiters = new Map<string, AbortController>()
+
+/** Timestamp of the last definitive LLM failure per session (chat.retry guard). */
+const llmFailures = new Map<string, number>()
+
+/**
+ * Whether a session had a definitive LLM failure within the given window.
+ * Used to validate `chat.retry` — an unprompted turn must never be started
+ * unless the last turn actually failed.
+ */
+export function hasRecentLLMFailure(sessionId: string, withinMs: number): boolean {
+  const at = llmFailures.get(sessionId)
+  if (at === undefined) return false
+  if (Date.now() - at <= withinMs) return true
+  // Expired entries are dropped lazily so the map never accumulates
+  // permanent entries for sessions that failed long ago.
+  llmFailures.delete(sessionId)
+  return false
+}
+
+/**
+ * Interrupt the current LLM-retry backoff wait for a session ("Retry now").
+ * Returns whether a wait was interrupted.
+ */
+export function interruptLLMRetryWait(sessionId: string): boolean {
+  const controller = retryWaiters.get(sessionId)
+  if (!controller) return false
+  controller.abort()
+  return true
+}
+
+/**
+ * Sleep through a retry backoff, interruptible by the user abort signal or
+ * the "Retry now" signal. Resolves with the reason the wait ended.
+ */
+function sleepWithRetryInterrupt(
+  ms: number,
+  signal?: AbortSignal,
+  retryNowSignal?: AbortSignal,
+): Promise<'waited' | 'aborted' | 'retry-now'> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve('aborted')
+      return
+    }
+    if (retryNowSignal?.aborted) {
+      resolve('retry-now')
+      return
+    }
+    const cleanup = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      retryNowSignal?.removeEventListener('abort', onRetryNow)
+    }
+    const onAbort = () => {
+      cleanup()
+      resolve('aborted')
+    }
+    const onRetryNow = () => {
+      cleanup()
+      resolve('retry-now')
+    }
+    const timer = setTimeout(() => {
+      cleanup()
+      resolve('waited')
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    retryNowSignal?.addEventListener('abort', onRetryNow, { once: true })
+  })
+}
+
+/**
+ * Sleep through a retry backoff for a session, interruptible by the user abort
+ * signal or the "Retry now" signal. Registers the wait so `chat.llm_retry_now`
+ * can interrupt it. Resolves with the reason the wait ended.
+ */
+export async function sleepThroughRetryBackoff(
+  ms: number,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<'waited' | 'aborted' | 'retry-now'> {
+  const retryNowController = new AbortController()
+  retryWaiters.set(sessionId, retryNowController)
+  try {
+    return await sleepWithRetryInterrupt(ms, signal, retryNowController.signal)
+  } finally {
+    retryWaiters.delete(sessionId)
+  }
+}
+
+/** Record a definitive LLM failure (chat.retry guard). */
+export function recordLLMFailure(sessionId: string): void {
+  llmFailures.set(sessionId, Date.now())
+}
+
+/** Clear a recorded LLM failure after a successful turn (chat.retry guard). */
+export function clearLLMFailure(sessionId: string): void {
+  llmFailures.delete(sessionId)
 }
 
 // ============================================================================

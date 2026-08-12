@@ -31,6 +31,9 @@ export type ClientMessageType =
   | 'runner.launch' // Start the auto-loop runner (build → verify → done)
   // Workflow
   | 'workflow.exit' // Exit/cancel a paused workflow
+  // Chat
+  | 'chat.retry' // Re-run the last turn after an LLM failure (no user message re-added)
+  | 'chat.llm_retry_now' // Interrupt the current LLM-retry backoff wait and retry immediately
   // Path confirmation
   | 'path.confirm' // User response to path confirmation request
   // Ask user
@@ -102,8 +105,8 @@ export type ServerMessageType =
   // Vision fallback events
   | 'chat.vision_fallback' // Vision model is describing an image
   | 'chat.error' // Error during generation
-  | 'chat.message_removed' // One or more messages were rolled back and must be dropped from the feed
-  | 'chat.step_retry' // A workflow step's LLM call failed — reporting a retry in progress
+  | 'chat.llm_retry' // An LLM call failed — reporting a backoff retry in progress
+  | 'chat.llm_retry_failed' // The LLM retry window was exhausted — definitive Retry available
   | 'chat.path_confirmation' // Request user confirmation for outside-workdir path access
   | 'chat.ask_user' // Request user answer to a question
   // Mode events
@@ -328,15 +331,25 @@ export interface ChatErrorPayload {
   recoverable: boolean
 }
 
-export interface ChatMessageRemovedPayload {
-  messageIds: string[]
-}
-
-export interface ChatStepRetryPayload {
-  stepName: string
+export interface ChatLLMRetryPayload {
   attempt: number
   /** Delay in ms until the next retry attempt (drives the UI countdown). */
   retryInMs: number
+}
+
+export interface ChatLLMRetryFailedPayload {
+  error: string
+  /** Number of consecutive failed attempts before giving up. */
+  attempts: number
+}
+
+// Client payloads for retry actions
+export interface ChatRetryPayload {
+  sessionId: string
+}
+
+export interface ChatLLMRetryNowPayload {
+  sessionId: string
 }
 
 // Path confirmation payloads

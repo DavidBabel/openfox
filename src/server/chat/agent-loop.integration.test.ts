@@ -20,6 +20,10 @@ vi.mock('./stream-pure.js', () => ({
     type: 'chat.done',
     data: { messageId, reason },
   })),
+  evaluateLLMRetry: vi.fn(() => ({ retry: true, delayMs: 0, attempt: 2 })),
+  sleepThroughRetryBackoff: vi.fn(async () => 'waited' as const),
+  recordLLMFailure: vi.fn(),
+  clearLLMFailure: vi.fn(),
 }))
 
 vi.mock('./execute-tools.js', () => ({

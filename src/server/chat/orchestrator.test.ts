@@ -608,13 +608,18 @@ describe('chat orchestrator', () => {
     getAllInstructionsMock.mockResolvedValue({ content: '', files: [] })
     getToolRegistryForModeMock.mockReturnValue({ tools: [], definitions: [], execute: vi.fn() })
     streamLLMPureMock.mockReturnValue({ kind: 'stream' })
-    consumeStreamGeneratorMock.mockResolvedValueOnce({
-      content: '',
-      toolCalls: [],
-      segments: [],
-      usage: { promptTokens: 4, completionTokens: 1 },
-      timing: { ttft: 1, completionTime: 1, tps: 1, prefillTps: 4 },
-      aborted: true,
+    consumeStreamGeneratorMock.mockImplementationOnce(async (_gen: unknown, onEvent: any) => {
+      // A partial response was streamed before the abort — the assistant
+      // message.start is deferred until this first event arrives
+      onEvent({ type: 'message.delta', data: { messageId: 'assistant-1', content: 'partial' } })
+      return {
+        content: '',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 4, completionTokens: 1 },
+        timing: { ttft: 1, completionTime: 1, tps: 1, prefillTps: 4 },
+        aborted: true,
+      }
     })
 
     const sessionManager = createSessionManager({
@@ -1668,13 +1673,17 @@ describe('chat orchestrator', () => {
       getAllInstructionsMock.mockResolvedValue({ content: '', files: [] })
       getToolRegistryForModeMock.mockReturnValue({ tools: [], definitions: [], execute: vi.fn() })
       streamLLMPureMock.mockReturnValue({ kind: 'stream' })
-      consumeStreamGeneratorMock.mockResolvedValue({
-        content: 'Hi',
-        toolCalls: [],
-        segments: [{ type: 'text', content: 'Hi' }],
-        usage: { promptTokens: 5, completionTokens: 2 },
-        timing: { ttft: 1, completionTime: 1, tps: 2, prefillTps: 5 },
-        aborted: false,
+      consumeStreamGeneratorMock.mockImplementation(async (_gen: unknown, onEvent: any) => {
+        // The assistant message.start is deferred until the first streamed event
+        onEvent({ type: 'message.delta', data: { messageId: 'assistant-1', content: 'Hi' } })
+        return {
+          content: 'Hi',
+          toolCalls: [],
+          segments: [{ type: 'text', content: 'Hi' }],
+          usage: { promptTokens: 5, completionTokens: 2 },
+          timing: { ttft: 1, completionTime: 1, tps: 2, prefillTps: 5 },
+          aborted: false,
+        }
       })
 
       const sessionManager = createSessionManager({

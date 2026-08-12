@@ -7,8 +7,7 @@
  */
 
 import type { ToolCall, ToolResult, UserStepChoice } from '../../shared/types.js'
-import type { OrchestratorOptions, OrchestratorResult, NextAction, LLMRetryPolicy } from '../runner/types.js'
-import { DEFAULT_LLM_RETRY_POLICY } from '../runner/types.js'
+import type { OrchestratorOptions, OrchestratorResult, NextAction } from '../runner/types.js'
 import type {
   WorkflowDefinition,
   WorkflowStep,
@@ -267,101 +266,6 @@ function getCurrentWindowMessageOptions(sessionId: string): { contextWindowId: s
   return contextWindowId ? { contextWindowId } : undefined
 }
 
-/**
- * Sleep that rejects with an 'Aborted' error if the signal fires first, so a
- * long retry backoff never strands the workflow after the user aborts.
- */
-function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new Error('Aborted'))
-      return
-    }
-    const onAbort = () => {
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
-      reject(new Error('Aborted'))
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
-}
-
-/**
- * Decide what to do after a failed LLM attempt, per the retry policy.
- *
- * Delays escalate through `backoffMs` (before attempt 2, 3, …) and then hold
- * at `minIntervalMs`; retrying stops once `maxDurationMs` has elapsed since
- * the first failure or `maxAttempts` consecutive failures are reached.
- */
-export function evaluateLLMRetry(
-  failures: number,
-  firstFailureAt: number,
-  now: number,
-  policy: LLMRetryPolicy,
-): { retry: true; delayMs: number; attempt: number } | { retry: false } {
-  if (now - firstFailureAt >= policy.maxDurationMs) return { retry: false }
-  if (failures >= policy.maxAttempts) return { retry: false }
-  const delayMs = failures <= policy.backoffMs.length ? policy.backoffMs[failures - 1]! : policy.minIntervalMs
-  return { retry: true, delayMs, attempt: failures + 1 }
-}
-
-/**
- * Roll back a failed agent-step attempt.
- *
- * Only the attempt's LLM-turn artifacts are removed (the failed assistant
- * bubbles, their stream/tool/error events) — the step prompt and agent
- * reminder stay in history, so a retry reuses the exact same context instead
- * of re-injecting a fresh copy. A `message.removed` event is appended
- * (relayed through the same FIFO as the removed events) so connected clients
- * drop the affected messages in order. User-authored messages drained into
- * the stream mid-attempt are never targeted.
- */
-function rollbackFailedAttempt(sessionId: string, turnStartSeq: number): void {
-  const eventStore = getEventStore()
-  const fromSeq = Math.max(1, turnStartSeq)
-  const events = eventStore.getEvents(sessionId, fromSeq + 1)
-
-  const assistantIds = new Set(
-    events
-      .filter((e) => e.type === 'message.start' && (e.data as { role?: string }).role === 'assistant')
-      .map((e) => (e.data as { messageId: string }).messageId),
-  )
-
-  const tombstoneSeqs = events
-    .filter((e) => {
-      switch (e.type) {
-        case 'message.start':
-          return (e.data as { role?: string }).role === 'assistant'
-        case 'message.delta':
-        case 'message.thinking':
-        case 'message.done':
-        case 'chat.done':
-          return assistantIds.has((e.data as { messageId: string }).messageId)
-        case 'chat.error':
-        case 'pattern.retry':
-        case 'tool.preparing':
-        case 'tool.call':
-        case 'tool.output':
-        case 'tool.result':
-          return true
-        default:
-          return false
-      }
-    })
-    .map((e) => e.seq)
-
-  if (tombstoneSeqs.length > 0) {
-    eventStore.tombstoneEvents(sessionId, tombstoneSeqs)
-  }
-  if (assistantIds.size > 0) {
-    eventStore.append(sessionId, { type: 'message.removed', data: { messageIds: [...assistantIds] } })
-  }
-}
-
 export function buildReason(metadataEntries?: Record<string, import('../../shared/types.js').MetadataEntry[]>): string {
   const entries = metadataEntries?.['criteria'] ?? []
   const remaining = entries.filter((e) => e.status !== 'passed')
@@ -399,10 +303,6 @@ export async function executeWorkflow(
       : workflow.entryStep
   let lastStepOutput: Record<string, string> = options.initialStepOutput ?? {}
   const firstEntryForStep = new Set<string>()
-  /** Consecutive LLM failures per agent step, reset on success. */
-  const stepLLMFailures = new Map<string, number>()
-  /** Timestamp of the first consecutive LLM failure per step (retry window anchor). */
-  const stepLLMDeadlines = new Map<string, number>()
 
   // Snapshot message count so we can compute workflow-scoped stats (not session-wide)
   const messagesBeforeWorkflow = sessionManager.requireSession(sessionId).messages.length
@@ -590,15 +490,12 @@ export async function executeWorkflow(
         const STEP_DONE_NUDGE =
           "You haven't called step_done(). If you haven't finished the task, continue and when you're finished call step_done()"
 
-        // Position in the event log before this attempt. If the LLM call fails,
         // When resuming from the same step after abort, skip re-injecting the
         // prompt or nudge — the agent already knows what step it's in and the
         // user's message (which triggered the resume) is already in context.
-        // LLM-failure retries skip both too: the prompt + reminder from the
-        // first attempt stay in history, so the retry reuses the same context
-        // instead of repeating the step prompt.
+        // LLM-failure retries happen inside streamLLMPure, so the prompt +
+        // reminder stay in history untouched and are never re-injected.
         const isResumingCurrentStep = isResume && step.id === resumeFromStep && !resumeConsumed
-        const isLLMFailedRetry = firstEntryForStep.has(step.id) && (stepLLMFailures.get(step.id) ?? 0) > 0
 
         // Build prompt content
         let promptContent: string | null
@@ -632,7 +529,7 @@ export async function executeWorkflow(
               }),
             )
           }
-        } else if (firstEntryForStep.has(step.id) && !isResumingCurrentStep && !isLLMFailedRetry) {
+        } else if (firstEntryForStep.has(step.id) && !isResumingCurrentStep) {
           // Build nudge: nudgePrompt first (if exists), then step_done nudge
           const parts: string[] = []
           if (agentStep.nudgePrompt) {
@@ -645,42 +542,11 @@ export async function executeWorkflow(
           emitWorkflowMessage(eventStore, sessionId, nudgeContent, currentWindowMessageOptions, onMessage)
         }
 
-        // Position right before the LLM turn: everything this attempt appends
-        // from here on (assistant bubbles, tool events, errors) is rolled back
-        // on failure, while the step prompt + reminder stay in history.
-        const turnStartSeq = eventStore.getLatestSeq(sessionId) ?? 0
-
-        // Outcome of a failed LLM attempt: either 'retry' (attempt rolled back,
-        // step will re-run after a backoff) or 'blocked' (retry window elapsed).
-        let retryBlocked: 'retry' | 'blocked' | null = null
-        let blockedReason = ''
-        const retryPolicy = { ...DEFAULT_LLM_RETRY_POLICY, ...options.llmRetryPolicy }
-        const handleLLMFailure = async (errorMessage: string): Promise<void> => {
-          const failures = (stepLLMFailures.get(step.id) ?? 0) + 1
-          stepLLMFailures.set(step.id, failures)
-          const firstFailureAt = stepLLMDeadlines.get(step.id) ?? Date.now()
-          stepLLMDeadlines.set(step.id, firstFailureAt)
-
-          const decision = evaluateLLMRetry(failures, firstFailureAt, Date.now(), retryPolicy)
-          if (decision.retry) {
-            rollbackFailedAttempt(sessionId, turnStartSeq)
-            // Mark the step as entered so the prompt is NOT re-injected on the
-            // retry — it stays in history from the first attempt.
-            firstEntryForStep.add(step.id)
-            // Never re-apply the resume-suppression: the retry needs full context.
-            resumeConsumed = true
-            eventStore.append(sessionId, {
-              type: 'workflow.step_retry',
-              data: { stepName: step.name, attempt: decision.attempt, retryInMs: decision.delayMs },
-            })
-            retryBlocked = 'retry'
-            // Back off before the next attempt; abort interrupts the wait.
-            await sleepWithSignal(decision.delayMs, signal)
-            return
-          }
-          // Give up: roll the final attempt back too — no leftover failed
-          // bubble or empty stats bar, just the error and the Retry step action.
-          rollbackFailedAttempt(sessionId, turnStartSeq)
+        // Block the execution when the LLM retry window is exhausted. Nothing
+        // is rolled back: failed attempts were buffered in streamLLMPure and
+        // never touched history. The step prompt stays in place so a user
+        // retry (resume) reuses the exact same context.
+        const blockOnLLMFailure = (errorMessage: string): OrchestratorResult => {
           sessionManager.setPhase(sessionId, 'blocked')
           if (executionId) {
             sessionManager.blockWorkflow(
@@ -691,9 +557,12 @@ export async function executeWorkflow(
               workflow.metadata.color,
             )
           }
-          blockedReason = `Step "${step.name}" failed after ${failures} attempts: ${errorMessage}`
-          eventStore.append(sessionId, { type: 'chat.error', data: { error: blockedReason, recoverable: false } })
-          retryBlocked = 'blocked'
+          const reason = `Step "${step.name}" failed: ${errorMessage}`
+          return {
+            finalAction: { type: 'BLOCKED', reason, blockedCriteria: [] },
+            iterations,
+            totalTime: (performance.now() - startTime) / 1000,
+          }
         }
 
         const turnMetrics = new TurnMetrics()
@@ -709,11 +578,12 @@ export async function executeWorkflow(
               sessionManager,
               sessionId,
               llmClient,
+              ...(options.getSessionLLMClient ? { getSessionLLMClient: options.getSessionLLMClient } : {}),
               ...(options.statsIdentity ? { statsIdentity: options.statsIdentity } : {}),
               ...(signal ? { signal } : {}),
               ...(onMessage ? { onMessage } : {}),
-              suppressRecoverableErrors: true,
-              ...(isLLMFailedRetry || isResumingCurrentStep ? { skipAgentReminder: true } : {}),
+              ...(options.llmRetryPolicy ? { llmRetryPolicy: options.llmRetryPolicy } : {}),
+              ...(isResumingCurrentStep ? { skipAgentReminder: true } : {}),
             },
             turnMetrics,
             agentStep.agentId ?? resolveDefaultAgentId(),
@@ -737,46 +607,22 @@ export async function executeWorkflow(
           if (error instanceof Error && error.message === 'Aborted') {
             throw error
           }
-          // Only LLM failures get the rollback+retry treatment. Unexpected
-          // internal errors propagate as before instead of being masked by
-          // pointless retries.
+          // A thrown LLMError means the retry window was exhausted (transient
+          // failures are retried inside the stream layer). Unexpected internal
+          // errors propagate as before instead of being masked.
           if (!(error instanceof LLMError)) {
             throw error
           }
-          await handleLLMFailure(error.message)
-          if (retryBlocked === 'retry') {
-            // Retry backoffs are resilience, not workflow progress — don't
-            // consume the maxIterations budget while waiting.
-            iterations -= 1
-            continue
-          }
-          return {
-            finalAction: { type: 'BLOCKED', reason: blockedReason, blockedCriteria: [] },
-            iterations,
-            totalTime: (performance.now() - startTime) / 1000,
-          }
+          return blockOnLLMFailure(error.message)
         }
 
-        // Soft LLM failure (stream error) — same treatment as a thrown one.
+        // Soft LLM failure (retry window exhausted in streamLLMPure) — block
+        // the execution so the user can retry the step on demand.
         if (agentResult.failed) {
-          await handleLLMFailure(agentResult.failed.error)
-          if (retryBlocked === 'retry') {
-            // Retry backoffs are resilience, not workflow progress — don't
-            // consume the maxIterations budget while waiting.
-            iterations -= 1
-            continue
-          }
-          return {
-            finalAction: { type: 'BLOCKED', reason: blockedReason, blockedCriteria: [] },
-            iterations,
-            totalTime: (performance.now() - startTime) / 1000,
-          }
+          return blockOnLLMFailure(agentResult.failed.error)
         }
 
         firstEntryForStep.add(step.id)
-        // Success resets the consecutive-failure counter for this step.
-        stepLLMFailures.delete(step.id)
-        stepLLMDeadlines.delete(step.id)
         // After the first resumed turn completes, mark resume as consumed so
         // subsequent iterations of this step get the nudge if step_done wasn't called.
         resumeConsumed = true
