@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 import userEvent from '@testing-library/user-event'
@@ -80,10 +80,13 @@ vi.mock('../stores/project', () => ({
   },
 }))
 
+const mountedRoots: Array<ReturnType<typeof createRoot>> = []
+
 function render(ui: React.ReactElement): HTMLElement {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
+  mountedRoots.push(root)
   act(() => {
     root.render(ui)
   })
@@ -93,6 +96,13 @@ function render(ui: React.ReactElement): HTMLElement {
 function textOf(el: HTMLElement | null): string {
   return el?.textContent ?? ''
 }
+
+afterEach(() => {
+  for (const root of mountedRoots.splice(0)) {
+    act(() => root.unmount())
+  }
+  document.body.innerHTML = ''
+})
 
 beforeEach(() => {
   sessionStore.sessions = []
