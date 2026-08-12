@@ -9,6 +9,18 @@ const rootDir = resolve(__dirname, '..').replace(/\\/g, '/')
 
 const CI_MULTIPLIER = process.env['CI'] === 'true' ? 10 : 1
 
+// Workers are configurable so machines that can parallel-start servers do, and
+// constrained ones (CI) or the unlucky can dial it down. Override with
+// OPENFOX_E2E_MAX_WORKERS; invalid values fall back to the default.
+export function resolveMaxWorkers(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env['OPENFOX_E2E_MAX_WORKERS']
+  if (raw) {
+    const parsed = Number(raw)
+    if (Number.isInteger(parsed) && parsed >= 1) return parsed
+  }
+  return env['CI'] === 'true' ? 1 : 12
+}
+
 export default defineConfig({
   test: {
     testTimeout: 15_000 * CI_MULTIPLIER,
@@ -17,7 +29,7 @@ export default defineConfig({
     // Run tests in parallel with fork pool
     // Each test file gets its own in-process server on a dynamic port
     pool: 'forks',
-    maxWorkers: process.env['CI'] === 'true' ? 1 : 12, // CI runners are resource-constrained
+    maxWorkers: resolveMaxWorkers(),
 
     // No global setup - each test file manages its own server
     // globalSetup: './setup.ts',  // REMOVED - using in-process servers
