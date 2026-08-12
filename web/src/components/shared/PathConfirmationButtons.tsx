@@ -1,7 +1,7 @@
 import { ScrollArea } from './ScrollArea'
 import { useSessionStore, type PendingPathConfirmation } from '../../stores/session'
 import { WarningSmallIcon } from './icons'
-import { useSessionScope } from '../plan/session-scope'
+import { useSessionScope } from '../../stores/session/session-scope'
 
 interface PathConfirmationButtonsProps {
   confirmation: PendingPathConfirmation

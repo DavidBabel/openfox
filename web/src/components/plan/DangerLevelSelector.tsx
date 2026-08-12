@@ -1,5 +1,5 @@
 import { useSessionStore } from '../../stores/session'
-import { useSessionScope, useScopedPaneState } from '../plan/session-scope'
+import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 
 export function DangerLevelSelector() {
   const sessionId = useSessionScope()

@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '../../stores/session'
 import { SETTINGS_KEYS, useSettingsStore } from '../../stores/settings'
-import { SessionScopeProvider } from '../plan/session-scope'
+import { SessionScopeProvider } from '../../stores/session/session-scope'
 import { ToolCallDisplay } from './ToolCallDisplay'
 
 vi.mock('./RunCommandView', () => ({

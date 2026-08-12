@@ -6,7 +6,7 @@ import { AgentsModal } from '../settings/AgentsModal'
 import { useKeybindings } from '../../hooks/useKeybindings'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { formatKeybinding } from '../../lib/keybindings'
-import { useSessionScope, useScopedPaneState } from './session-scope'
+import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 export function AgentSelector() {
   const sessionId = useSessionScope()
   const currentMode = useScopedPaneState(

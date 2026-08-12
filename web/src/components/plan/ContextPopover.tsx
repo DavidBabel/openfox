@@ -5,7 +5,7 @@ import { formatTokens } from '../../lib/format-stats'
 import { MoreIcon } from '../shared/icons'
 import { getTextColor } from './token-utils'
 import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
-import { useApplyDynamicContext, useScopedContext } from './session-scope'
+import { useApplyDynamicContext, useScopedContext } from '../../stores/session/session-scope'
 
 interface ContextPopoverProps {
   variant?: 'popover' | 'sidebar'

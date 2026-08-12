@@ -4,7 +4,7 @@ import { wsClient } from '../../lib/ws'
 import { Modal } from '../shared/SelfContainedModal'
 import { UnifiedDiffViewer } from '../shared/DiffView'
 import type { DiffLine } from '@shared/protocol.js'
-import { useSessionScope } from './session-scope'
+import { useSessionScope } from '../../stores/session/session-scope'
 
 interface DynamicContextPreviewModalProps {
   isOpen: boolean

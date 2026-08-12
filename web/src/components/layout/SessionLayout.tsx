@@ -1,7 +1,7 @@
 import { ScrollArea } from '../shared/ScrollArea'
 import { ResizeHandle } from '../shared/ResizeHandle'
 import type { ReactNode } from 'react'
-import { useScopedPaneState } from '../plan/session-scope'
+import { useScopedPaneState } from '../../stores/session/session-scope'
 import { useResizable } from '../../hooks/useResizable'
 import { SessionSidebar } from '../plan/SessionSidebar'
 import type { Message } from '@shared/types.js'

@@ -15,7 +15,7 @@ import { ProjectTasksView } from './ProjectTasksView'
 import { PathConfirmationButtons } from './PathConfirmationButtons'
 import { formatToolArgsFull, formatToolArgsWithMetadata } from '../../lib/formatToolArgs'
 import { type PendingPathConfirmation } from '../../stores/session'
-import { useSessionScope, useScopedPaneState } from '../plan/session-scope'
+import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 import { useSettingsStore, SETTINGS_KEYS } from '../../stores/settings'
 import { buildEditorUrl } from '../../lib/editor-link'
 import { detectRemoteExecution } from '../../lib/remote-execution'
@@ -25,6 +25,10 @@ interface StreamingChunk {
   stream: 'stdout' | 'stderr'
   content: string
 }
+
+// Stable fallback for the scoped selector — a fresh array per render makes
+// useSyncExternalStore loop ("Maximum update depth exceeded").
+const EMPTY_CONFIRMATIONS: PendingPathConfirmation[] = []
 
 interface ToolCallDisplayProps {
   tool: string
@@ -153,7 +157,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
     scopeId,
     (pane) => pane.pendingPathConfirmations,
     (state) => state.pendingPathConfirmations,
-    [],
+    EMPTY_CONFIRMATIONS,
   )
   const pendingConfirmation: PendingPathConfirmation | null = callId
     ? (pendingPathConfirmations.find((pc) => pc.callId === callId || pc.callId.startsWith(callId + '-')) ?? null)

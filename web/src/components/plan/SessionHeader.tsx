@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { XCloseIcon } from '../shared/icons'
 import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
-import { useApplyDynamicContext, useScopedContext } from './session-scope'
+import { useApplyDynamicContext, useScopedContext } from '../../stores/session/session-scope'
 
 export function SessionHeader() {
   const { sessionId, contextState, currentSession } = useScopedContext()

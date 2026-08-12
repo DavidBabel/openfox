@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Project, DangerLevel } from '@shared/types.js'
 import { Modal } from '../shared/SelfContainedModal'
+import { ModalCrumbTitle } from '../shared/ModalCrumbTitle'
 import { McpServerCard } from './McpServerCard'
 import { ModalFooter } from '../shared/ModalFooter'
 import { useProjectStore } from '../../stores/project'
@@ -378,7 +379,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     <Modal
       isOpen={isOpen}
       onClose={handleCancel}
-      title={`${project.name} Settings`}
+      title={<ModalCrumbTitle projectName={project.name}>Settings</ModalCrumbTitle>}
       size="lg"
       footer={
         <ModalFooter onCancel={handleCancel} onSave={handleSave} saving={saving} saveDisabled={!isDirty || saving} />

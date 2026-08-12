@@ -2,7 +2,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { SessionHeader } from './SessionHeader'
-import { SessionScopeProvider } from './session-scope'
+import { SessionScopeProvider } from '../../stores/session/session-scope'
 
 const { sendMock, queueUpdateMock, triggerPendingUpdateMock } = vi.hoisted(() => ({
   sendMock: vi.fn(),

@@ -51,6 +51,7 @@ vi.mock('./stores/session', () => ({
     loadSession: vi.fn(),
     listSessions: vi.fn(),
     clearError: vi.fn(),
+    openSessionIds: [],
   }),
 }))
 

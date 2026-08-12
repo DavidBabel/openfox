@@ -18,6 +18,7 @@ import { DynamicContextPreviewModal } from './DynamicContextPreviewModal'
 import { WorkspaceBranchSection } from './WorkspaceBranchSection'
 import { WorkspaceModal } from './WorkspaceModal'
 import { BranchModal } from './BranchModal'
+import { useScopedContext } from '../../stores/session/session-scope'
 import { ContextPopover } from './ContextPopover'
 import { FolderIcon, BranchIcon, ChevronDownIcon, OpenExternalIcon, PlayIcon } from '../shared/icons'
 import { MetadataEntries } from '../shared/MetadataEntries'
@@ -182,11 +183,10 @@ function MetadataStatusSummary({ entries }: { entries: { status: string }[] }) {
 /* ------------------------------------------------------------------ */
 
 export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
-  const session = useSessionStore((state) => state.currentSession)
+  const { contextState, currentSession: session } = useScopedContext()
   const devServerStatus = useDevServerStore((s) => s.status)
   const devServerConfig = useDevServerStore((s) => s.config)
   const devServerStart = useDevServerStore((s) => s.start)
-  const contextState = useSessionStore((state) => state.contextState)
   const queueUpdate = useSessionStore((state) => state.queueUpdate)
   const devServerLogs = useDevServerStore((s) => s.logs)
   const { branch, diff } = useGitStatus()

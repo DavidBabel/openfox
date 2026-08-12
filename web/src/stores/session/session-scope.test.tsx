@@ -9,7 +9,7 @@ const { storeHolder } = vi.hoisted(() => ({ storeHolder: [] as unknown[] }))
 
 // Real hook-based store so useSessionStore actually registers hooks (a plain
 // selector-calling stub would mask the conditional-hook bug in useSessionScope).
-vi.mock('../../stores/session', () => {
+vi.mock('../session', () => {
   const store = create(() => ({
     focusedSessionId: null as string | null,
     currentSession: null,

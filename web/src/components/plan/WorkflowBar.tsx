@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSessionStore } from '../../stores/session'
-import { useSessionScope, useScopedPaneState } from './session-scope'
+import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 
 export function WorkflowBar() {
   const sessionId = useSessionScope()

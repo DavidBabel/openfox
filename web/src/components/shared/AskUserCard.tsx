@@ -3,7 +3,7 @@ import type { ToolCall } from '@shared/types.js'
 import { normalizeAskOptions } from '@shared/ask-options.js'
 import { useSessionStore, usePendingQuestions, type PendingQuestion } from '../../stores/session'
 import { shouldAutofocus } from '../../lib/device'
-import { useSessionScope } from '../plan/session-scope'
+import { useSessionScope } from '../../stores/session/session-scope'
 
 interface AskUserCardProps {
   toolCall: ToolCall

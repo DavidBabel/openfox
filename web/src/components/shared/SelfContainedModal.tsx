@@ -5,7 +5,7 @@ import { CloseButton } from './IconButton'
 
 interface ModalProps {
   label?: ReactNode
-  title?: string
+  title?: ReactNode
   headerRight?: ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
   minHeight?: string

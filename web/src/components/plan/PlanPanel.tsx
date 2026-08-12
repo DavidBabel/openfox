@@ -34,7 +34,7 @@ import { useViewport } from '../../hooks/useViewport'
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { useScrolledSend } from '@/hooks/useScrolledSend.ts'
 import { useKeybindings, useBinding, useAgentSwitchingBindings } from '../../hooks/useKeybindings'
-import { SessionScopeProvider, useScopedPaneState } from './session-scope'
+import { SessionScopeProvider, useScopedPaneState } from '../../stores/session/session-scope'
 
 interface PlanPanelProps {
   criteriaSidebarOpen?: boolean

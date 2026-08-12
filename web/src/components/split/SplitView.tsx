@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'wouter'
+import { useEffect, useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { SessionPane } from './SessionPane'
 import { SplitControlPanel } from './SplitControlPanel'
@@ -11,7 +10,6 @@ interface SplitViewProps {
 }
 
 export function SplitView({ controlOpen = true }: SplitViewProps) {
-  const [, navigate] = useLocation()
   const openSessionIds = useSessionStore((state) => state.openSessionIds)
   const focusedSessionId = useSessionStore((state) => state.focusedSessionId ?? state.currentSession?.id)
   const focusPane = useSessionStore((state) => state.focusPane)
@@ -39,18 +37,6 @@ export function SplitView({ controlOpen = true }: SplitViewProps) {
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [listHomeSessions])
-
-  // Navigate home only when the user closes the last pane. A fresh visit with
-  // no panes stays put and shows an empty state so the control panel can open
-  // sessions (restoration in App happens before this component mounts).
-  const prevCountRef = useRef(openSessionIds.length)
-  useEffect(() => {
-    const prev = prevCountRef.current
-    prevCountRef.current = openSessionIds.length
-    if (prev > 0 && openSessionIds.length === 0) {
-      navigate('/')
-    }
-  }, [openSessionIds.length, navigate])
 
   const panesArea =
     openSessionIds.length === 0 ? (

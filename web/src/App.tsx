@@ -361,6 +361,11 @@ function App() {
 
   const effectiveLeftOpen = isMobile ? leftMobileOpen : isProjectPage ? true : leftSidebarOpen
   const effectiveRightOpen = isMobile ? rightMobileOpen : rightSidebarOpen
+  // On the split route with no panes open, the control sidebar must stay
+  // visible so the user can pick a session to open; once a pane exists the
+  // regular toggle takes over.
+  const openPaneCount = useSessionStore((state) => state.openSessionIds.length)
+  const splitControlOpen = isSplit && openPaneCount === 0 ? true : effectiveLeftOpen
 
   const handleLeftToggle = () => {
     if (isMobile) {
@@ -439,7 +444,7 @@ function App() {
               <OnboardingPage />
             </Route>
             <Route path="/split-view">
-              {splitReady ? <SplitView controlOpen={effectiveLeftOpen} /> : <LoadingSpinner />}
+              {splitReady ? <SplitView controlOpen={splitControlOpen} /> : <LoadingSpinner />}
             </Route>
             <Route path="/p/:projectId/s/:sessionId">
               <ProjectSessionView

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { useSessionStore, useIsRunning, useQueuedMessages } from '../../stores/session'
-import { useScopedPaneState } from './session-scope'
+import { useScopedPaneState } from '../../stores/session/session-scope'
 import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
 import { useCommandsStore } from '../../stores/commands'
 import { authFetch } from '../../lib/api'

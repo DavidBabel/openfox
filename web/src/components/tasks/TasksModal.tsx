@@ -7,6 +7,8 @@ import { ConfirmModal } from '../shared/ConfirmModal'
 import { PauseIcon, PlayIcon, SearchIcon, PlusIcon } from '../shared/icons'
 import { useTasksStore } from '../../stores/tasks'
 import { useAgents } from '../../hooks/useAgents'
+import { useProjectStore } from '../../stores/project'
+import { ModalCrumbTitle } from '../shared/ModalCrumbTitle'
 import { TaskColumn } from './TaskColumn'
 import { TaskEditor } from './TaskEditor'
 import { GatesEditor } from './GatesEditor'
@@ -30,6 +32,7 @@ export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
   const duplicateTask = useTasksStore((state) => state.duplicateTask)
   const setSettings = useTasksStore((state) => state.setSettings)
   const lastError = useTasksStore((state) => state.lastError)
+  const project = useProjectStore((state) => state.projects.find((p) => p.id === projectId))
 
   const { agents, fetchAgents } = useAgents()
 
@@ -307,7 +310,7 @@ export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title="Tasks"
+        title={<ModalCrumbTitle projectName={project?.name ?? projectId}>Tasks</ModalCrumbTitle>}
         size="full"
         showCloseButton
         closeOnBackdropClick

@@ -88,7 +88,7 @@ describe('SplitView', () => {
     expect(screen.getByText(/pick a session on the left/)).toBeDefined()
   })
 
-  it('navigates home when the last pane is closed', () => {
+  it('stays in the split view with the empty state when the last pane is closed', () => {
     storeState.openSessionIds = ['s1']
     storeState.focusedSessionId = 's1'
     storeState.panes = { s1: makePane('s1') }
@@ -96,7 +96,8 @@ describe('SplitView', () => {
     navigateMock.mockClear()
     storeState.openSessionIds = []
     rerender(<SplitView />)
-    expect(navigateMock).toHaveBeenCalledWith('/')
+    expect(navigateMock).not.toHaveBeenCalled()
+    expect(screen.getByText(/pick a session on the left/)).toBeDefined()
   })
 
   it('renders one pane per open session with the focused one flagged', () => {

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext } from 'react'
-import { useSessionStore } from '../../stores/session'
+import { useSessionStore } from '../session'
 import { wsClient } from '../../lib/ws'
-import type { SessionPane, SessionState } from '../../stores/session/types'
+import type { SessionPane, SessionState } from './types'
 
 /**
  * Resolves the session a component's actions should target. Wrapped by
