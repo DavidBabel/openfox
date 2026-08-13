@@ -4,6 +4,7 @@ import { normalizeAskOptions } from '@shared/ask-options.js'
 import { useSessionStore, usePendingQuestions, type PendingQuestion } from '../../stores/session'
 import { shouldAutofocus } from '../../lib/device'
 import { useSessionScope } from '../../stores/session/session-scope'
+import { Markdown } from './Markdown'
 
 interface AskUserCardProps {
   toolCall: ToolCall
@@ -83,7 +84,9 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
 
   return (
     <div ref={containerRef} className="my-1">
-      <div className="text-sm text-text-primary">{question}</div>
+      <div className="text-sm">
+        <Markdown content={question} />
+      </div>
 
       {isPending && (
         <div className="mt-2 border border-border rounded overflow-hidden">

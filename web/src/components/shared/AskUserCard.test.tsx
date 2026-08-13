@@ -38,6 +38,27 @@ describe('AskUserCard', () => {
     expect(container.textContent).toContain('What framework?')
   })
 
+  it('renders markdown-structured questions without leaking raw syntax', () => {
+    const question =
+      'Pick a stack:\n1. **Meross** MTS100 — the thermostat\n2. `MSS510` — the light switch\n3. Plugs — metering MSS310 or plain MSS110?'
+    const tc = makeToolCall({ arguments: { question } })
+    const container = render(<AskUserCard toolCall={tc} />)
+    expect(container.textContent).toContain('Meross')
+    expect(container.textContent).toContain('MSS510')
+    expect(container.textContent).not.toContain('**')
+    expect(container.textContent).not.toContain('`MSS510`')
+    expect(container.querySelectorAll('li').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('preserves line breaks in multi-part questions', () => {
+    const question = 'Two things:\n1. Inventory — which models?\n2. Network — reservations?'
+    const tc = makeToolCall({ arguments: { question } })
+    const container = render(<AskUserCard toolCall={tc} />)
+    const items = Array.from(container.querySelectorAll('li')).map((li) => li.textContent)
+    expect(items).toContain('Inventory — which models?')
+    expect(items).toContain('Network — reservations?')
+  })
+
   it('shows answered state when tool call has result', () => {
     const tc = makeToolCall({
       result: { success: true, output: 'React', durationMs: 100, truncated: false },
