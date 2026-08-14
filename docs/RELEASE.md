@@ -16,6 +16,8 @@ Each release gets its own section in CHANGELOG.md with three categories:
 
 ## Workflow
 
+Every step below runs on `develop`. Nothing touches `main` until step 11, when the fully tested and published release is merged over — so `main` always reflects a successful release, never a work in progress.
+
 ### 1. Determine the release range
 
 Find the last tagged version and the current HEAD:
@@ -158,11 +160,15 @@ git push --follow-tags
 gh release create "$(git describe --tags --abbrev=0)" --generate-notes
 ```
 
-### 11. Sync develop
+### 11. Merge the successful release to main
+
+All previous steps happen on `develop`. `main` only ever receives a fully tested, published release — never an in-progress one.
 
 ```bash
-git checkout develop && git merge main --ff-only && git push origin develop
+git checkout main && git merge develop --ff-only && git push origin main && git checkout develop
 ```
+
+`--ff-only` keeps the release train linear: the merge only succeeds when `main` is strictly behind `develop`, so the two can never diverge.
 
 ## Example
 

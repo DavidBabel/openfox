@@ -106,27 +106,7 @@ git commit -m "message"   # timeout: 120000ms
 
 ### Release
 
-Features accumulate on `develop` via squash-merges. `main` stays aligned with the latest published version.
-
-**When asked to publish, the first step is always to read [docs/RELEASE.md](RELEASE.md).** That document contains the full playbook. The high-level flow is:
-
-1. **Read docs/RELEASE.md** — follow the sub-agent prompt template to generate the changelog
-2. **Present changelog to user** — show the proposed entry and wait for approval
-3. **Commit changelog** — only after user signs off
-4. **Ship** — bump version, publish, push, sync
-
-```bash
-# Ship: merge develop → main, publish, sync back
-git checkout main && git merge develop --ff-only
-git push origin main
-# Steps 1-3: generate, validate, commit changelog (see docs/RELEASE.md)
-# Step 4:
-npm run patch                              # Bump patch version — commits & tags
-npm publish 2>&1 | tail -10                # Build + e2e via prepublishOnly, then publish. timeout: 120000ms
-git push --follow-tags                     # Push commit and tag
-gh release create "$(git describe --tags --abbrev=0)" --generate-notes  # Create GitHub Release
-git checkout develop && git merge main --ff-only && git push origin develop  # Sync develop with version bump
-```
+**When asked to publish, read [docs/RELEASE.md](RELEASE.md) and follow the playbook.** It's the single source of truth: changelog generation, version bump, publish, and the merge to `main` (all release work happens on `develop`; `main` only ever receives a successful release).
 
 ## Code Conventions
 
