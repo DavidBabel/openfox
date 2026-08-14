@@ -177,6 +177,7 @@ export interface TopLevelLoopConfig {
 // ============================================================================
 
 const MAX_TRUNCATION_RETRIES = 3
+const OUTPUT_RESERVE_TOKENS = 2048
 const CONTINUE_PROMPT = 'Continue your previous response. Do NOT repeat what you already wrote.'
 const CONTINUE_AFTER_STREAM_ERROR_PROMPT =
   'The LLM stream was interrupted mid-response. Continue exactly where you left off — do not repeat what was already written.'
@@ -327,7 +328,7 @@ export async function runTopLevelAgentLoop(
       previousContextTokens = contextState.currentTokens
 
       const contextWindow = sessionManager.getCurrentModelContext()
-      const availableForOutput = Math.max(256, contextWindow - contextState.currentTokens)
+      const availableForOutput = Math.max(256, contextWindow - contextState.currentTokens - OUTPUT_RESERVE_TOKENS)
 
       let modelSettings =
         config.modelSettings ??
@@ -511,7 +512,10 @@ export async function runTopLevelAgentLoop(
         const currentMaxTokens = result.modelParams?.maxTokens ?? 16384
         const promptTokens = result.usage.promptTokens
         const contextWindow = sessionManager.getCurrentModelContext()
-        const newMaxTokens = Math.min(Math.floor(currentMaxTokens * 1.5), contextWindow - promptTokens - 2048)
+        const newMaxTokens = Math.min(
+          Math.floor(currentMaxTokens * 1.5),
+          contextWindow - promptTokens - OUTPUT_RESERVE_TOKENS,
+        )
         currentMaxTokensOverride = newMaxTokens
         // Finalize the truncated assistant message so the frontend properly closes it
         const interimStats = turnMetrics.buildStats(statsIdentity, mode)

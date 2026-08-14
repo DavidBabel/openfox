@@ -492,10 +492,10 @@ describe('maxTokens clamping', () => {
 
     await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
 
-    // availableForOutput = 200000 - 195000 = 5000, requested 16384 → clamped to 5000
+    // availableForOutput = 200000 - 195000 - 2048 reserve = 2952, requested 16384 → clamped to 2952
     const callArgs = (streamLLMPure as any).mock.calls[0]?.[0]
     expect(callArgs).toBeDefined()
-    expect(callArgs.modelSettings?.maxTokens).toBe(5000)
+    expect(callArgs.modelSettings?.maxTokens).toBe(2952)
   })
 
   it('clamps maxTokens when user-configured maxTokens exceeds available space', async () => {
@@ -533,10 +533,10 @@ describe('maxTokens clamping', () => {
 
     await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
 
-    // availableForOutput = 200000 - 190000 = 10000, requested 32000 → clamped to 10000
+    // availableForOutput = 200000 - 190000 - 2048 reserve = 7952, requested 32000 → clamped to 7952
     const callArgs = (streamLLMPure as any).mock.calls[0]?.[0]
     expect(callArgs).toBeDefined()
-    expect(callArgs.modelSettings?.maxTokens).toBe(10000)
+    expect(callArgs.modelSettings?.maxTokens).toBe(7952)
   })
 
   it('applies 256-token floor when context is over limit', async () => {

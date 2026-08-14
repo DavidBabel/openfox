@@ -18,6 +18,7 @@ vi.mock('./http-client.js', () => ({
 }))
 
 import { createLLMClient } from './client.js'
+import { logger } from '../utils/logger.js'
 
 function createConfig(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -529,6 +530,26 @@ describe('llm client', () => {
     }
 
     expect(events).toEqual([{ type: 'error', error: 'stream failed' }])
+  })
+
+  it('logs the stream error message so provider rejections stay diagnosable', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const providerMessage = 'Please reduce the length of the messages or decrease max_tokens'
+    httpClientCreateStreamMock.mockImplementationOnce(() => {
+      throw new Error(providerMessage)
+    })
+
+    const client = createLLMClient(createConfig(), 'vllm')
+
+    for await (const _event of client.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
+      // consume
+    }
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'LLM stream error',
+      expect.objectContaining({ error: expect.stringContaining('reduce the length') }),
+    )
+    errorSpy.mockRestore()
   })
 
   it('surfaces error chunks that do not contain choices', async () => {
