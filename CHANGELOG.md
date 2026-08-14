@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.0.119 - 2026-08-14
+
+### Features
+
+- **Per-model sampling controls** — pick which sampling parameters each backend receives, per model
+- **Read-only session status** — lightweight API and widget expose live state for external integrations
+
+### Enhancements
+
+- **Reviewer gets the full picture** — code reviews now factor in intended scope, verifier notes, and changed files
+- **No surprise navigation on In Progress** — moving a task keeps your place; open it via the card link
+- **Task editor shortcuts inverted** — Enter inserts a newline, Shift+Enter saves
+
+### Bug Fixes
+
+- **New-task autocomplete fixed** — slash/@ suggestions are no longer clipped and load on cold start
+- **Long chats safer against rejection** — max_tokens now keeps 2048 tokens of headroom
+- **Split panes keep dev state separate** — server status, logs, and config no longer bleed between workdirs
+- **ask_user prompts render as markdown** — no more raw text walls
+- **Submodule changes appear in the diff preview**
+- **Auto-config spots rejected reasoning** — providers that refuse it no longer receive reasoning history
+- **LM Studio context windows set by auto-config** — no longer left at zero
+- **No phantom password prompt** — the login modal no longer flashes while connecting
+- **Silent streams end their turn** — idle LLM connections time out cleanly instead of hanging
+- **Null token usage no longer crashes sessions**
+
 ## 2.0.118 - 2026-08-12
 
 ### Features
