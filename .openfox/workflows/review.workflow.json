@@ -3,7 +3,7 @@
     "id": "review",
     "name": "PR Review",
     "description": "PR Review + Merge workflow for OpenFox",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "color": "#10b981",
     "parameters": [
       {
@@ -26,7 +26,7 @@
       "type": "agent",
       "phase": "build",
       "agentId": "builder",
-      "prompt": "Set up the review workspace for PR #{{pr_number}}:\n\n1. Use the `workspace` tool to switch to a new workspace named `review-pr-{{pr_number}}`\n2. Point origin to GitHub: `git remote set-url origin git@github.com:co-l/openfox.git`\n3. Fetch and sync with develop: `git fetch origin && git reset --hard origin/develop`\n4. Checkout the PR branch: `gh pr checkout {{pr_number}}`\n\nIf any step fails, report the error and call step_done(). Otherwise call step_done().",
+      "prompt": "Set up the review workspace for PR #{{pr_number}}:\n\n1. Use the `workspace` tool to switch to a new workspace named `review-pr-{{pr_number}}`\n2. Point origin to GitHub: `git remote set-url origin git@github.com:co-l/openfox.git`\n3. Fetch and sync with develop: `git fetch origin && git reset --hard origin/develop`\n4. Checkout the PR branch: `gh pr checkout {{pr_number}}`\n\nIf `gh pr checkout` fails because the PR head branch name collides with a local branch (e.g. the PR head is also named `develop`), fetch the PR head ref directly instead:\n`git fetch origin refs/pull/{{pr_number}}/head && git checkout -b pr-{{pr_number}}-head FETCH_HEAD`\n\nIf any step fails, report the error and call step_done(). Otherwise call step_done().",
       "transitions": [
         {
           "when": {
@@ -102,7 +102,7 @@
       "type": "agent",
       "phase": "build",
       "agentId": "builder",
-      "prompt": "Apply the fixes you identified during review:\n\n1. Run checks: `npm run typecheck && npm run lint && npm run test`\n2. Commit: `git add -A && git commit -m \"review: fixes for PR #{{pr_number}}\"`\n3. Tag: `git tag review-fixes-{{pr_number}}`\n\nIf there is nothing to fix or apply, say so explicitly and call step_done().",
+      "prompt": "Apply the fixes you identified during review:\n\n1. Implement the agreed fixes and improvements.\n2. Verify with: `npm run typecheck && npm run lint && npm run test`\n3. Leave everything UNCOMMITTED. Do NOT commit, tag, or push anything — the single review commit happens after manual testing.\n\nIf there is nothing to fix or apply, say so explicitly and call step_done().",
       "transitions": [
         {
           "when": {
@@ -144,11 +144,27 @@
     },
     {
       "id": "capture_fixes",
-      "name": "Capture Fixes",
+      "name": "Commit All Fixes & Adjustments",
       "type": "agent",
       "phase": "build",
       "agentId": "builder",
-      "prompt": "Capture any fixes that accumulated during review or testing (still in review workspace):\n\n1. `STATE=$(git status --porcelain)`\n2. If `$STATE` is non-empty:\n   a. `git add -A && git commit -m \"review: fixes for PR #{{pr_number}}\"`\n   b. `git tag -f review-fixes-{{pr_number}}`\n3. If tag `review-fixes-{{pr_number}}` exists locally:\n   a. `git push origin review-fixes-{{pr_number}}`\n4. Report whether fixes were captured (yes/no) and call step_done().",
+      "prompt": "All fixes and testing adjustments are now in the review workspace. Capture them in ONE commit:\n\n1. `git add -A`\n2. If there are staged changes: `git commit -m \"review: fixes for PR #{{pr_number}}\"`\n   If nothing is staged, report that there is nothing to commit.\n3. Tag the tip so it can be located later: `git tag -f review-fixes-{{pr_number}}`\n4. Push the tag: `git push origin review-fixes-{{pr_number}}`\n5. Report whether fixes were captured (yes/no) and call step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "prepare_merge"
+        }
+      ]
+    },
+    {
+      "id": "prepare_merge",
+      "name": "Prepare PR for Merge",
+      "type": "agent",
+      "phase": "verification",
+      "agentId": "builder",
+      "prompt": "Make sure PR #{{pr_number}} is mergeable before attempting the squash-merge:\n\n1. Check mergeability and PR head details:\n   `gh pr view {{pr_number}} --json mergeable,mergeStateStatus,headRepositoryOwner,headRefName,maintainerCanModify`\n2. If `mergeable` is \"MERGEABLE\": report it and call step_done() — the squash-merge step can proceed.\n3. If the PR is conflicting or otherwise not mergeable, rebuild the PR head on latest develop so it merges cleanly:\n   a. `git fetch origin && git fetch origin refs/pull/{{pr_number}}/head`\n   b. Create a fresh branch from the latest develop: `git checkout -b pr-{{pr_number}}-merged origin/develop`\n   c. Bring in the PR content plus all local review fixes (the `review-fixes-{{pr_number}}` tag from the capture step): `git merge --squash review-fixes-{{pr_number}}`\n   d. Resolve every conflict — when both sides add features, keep BOTH; never delete the other side's code.\n   e. Verify: `npm run typecheck && npm run lint && npm run test`, then `git add -A && git commit -m \"PR #{{pr_number}}: merged onto develop\"`.\n   f. Push the resolved head to the PR's head ref (only possible when `maintainerCanModify` is true):\n      `git push --force-with-lease=<headRefName>:<expectedSha> https://github.com/<headOwner>/<headRepo>.git pr-{{pr_number}}-merged:<headRefName>`\n   g. Re-check mergeability with step 1.\n4. If the PR still is not mergeable, or pushing to the fork's head is not possible, report the blocker explicitly so the user can intervene, then call step_done().",
       "transitions": [
         {
           "when": {
@@ -176,11 +192,11 @@
     },
     {
       "id": "cherry_pick",
-      "name": "Cherry-Pick Fixes",
+      "name": "Confirm Merge on Develop",
       "type": "agent",
-      "phase": "build",
+      "phase": "verification",
       "agentId": "builder",
-      "prompt": "Switch to original and cherry-pick any fix commits onto develop:\n\n1. `workspace switch original`\n2. `git checkout develop && git pull origin develop --ff-only`\n3. Check if tag exists remotely: `TAG_EXISTS=$(git ls-remote --exit-code origin refs/tags/review-fixes-{{pr_number}} 2>/dev/null && echo yes || echo no)`\n4. If `$TAG_EXISTS` == \"yes\":\n   a. `git fetch origin refs/tags/review-fixes-{{pr_number}}`\n   b. `git cherry-pick FETCH_HEAD && git push origin develop`\n5. If `$TAG_EXISTS` == \"no\", report no fixes to cherry-pick.\n6. Call step_done().",
+      "prompt": "Switch to original and confirm the merge landed on develop:\n\n1. `workspace switch original`\n2. `git checkout develop && git pull origin develop --ff-only`\n3. Confirm the squash-merge commit exists: `git log --oneline -3 develop` (look for `PR #{{pr_number}}: ...`).\n4. The review fixes were folded into that single squash commit (one-commit design), so no separate cherry-pick is needed. If the squash commit is missing, report it loudly.\n5. Call step_done().",
       "transitions": [
         {
           "when": {
@@ -196,7 +212,7 @@
       "type": "agent",
       "phase": "verification",
       "agentId": "builder",
-      "prompt": "Verify the PR's changes are present in git history on both local and origin develop, before deleting the workspace:\n\n1. `git fetch origin` then confirm local and remote are in sync: `git rev-parse develop origin/develop` (SHAs must match)\n2. Confirm the PR's squash-merge commit (`PR #{{pr_number}}: ...`) is in history on both: `git log --oneline -5 develop` and `git log --oneline -5 origin/develop`\n3. If review fixes were applied, also confirm the `review: fixes for PR #{{pr_number}}` commit is in history on both. If no fixes were needed, there will be no such commit — state that and skip this check.\n4. Spot-check the merged changes exist on origin: pick a file the PR touched and confirm via `git show origin/develop:<file>`\n\nReport whether the changes are confirmed on both local and origin, then call step_done().",
+      "prompt": "Verify the PR's changes are present in git history on both local and origin develop, before deleting the workspace:\n\n1. `git fetch origin` then confirm local and remote are in sync: `git rev-parse develop origin/develop` (SHAs must match)\n2. Confirm the PR's squash-merge commit (`PR #{{pr_number}}: ...`) is in history on both: `git log --oneline -5 develop` and `git log --oneline -5 origin/develop`\n3. If review fixes were applied: they are folded into the single squash-merge commit (one-commit design) — there is no separate `review: fixes for PR #{{pr_number}}` commit on develop. State that and confirm the fix content is present by spot-checking one of the fixed files: `git show origin/develop:<file>`\n4. Spot-check the merged changes exist on origin: pick a file the PR touched and confirm via `git show origin/develop:<file>`\n\nReport whether the changes are confirmed on both local and origin, then call step_done().",
       "transitions": [
         {
           "when": {
@@ -228,7 +244,7 @@
       "type": "agent",
       "phase": "verification",
       "agentId": "builder",
-      "prompt": "Leave closing feedback on PR #{{pr_number}} once the user has approved it:\n\n1. Determine the next release version: read the current version from package.json and use the next patch bump (e.g. 2.0.112 -> v2.0.113). If you can't determine it confidently, ask the user.\n2. Draft the PR comment following this template:\n\n> Merged, will be released in vX.Y.Z\n>\n> AI-summary\n>\n> ---\n>\n> <concise bullet-point summary of what the PR modified>\n\n3. Present the full draft in chat and ask the user to approve or modify it.\n4. Do NOT post the comment until the user explicitly approves the final text.\n5. Once approved, post it: write the text to a temp file and run `gh pr comment {{pr_number}} --body-file <tempfile>`, then remove the temp file.\n\nCall step_done() when you have presented the draft.",
+      "prompt": "Leave closing feedback on PR #{{pr_number}} once the user has approved it:\n\n1. Determine the next release version: read the current version from package.json and use the next patch bump (e.g. 2.0.112 -> v2.0.113). If you can't determine it confidently, ask the user.\n2. Draft the PR comment with EXACTLY this format (the `### AI-summary` heading is mandatory, no AI-written intro paragraph):\n\nMerged, will be released in vX.Y.Z\n---\n### AI-summary\n- <bullet point>\n- <bullet point>\n\nExample:\n\nMerged, will be released in v2.0.132\n---\n### AI-summary\n- Adds per-model control of which sampling parameters are sent to the LLM backend (new `omitParams` field, stripped at request time)\n- Auto-config probes each model for rejected parameters and pre-populates the UI checkboxes\n- Turn stats and truncation retries now reflect the actual wire request\n\n3. Present the full draft in chat and ask the user to approve or modify it.\n4. Do NOT post the comment until the user explicitly approves the final text.\n5. Once approved, post it: write the text to a temp file and run `gh pr comment {{pr_number}} --body-file <tempfile>`, then remove the temp file.\n\nCall step_done() when you have presented the draft.",
       "transitions": [
         {
           "when": {
