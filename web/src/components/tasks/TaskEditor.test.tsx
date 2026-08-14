@@ -1,9 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { TaskEditor } from './TaskEditor'
 import { useTasksStore } from '../../stores/tasks'
 import { useAgentsStore } from '../../stores/agents'
+import { useWorkflowsStore } from '../../stores/workflows'
+import { useCommandsStore } from '../../stores/commands'
+import { useProjectStore } from '../../stores/project'
 import { authFetch } from '../../lib/api'
 import type { ProjectTask } from '@shared/types.js'
 
@@ -50,6 +54,10 @@ describe('TaskEditor', () => {
       ],
       userItems: [],
     })
+    // Neutralize the cold-start fetches (asserted in their own test) so other
+    // tests can seed the stores directly without an async refetch wiping them.
+    useWorkflowsStore.setState({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() })
+    useCommandsStore.setState({ defaults: [], userItems: [], projectItems: [], fetchCommands: vi.fn() })
     vi.mocked(authFetch).mockReset()
     vi.mocked(authFetch).mockResolvedValue({ ok: true, json: async () => ({}) } as unknown as Response)
   })
@@ -136,6 +144,51 @@ describe('TaskEditor', () => {
         expect.objectContaining({ method: 'PUT' }),
       )
     })
+  })
+
+  it('renders the slash autocomplete into a portal so it is not clipped by the modal', async () => {
+    useWorkflowsStore.setState({
+      defaults: [{ id: 'review', name: 'PR Review', description: '', version: '1', scope: 'builtin' }],
+      userItems: [],
+      projectItems: [],
+    })
+    useCommandsStore.setState({ defaults: [], userItems: [], projectItems: [] })
+    render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+    const promptEl = screen.getByPlaceholderText(/Describe the task/i) as HTMLTextAreaElement
+    const user = userEvent.setup()
+    await user.click(promptEl)
+    await user.type(promptEl, '/rev')
+    await waitFor(() => {
+      const listbox = document.body.querySelector('[role="listbox"]')
+      expect(listbox).toBeTruthy()
+      expect(listbox!.className).toContain('fixed')
+    })
+  })
+
+  it('fetches workflows and commands on mount so the slash menu is populated from a cold start', async () => {
+    const wfState = useWorkflowsStore.getState()
+    const cmdState = useCommandsStore.getState()
+    const projState = useProjectStore.getState()
+    const fetchWorkflows = vi.fn()
+    const fetchCommands = vi.fn()
+    useWorkflowsStore.setState({ fetchWorkflows })
+    useCommandsStore.setState({ fetchCommands })
+    useProjectStore.setState({
+      projects: [
+        { id: 'proj-1', name: 'Proj', workdir: '/tmp/proj', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      ],
+    })
+    try {
+      render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+      await waitFor(() => {
+        expect(fetchWorkflows).toHaveBeenCalledWith('/tmp/proj')
+        expect(fetchCommands).toHaveBeenCalledWith('/tmp/proj')
+      })
+    } finally {
+      useWorkflowsStore.setState(wfState)
+      useCommandsStore.setState(cmdState)
+      useProjectStore.setState(projState)
+    }
   })
 
   describe('agent selection', () => {

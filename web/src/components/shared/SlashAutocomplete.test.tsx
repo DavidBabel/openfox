@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { SlashAutocomplete } from './SlashAutocomplete'
 import type { WorkflowInfo } from '../../lib/parse-slash-command'
 import type { CommandInfo } from '../../lib/parse-slash-command'
@@ -101,5 +101,103 @@ describe('SlashAutocomplete', () => {
       expect.objectContaining({ id: 'review', type: 'workflow', scope: 'project' }),
       0,
     )
+  })
+
+  it('renders in place with absolute positioning when no anchorRef is given', () => {
+    const { container } = renderAutocomplete('/rev', 4)
+    const listbox = container.querySelector('[role="listbox"]')
+    expect(listbox).toBeTruthy()
+    expect(listbox!.className).toContain('absolute')
+    expect(listbox!.className).toContain('bottom-full')
+  })
+
+  it('renders into a portal with fixed positioning when an anchorRef is given', () => {
+    const origHeight = window.innerHeight
+    const origWidth = window.innerWidth
+    Object.defineProperty(window, 'innerHeight', { value: 540, configurable: true })
+    Object.defineProperty(window, 'innerWidth', { value: 840, configurable: true })
+
+    const anchor = document.createElement('div')
+    Object.defineProperty(anchor, 'getBoundingClientRect', {
+      value: () => ({
+        top: 76,
+        bottom: 132,
+        left: 22,
+        right: 382,
+        width: 290,
+        height: 52,
+        x: 22,
+        y: 78,
+        toJSON: () => ({}),
+      }),
+    })
+    document.body.appendChild(anchor)
+
+    try {
+      const { unmount } = render(
+        <SlashAutocomplete
+          text="/rev"
+          cursorPos={4}
+          workflows={workflows}
+          commands={commands}
+          onSelect={vi.fn()}
+          anchorRef={{ current: anchor }}
+        />,
+      )
+      const listbox = document.body.querySelector('[role="listbox"]')
+      expect(listbox).toBeTruthy()
+      // Portaled out of the rendering tree: the anchor must not contain it.
+      expect(anchor.querySelector('[role="listbox"]')).toBeNull()
+      const el = listbox as HTMLElement
+      // Position is applied via utility classes; top/left/width are inline.
+      expect(el.className).toContain('fixed')
+      expect(el.className).toContain('z-[100]')
+      expect(el.style.top).toBe('136px') // anchor.bottom + margin
+      expect(el.style.left).toBe('22px') // aligned to the anchor
+      expect(el.style.width).toBe('290px') // matches the anchor width
+      unmount()
+    } finally {
+      document.body.removeChild(anchor)
+      Object.defineProperty(window, 'innerHeight', { value: origHeight, configurable: true })
+      Object.defineProperty(window, 'innerWidth', { value: origWidth, configurable: true })
+    }
+  })
+
+  it('repositions the portaled panel when the anchor moves and a resize fires', async () => {
+    const origHeight = window.innerHeight
+    const origWidth = window.innerWidth
+    Object.defineProperty(window, 'innerHeight', { value: 700, configurable: true })
+    Object.defineProperty(window, 'innerWidth', { value: 1000, configurable: true })
+
+    let anchorRect = { top: 112, bottom: 168, left: 33, width: 260, height: 56 }
+    const anchor = document.createElement('div')
+    Object.defineProperty(anchor, 'getBoundingClientRect', { value: () => anchorRect })
+    document.body.appendChild(anchor)
+
+    try {
+      const { unmount } = render(
+        <SlashAutocomplete
+          text="/rev"
+          cursorPos={4}
+          workflows={workflows}
+          commands={commands}
+          onSelect={vi.fn()}
+          anchorRef={{ current: anchor }}
+        />,
+      )
+      const listbox = document.body.querySelector('[role="listbox"]') as HTMLElement
+      expect(listbox.style.top).toBe('172px') // anchor.bottom + margin
+
+      // Anchor moves down without scrolling the window; a resize must
+      // re-anchor the panel (the same scheduler drives ResizeObserver).
+      anchorRect = { top: 312, bottom: 368, left: 33, width: 260, height: 56 }
+      window.dispatchEvent(new Event('resize'))
+      await waitFor(() => expect(listbox.style.top).toBe('372px'))
+      unmount()
+    } finally {
+      document.body.removeChild(anchor)
+      Object.defineProperty(window, 'innerHeight', { value: origHeight, configurable: true })
+      Object.defineProperty(window, 'innerWidth', { value: origWidth, configurable: true })
+    }
   })
 })

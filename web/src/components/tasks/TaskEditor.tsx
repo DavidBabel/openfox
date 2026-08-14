@@ -13,9 +13,10 @@ import { AttachIcon } from '../shared/icons'
 import { useTasksStore } from '../../stores/tasks'
 import { useAgents } from '../../hooks/useAgents'
 import { useConfigStore } from '../../stores/config'
-import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
+import { useWorkflowsStore, useAllWorkflows } from '../../stores/workflows'
 import { useCommandsStore } from '../../stores/commands'
 import { useProjectStore } from '../../stores/project'
+import { useShallow } from 'zustand/react/shallow'
 import { dedupById } from '../../lib/modal-utils'
 import { authFetch } from '../../lib/api'
 import { insertSuggestionAtCursor, focusTextareaAt, resolveSlashParamIds } from '../../lib/composer-utils'
@@ -48,12 +49,22 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
   const providers = useConfigStore((state) => state.providers)
   const projects = useProjectStore((state) => state.projects)
   const workdir = projects.find((p) => p.id === projectId)?.workdir
+  const fetchWorkflows = useWorkflowsStore((state) => state.fetchWorkflows)
+  const fetchCommands = useCommandsStore((state) => state.fetchCommands)
 
   // Agents load lazily (chat composer, settings…). The editor must own its own
   // fetch so the dropdown is populated even when opened from the homepage.
   useEffect(() => {
     void fetchAgents()
   }, [fetchAgents])
+
+  // Workflows and commands load lazily too (plan/session views). Own the fetch
+  // here so the slash menu is populated even on a cold start from the homepage;
+  // re-run when the project workdir resolves to pick up project-scoped items.
+  useEffect(() => {
+    void fetchWorkflows(workdir)
+    void fetchCommands(workdir)
+  }, [workdir, fetchWorkflows, fetchCommands])
 
   const draftKey = `${DRAFT_KEY}:${projectId}:${initialTask?.id ?? 'new'}`
 
@@ -66,6 +77,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
   const [saving, setSaving] = useState(false)
   const [activeSlashParams, setActiveSlashParams] = useState<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const composerWrapRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const autocompleteRef = useRef<AtMentionAutocompleteHandle>(null)
   const slashAutocompleteRef = useRef<SlashAutocompleteHandle>(null)
@@ -261,11 +273,8 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
     }
   }
 
-  const workflows = (() => selectAllWorkflows(useWorkflowsStore.getState()))()
-  const commands = (() => {
-    const s = useCommandsStore.getState()
-    return dedupById(dedupById(s.defaults, s.userItems), s.projectItems)
-  })()
+  const workflows = useAllWorkflows()
+  const commands = useCommandsStore(useShallow((s) => dedupById(dedupById(s.defaults, s.userItems), s.projectItems)))
 
   const slashParamCount = (() => {
     if (activeSlashParams.length === 0) return 0
@@ -311,11 +320,14 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
       <div className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-text-muted mb-1">Prompt</label>
-          <div className="relative" onDragOver={onDragOver} onDrop={onDrop}>
+          <div className="relative" ref={composerWrapRef} onDragOver={onDragOver} onDrop={onDrop}>
             <textarea
               ref={textareaRef}
               value={prompt}
-              onChange={(e) => handlePromptChange(e.target.value)}
+              onChange={(e) => {
+                cursorPosRef.current = e.target.selectionStart
+                handlePromptChange(e.target.value)
+              }}
               onSelect={(e) => {
                 cursorPosRef.current = e.currentTarget.selectionStart
               }}
@@ -332,6 +344,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
               text={prompt}
               cursorPos={cursorPosRef.current}
               workdir={workdir}
+              anchorRef={composerWrapRef}
               onSelect={handleSelectFile}
             />
             <SlashAutocomplete
@@ -340,6 +353,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
               cursorPos={cursorPosRef.current}
               workflows={workflows}
               commands={commands}
+              anchorRef={composerWrapRef}
               onSelect={handleSelectSlash}
             />
             {activeSlashParams.length > 0 && slashParamCount > 0 && (
