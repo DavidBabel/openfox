@@ -10,209 +10,197 @@ interface LogChunk {
   type?: 'marker'
 }
 
-interface DevServerStore {
-  workdir: string | null
+interface DevServerEntry {
   status: DevServerStatus | null
   logs: LogChunk[]
   config: DevServerConfig | null
-  loading: boolean
+}
 
-  setWorkdir: (workdir: string | null) => void
-  fetchStatus: () => Promise<void>
-  fetchConfig: () => Promise<void>
-  fetchLogs: () => Promise<void>
-  clearLogs: () => Promise<void>
-  insertMarker: () => Promise<void>
-  start: () => Promise<void>
-  stop: () => Promise<void>
-  restart: () => Promise<void>
-  saveConfig: (config: DevServerConfig) => Promise<void>
+const MAX_LOG_CHUNKS = 2000
+
+const capLogs = (logs: LogChunk[]): LogChunk[] => (logs.length > MAX_LOG_CHUNKS ? logs.slice(-MAX_LOG_CHUNKS) : logs)
+
+interface DevServerStore {
+  byWorkdir: Record<string, DevServerEntry>
+
+  fetchStatus: (workdir: string) => Promise<void>
+  fetchConfig: (workdir: string) => Promise<void>
+  fetchLogs: (workdir: string) => Promise<void>
+  clearLogs: (workdir: string) => Promise<void>
+  insertMarker: (workdir: string) => Promise<void>
+  start: (workdir: string) => Promise<void>
+  stop: (workdir: string) => Promise<void>
+  restart: (workdir: string) => Promise<void>
+  saveConfig: (workdir: string, config: DevServerConfig) => Promise<void>
   handleMessage: (message: ServerMessage) => void
 }
 
-let logBuffer: LogChunk[] = []
+const EMPTY_ENTRY: DevServerEntry = { status: null, logs: [], config: null }
+
+let logBuffer: { workdir: string; stream: 'stdout' | 'stderr'; content: string }[] = []
+
+const upsertEntry = (
+  byWorkdir: Record<string, DevServerEntry>,
+  workdir: string,
+  updater: (entry: DevServerEntry) => DevServerEntry,
+): Record<string, DevServerEntry> => ({
+  ...byWorkdir,
+  [workdir]: updater(byWorkdir[workdir] ?? EMPTY_ENTRY),
+})
 
 export const useDevServerStore = create<DevServerStore>()((set, get) => {
   function flushLogBuffer() {
     if (logBuffer.length === 0) return
     const chunks = logBuffer
     logBuffer = []
-    set((state) => ({
-      logs: [...state.logs, ...chunks],
-    }))
+    set((state) => {
+      let byWorkdir = state.byWorkdir
+      const grouped = new Map<string, LogChunk[]>()
+      for (const chunk of chunks) {
+        const list = grouped.get(chunk.workdir) ?? []
+        list.push({ stream: chunk.stream, content: chunk.content })
+        grouped.set(chunk.workdir, list)
+      }
+      for (const [workdir, newLogs] of grouped) {
+        byWorkdir = upsertEntry(byWorkdir, workdir, (entry) => ({
+          ...entry,
+          logs: capLogs([...entry.logs, ...newLogs]),
+        }))
+      }
+      return { byWorkdir }
+    })
   }
 
   const scheduleLogFlush = createLogBuffer(flushLogBuffer)
 
+  const devServerUrl = (workdir: string, path: string): string =>
+    `/api/dev-server/${path}?workdir=${encodeURIComponent(workdir)}`
+
+  /** Run a dev-server request and fold the JSON response into the workdir's entry. */
+  const run = async (
+    workdir: string,
+    url: string,
+    init: RequestInit | undefined,
+    apply: (data: unknown) => (entry: DevServerEntry) => DevServerEntry,
+  ): Promise<void> => {
+    if (!workdir) return
+    try {
+      const res = await authFetch(url, init)
+      const data = await res.json()
+      set((state) => ({ byWorkdir: upsertEntry(state.byWorkdir, workdir, apply(data)) }))
+    } catch {
+      // ignore
+    }
+  }
+
+  const patchStatus =
+    (data: unknown) =>
+    (entry: DevServerEntry): DevServerEntry => ({
+      ...entry,
+      status: data as DevServerStatus,
+    })
+
+  const patchStatusWithLogsCleared =
+    (data: unknown) =>
+    (entry: DevServerEntry): DevServerEntry => ({
+      ...entry,
+      status: data as DevServerStatus,
+      logs: [],
+    })
+
   return {
-    workdir: null,
-    status: null,
-    logs: [],
-    config: null,
-    loading: false,
+    byWorkdir: {},
 
-    setWorkdir: (workdir) => {
-      const prev = get().workdir
-      if (prev === workdir) return
-      set({ workdir, status: null, logs: [], config: null, loading: true })
-      if (workdir) {
-        get().fetchStatus()
-        get().fetchConfig()
-      }
-    },
+    fetchStatus: (workdir) => run(workdir, devServerUrl(workdir, ''), undefined, patchStatus),
 
-    fetchStatus: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        const res = await authFetch(`/api/dev-server?workdir=${encodeURIComponent(workdir)}`)
-        const data: DevServerStatus = await res.json()
-        set({ status: data, loading: false })
-      } catch {
-        set({ loading: false })
-      }
-    },
+    fetchConfig: (workdir) =>
+      run(workdir, devServerUrl(workdir, 'config'), undefined, (data) => (entry) => ({
+        ...entry,
+        config: (data as { config: DevServerConfig | null }).config ?? null,
+      })),
 
-    fetchConfig: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        const res = await authFetch(`/api/dev-server/config?workdir=${encodeURIComponent(workdir)}`)
-        const data = await res.json()
-        set({ config: data.config ?? null })
-      } catch {
-        // ignore
-      }
-    },
-
-    fetchLogs: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        const res = await authFetch(`/api/dev-server/logs?workdir=${encodeURIComponent(workdir)}`)
-        const data = await res.json()
-        const logs: LogChunk[] = (data.logs as { stream: 'stdout' | 'stderr'; content: string; type?: 'marker' }[]).map(
-          (entry) => ({
-            stream: entry.stream,
-            content: entry.content,
-            ...(entry.type ? { type: entry.type } : {}),
+    fetchLogs: (workdir) =>
+      run(workdir, devServerUrl(workdir, 'logs'), undefined, (data) => (entry) => ({
+        ...entry,
+        logs: (data as { logs: { stream: 'stdout' | 'stderr'; content: string; type?: 'marker' }[] }).logs.map(
+          (log) => ({
+            stream: log.stream,
+            content: log.content,
+            ...(log.type ? { type: log.type } : {}),
           }),
-        )
-        set({ logs })
+        ),
+      })),
+
+    clearLogs: (workdir) =>
+      run(workdir, devServerUrl(workdir, 'clear-logs'), { method: 'POST' }, () => (entry) => ({
+        ...entry,
+        logs: [],
+      })),
+
+    insertMarker: async (workdir) => {
+      if (!workdir) return
+      try {
+        await authFetch(devServerUrl(workdir, 'insert-marker'), { method: 'POST' })
+        get().fetchLogs(workdir)
       } catch {
         // ignore
       }
     },
 
-    clearLogs: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        await authFetch(`/api/dev-server/clear-logs?workdir=${encodeURIComponent(workdir)}`, { method: 'POST' })
-        set({ logs: [] })
-      } catch {
-        // ignore
-      }
-    },
+    start: (workdir) => run(workdir, devServerUrl(workdir, 'start'), { method: 'POST' }, patchStatusWithLogsCleared),
 
-    insertMarker: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        await authFetch(`/api/dev-server/insert-marker?workdir=${encodeURIComponent(workdir)}`, { method: 'POST' })
-        get().fetchLogs()
-      } catch {
-        // ignore
-      }
-    },
+    stop: (workdir) => run(workdir, devServerUrl(workdir, 'stop'), { method: 'POST' }, patchStatus),
 
-    start: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        const res = await authFetch(`/api/dev-server/start?workdir=${encodeURIComponent(workdir)}`, { method: 'POST' })
-        const data: DevServerStatus = await res.json()
-        set({ status: data, logs: [] })
-      } catch {
-        // ignore
-      }
-    },
+    restart: (workdir) =>
+      run(workdir, devServerUrl(workdir, 'restart'), { method: 'POST' }, patchStatusWithLogsCleared),
 
-    stop: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        const res = await authFetch(`/api/dev-server/stop?workdir=${encodeURIComponent(workdir)}`, { method: 'POST' })
-        const data: DevServerStatus = await res.json()
-        set({ status: data })
-      } catch {
-        // ignore
-      }
-    },
-
-    restart: async () => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        const res = await authFetch(`/api/dev-server/restart?workdir=${encodeURIComponent(workdir)}`, {
-          method: 'POST',
-        })
-        const data: DevServerStatus = await res.json()
-        set({ status: data, logs: [] })
-      } catch {
-        // ignore
-      }
-    },
-
-    saveConfig: async (config) => {
-      const workdir = get().workdir
-      if (!workdir) return
-      try {
-        const res = await authFetch(`/api/dev-server/config?workdir=${encodeURIComponent(workdir)}`, {
+    saveConfig: (workdir, config) => {
+      if (!workdir) return Promise.resolve()
+      return run(
+        workdir,
+        devServerUrl(workdir, 'config'),
+        {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(config),
-        })
-        const data = await res.json()
-        set({ config: data.config ?? config })
-        get().fetchStatus()
-      } catch {
-        // ignore
-      }
+        },
+        (data) => (entry) => ({
+          ...entry,
+          config: (data as { config: DevServerConfig | null }).config ?? config,
+        }),
+      ).then(() => get().fetchStatus(workdir))
     },
 
     handleMessage: (message) => {
-      const workdir = get().workdir
-      if (!workdir) return
-
       switch (message.type) {
         case 'devServer.output': {
           const payload = message.payload as DevServerOutputPayload
-          if (payload.workdir !== workdir) return
-          logBuffer.push({ stream: payload.stream, content: payload.content })
+          logBuffer.push({ workdir: payload.workdir, stream: payload.stream, content: payload.content })
           scheduleLogFlush()
           break
         }
         case 'devServer.state': {
           const payload = message.payload as DevServerStatePayload
-          if (payload.workdir !== workdir) return
           set((state) => ({
-            status: state.status
-              ? {
-                  ...state.status,
-                  state: payload.state as DevServerState,
-                  errorMessage: payload.errorMessage,
-                  ...(payload.url !== undefined ? { url: payload.url } : {}),
-                  ...(payload.inspectProxyPort !== undefined ? { inspectProxyPort: payload.inspectProxyPort } : {}),
-                }
-              : {
-                  state: payload.state as DevServerState,
-                  url: payload.url ?? null,
-                  hotReload: false,
-                  config: null,
-                  errorMessage: payload.errorMessage,
-                  inspectProxyPort: payload.inspectProxyPort ?? null,
-                },
+            byWorkdir: upsertEntry(state.byWorkdir, payload.workdir, (entry) => {
+              const nextStatus = entry.status
+                ? {
+                    ...entry.status,
+                    state: payload.state as DevServerState,
+                    errorMessage: payload.errorMessage,
+                    ...(payload.url !== undefined ? { url: payload.url } : {}),
+                    ...(payload.inspectProxyPort !== undefined ? { inspectProxyPort: payload.inspectProxyPort } : {}),
+                  }
+                : {
+                    state: payload.state as DevServerState,
+                    url: payload.url ?? null,
+                    hotReload: false,
+                    config: null,
+                    errorMessage: payload.errorMessage,
+                    inspectProxyPort: payload.inspectProxyPort ?? null,
+                  }
+              return { ...entry, status: nextStatus }
+            }),
           }))
           break
         }
@@ -220,3 +208,8 @@ export const useDevServerStore = create<DevServerStore>()((set, get) => {
     },
   }
 })
+
+/** Subscribe to the dev server entry for a single workdir (stable default when absent). */
+export function useDevServerEntry(workdir: string | null | undefined): DevServerEntry {
+  return useDevServerStore((state) => (workdir ? state.byWorkdir[workdir] : undefined) ?? EMPTY_ENTRY)
+}

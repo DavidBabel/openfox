@@ -2,7 +2,7 @@ import { ScrollArea } from '../shared/ScrollArea'
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { useState, useEffect, useRef, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { useDevServerStore } from '../../stores/dev-server'
+import { useDevServerStore, useDevServerEntry } from '../../stores/dev-server'
 import { GearIcon, StopIcon, OpenExternalIcon } from '../shared/icons'
 import { DevServerConfigModal } from './DevServerConfigModal'
 import { LogViewer } from './LogViewer'
@@ -130,10 +130,7 @@ export const DevServerFooter = memo(function DevServerFooter({
   onExpand,
   onConfigure,
 }: DevServerFooterProps) {
-  const setWorkdir = useDevServerStore((s) => s.setWorkdir)
-  const status = useDevServerStore((s) => s.status)
-  const config = useDevServerStore((s) => s.config)
-  const logs = useDevServerStore((s) => s.logs)
+  const { status, config, logs } = useDevServerEntry(workdir)
   const start = useDevServerStore((s) => s.start)
   const stop = useDevServerStore((s) => s.stop)
   const fetchLogs = useDevServerStore((s) => s.fetchLogs)
@@ -141,8 +138,9 @@ export const DevServerFooter = memo(function DevServerFooter({
   const insertMarker = useDevServerStore((s) => s.insertMarker)
 
   const handleClearLogs = () => {
+    if (!workdir) return
     if (window.confirm('Clear all dev server logs?')) {
-      clearLogs()
+      clearLogs(workdir)
     }
   }
 
@@ -174,23 +172,26 @@ export const DevServerFooter = memo(function DevServerFooter({
   const hasConfig = config !== null
   const isAlive = state === 'running' || state === 'warning'
 
-  // Set workdir in store
+  // Fetch status and config for this pane's workdir
   useEffect(() => {
-    setWorkdir(workdir ?? null)
-  }, [workdir, setWorkdir])
+    if (!workdir) return
+    void useDevServerStore.getState().fetchStatus(workdir)
+    void useDevServerStore.getState().fetchConfig(workdir)
+  }, [workdir])
 
   // Fetch full log buffer when server starts
   useEffect(() => {
-    if (isAlive) {
-      fetchLogs()
+    if (isAlive && workdir) {
+      fetchLogs(workdir)
     }
-  }, [isAlive, fetchLogs])
+  }, [isAlive, fetchLogs, workdir])
 
   const handleAction = () => {
+    if (!workdir) return
     if (isAlive) {
-      stop()
+      stop(workdir)
     } else {
-      start()
+      start(workdir)
     }
   }
 
@@ -331,7 +332,9 @@ export const DevServerFooter = memo(function DevServerFooter({
         )}
       </div>
 
-      {!onConfigure && <DevServerConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} />}
+      {!onConfigure && (
+        <DevServerConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} workdir={workdir} />
+      )}
 
       {showExpandModal && (
         <LogViewer
@@ -339,7 +342,9 @@ export const DevServerFooter = memo(function DevServerFooter({
           logs={logs}
           onClose={() => setShowExpandModal(false)}
           onClear={handleClearLogs}
-          onInsertMarker={insertMarker}
+          onInsertMarker={() => {
+            if (workdir) insertMarker(workdir)
+          }}
         />
       )}
     </div>

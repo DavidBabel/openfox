@@ -22,6 +22,7 @@ vi.mock('../../stores/session', () => ({
 vi.mock('../../stores/dev-server', () => ({
   useDevServerStore: (selector?: (s: unknown) => unknown) =>
     selector ? selector(mockDevServerStore()) : mockDevServerStore(),
+  useDevServerEntry: () => mockDevServerStore(),
 }))
 
 vi.mock('../../hooks/useGitStatus', () => ({

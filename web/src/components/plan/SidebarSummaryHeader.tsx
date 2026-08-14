@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import { LogViewer } from './LogViewer'
 import { createPortal } from 'react-dom'
 import { useSessionStore } from '../../stores/session'
-import { useDevServerStore } from '../../stores/dev-server'
+import { useDevServerStore, useDevServerEntry } from '../../stores/dev-server'
 import { useGitStatus } from '../../hooks/useGitStatus'
 import { useSettingsStore, SETTINGS_KEYS } from '../../stores/settings'
 import { ProgressBar } from '../shared/ProgressBar'
@@ -184,11 +184,13 @@ function MetadataStatusSummary({ entries }: { entries: { status: string }[] }) {
 
 export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
   const { contextState, currentSession: session } = useScopedContext()
-  const devServerStatus = useDevServerStore((s) => s.status)
-  const devServerConfig = useDevServerStore((s) => s.config)
-  const devServerStart = useDevServerStore((s) => s.start)
   const queueUpdate = useSessionStore((state) => state.queueUpdate)
-  const devServerLogs = useDevServerStore((s) => s.logs)
+  const workdir = session ? (session.workspace ?? session.workdir) : undefined
+  const devServerEntry = useDevServerEntry(workdir)
+  const devServerStatus = devServerEntry.status
+  const devServerConfig = devServerEntry.config
+  const devServerLogs = devServerEntry.logs
+  const devServerStart = useDevServerStore((s) => s.start)
   const { branch, diff } = useGitStatus()
   const [showLogModal, setShowLogModal] = useState(false)
   const [showDevServerConfig, setShowDevServerConfig] = useState(false)
@@ -204,7 +206,6 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
   if (!visible || !session) return null
 
   const workspaceName = pathBasename(session.workspace ?? '') || 'original'
-  const workdir = session.workspace ?? session.workdir
 
   /* ---- Metadata ---- */
   const allEntries = session.metadataEntries ?? {}
@@ -229,7 +230,7 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
 
   const handleStart = (e: React.MouseEvent) => {
     e.stopPropagation()
-    devServerStart()
+    if (workdir) devServerStart(workdir)
   }
 
   const handleOpen = (e: React.MouseEvent) => {
@@ -413,7 +414,9 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
         <LogViewer title="Dev Server Logs" logs={devServerLogs} onClose={() => setShowLogModal(false)} />
       )}
 
-      {showDevServerConfig && <DevServerConfigModal isOpen={true} onClose={() => setShowDevServerConfig(false)} />}
+      {showDevServerConfig && (
+        <DevServerConfigModal isOpen={true} onClose={() => setShowDevServerConfig(false)} workdir={workdir} />
+      )}
 
       {activeMetadataKey && session && (
         <MetadataModal

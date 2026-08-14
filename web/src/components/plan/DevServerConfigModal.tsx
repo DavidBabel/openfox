@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
-import { useDevServerStore } from '../../stores/dev-server'
+import { useDevServerStore, useDevServerEntry } from '../../stores/dev-server'
 
 interface DevServerConfigModalProps {
   isOpen: boolean
   onClose: () => void
+  /** Workdir whose dev server config this modal edits (required in split view). */
+  workdir?: string
 }
 
-export function DevServerConfigModal({ isOpen, onClose }: DevServerConfigModalProps) {
-  const config = useDevServerStore((s) => s.config)
+export function DevServerConfigModal({ isOpen, onClose, workdir }: DevServerConfigModalProps) {
+  const { config } = useDevServerEntry(workdir)
   const saveConfig = useDevServerStore((s) => s.saveConfig)
 
   const [command, setCommand] = useState('')
@@ -27,9 +29,9 @@ export function DevServerConfigModal({ isOpen, onClose }: DevServerConfigModalPr
   }, [isOpen, config])
 
   const handleSave = async () => {
-    if (!command.trim() || !url.trim()) return
+    if (!workdir || !command.trim() || !url.trim()) return
     setSaving(true)
-    await saveConfig({ command: command.trim(), url: url.trim(), hotReload, disableInspect })
+    await saveConfig(workdir, { command: command.trim(), url: url.trim(), hotReload, disableInspect })
     setSaving(false)
     onClose()
   }
