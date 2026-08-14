@@ -204,6 +204,22 @@ describe('loadDefaultWorkflows', () => {
     expect(stepIds.indexOf('work_location')).toBeLessThan(stepIds.indexOf('setup_workspace'))
     expect(stepIds.indexOf('setup_workspace')).toBeLessThan(stepIds.indexOf('build'))
   })
+
+  it('code review step gives the reviewer situational context (criteria, verification notes, modified files)', async () => {
+    const defaults = await loadDefaultWorkflows()
+    const wf = defaults.find((w) => w.metadata.id === 'default')
+    expect(wf).toBeDefined()
+
+    const codeReview = wf!.steps.find((s) => s.id === 'code_review')
+    expect(codeReview).toBeDefined()
+    expect(codeReview!.type).toBe('sub_agent')
+    if (codeReview!.type === 'sub_agent') {
+      expect(codeReview!.subAgentType).toBe('code_reviewer')
+      expect(codeReview!.prompt).toContain('{{criteriaList}}')
+      expect(codeReview!.prompt).toContain('{{stepOutput.content}}')
+      expect(codeReview!.prompt).toContain('{{modifiedFiles}}')
+    }
+  })
 })
 
 describe('findWorkflowById', () => {
