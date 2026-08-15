@@ -89,7 +89,8 @@ const MODEL_PROFILES: Array<{ pattern: string; profile: ModelProfile }> = [
     pattern: 'deepseek',
     profile: {
       name: 'DeepSeek',
-      temperature: 0.6,
+      // Per DeepSeek API docs: default temperature is 1.0
+      temperature: 1,
       topP: 0.95,
       defaultMaxTokens: 16384,
       supportsVision: false,

@@ -30,6 +30,13 @@ describe('profiles', () => {
       expect(profile.name).toBe('Qwen3-Coder-Next')
     })
 
+    it('returns DeepSeek profile with temperature 1 per model card', () => {
+      const profile = getModelProfile('deepseek-v4-flash')
+
+      expect(profile.name).toBe('DeepSeek')
+      expect(profile.temperature).toBe(1)
+    })
+
     it('returns Llama profile', () => {
       const profile = getModelProfile('llama-3-70b')
 
