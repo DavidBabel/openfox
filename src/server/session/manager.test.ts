@@ -28,6 +28,7 @@ import { closeDatabase, getDatabase, initDatabase } from '../db/index.js'
 import { createProject } from '../db/projects.js'
 import { getSession, updateSessionWorkdir } from '../db/sessions.js'
 import { initEventStore, getCurrentContextWindowId, emitContextCompacted, getEventStore } from '../events/index.js'
+import * as eventModule from '../events/index.js'
 import { setAgentModelOverride } from '../agents/model-overrides.js'
 import { SessionManager } from './manager.js'
 
@@ -58,6 +59,7 @@ const mockProviderManager = {
   createClient: vi.fn((): typeof mockDedicatedClient | undefined => mockDedicatedClient),
   getActiveProviderId: vi.fn(() => 'test-provider'),
   getCurrentModel: vi.fn(() => 'global-model'),
+  getProviders: vi.fn(() => [] as Array<{ id: string; models: Array<{ id: string; contextWindow: number }> }>),
 }
 
 describe('SessionManager', () => {
@@ -485,6 +487,66 @@ describe('SessionManager', () => {
 
     const contextState = manager.getContextState(session.id)
     expect(contextState.maxTokens).toBe(200000)
+  })
+
+  it('getCurrentModelContext uses the session model context window when the session has a providerModel', () => {
+    mockProviderManager.getProviders.mockReturnValue([
+      { id: 'test-provider', models: [{ id: 'session-model-262k', contextWindow: 262144 }] },
+      { id: 'other-provider', models: [{ id: 'default-model-100k', contextWindow: 100000 }] },
+    ])
+    mockProviderManager.getCurrentModelContext.mockReturnValue(100000)
+    const session = manager.createSession(projectId, 'Test Session')
+    manager.setSessionProvider(session.id, 'test-provider', 'session-model-262k')
+
+    // Session model window (262K) wins over the global default model (100K).
+    expect(manager.getCurrentModelContext(session.id)).toBe(262144)
+  })
+
+  it('getCurrentModelContext falls back to the global default context when the session model is unknown', () => {
+    mockProviderManager.getProviders.mockReturnValue([
+      { id: 'test-provider', models: [{ id: 'alpha-model', contextWindow: 262144 }] },
+    ])
+    mockProviderManager.getCurrentModelContext.mockReturnValue(100000)
+    const session = manager.createSession(projectId, 'Test Session')
+    manager.setSessionProvider(session.id, 'test-provider', 'beta-model')
+
+    expect(manager.getCurrentModelContext(session.id)).toBe(100000)
+  })
+
+  it('getCurrentModelContext without a session id resolves the global default context', () => {
+    mockProviderManager.getCurrentModelContext.mockReturnValue(100000)
+    const session = manager.createSession(projectId, 'Test Session')
+    manager.setSessionProvider(session.id, 'test-provider', 'session-model-262k')
+
+    expect(manager.getCurrentModelContext()).toBe(100000)
+  })
+
+  it('getContextState uses the session model context window when the session has a providerModel', () => {
+    mockProviderManager.getProviders.mockReturnValue([
+      { id: 'test-provider', models: [{ id: 'session-model-262k', contextWindow: 262144 }] },
+    ])
+    mockProviderManager.getCurrentModelContext.mockReturnValue(100000)
+    const session = manager.createSession(projectId, 'Test Session')
+    manager.setSessionProvider(session.id, 'test-provider', 'session-model-262k')
+
+    const contextState = manager.getContextState(session.id)
+    expect(contextState.maxTokens).toBe(262144)
+  })
+
+  it('builds sessions with the session model context window, even when restored from the DB', () => {
+    mockProviderManager.getProviders.mockReturnValue([
+      { id: 'test-provider', models: [{ id: 'session-model-262k', contextWindow: 262144 }] },
+    ])
+    mockProviderManager.getCurrentModelContext.mockReturnValue(100000)
+
+    const spy = vi.spyOn(eventModule, 'getSessionState')
+
+    const session = manager.createSession(projectId, 'Test Session', 'test-provider', 'session-model-262k')
+
+    // The context-state fold during session building (buildSessionFromDb) must
+    // be sized with the session model's window (262K), not the global default (100K).
+    const maxTokensArgs = spy.mock.calls.filter((c) => c[0] === session.id).map((c) => c[1])
+    expect(maxTokensArgs).toContain(262144)
   })
 
   describe('queue operations', () => {

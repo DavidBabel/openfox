@@ -619,6 +619,156 @@ describe('maxTokens clamping', () => {
     expect(callArgs.modelSettings?.maxTokens).toBe(16384)
   })
 
+  it('resolves the context window with the session id (session-aware, not the global default)', async () => {
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+
+    // The clamp and truncation budget must resolve the SESSION model's window,
+    // so the context lookup must be scoped to the session.
+    expect(mockSessionManager.getCurrentModelContext).toHaveBeenCalledWith('test-session')
+  })
+
+  it('clamps against the session model context window, not the default model', async () => {
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 99000,
+        maxTokens: 262000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      // Session-aware: 262K for the session model, 100K for the global default.
+      getCurrentModelContext: vi.fn((sessionId?: string) => (sessionId ? 262000 : 100000)),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+
+    // Session at 99K of a 262K window → available = 262000 - 99000 - 2048.
+    // 16384 requested stays unclamped. If the DEFAULT (100K) window were used,
+    // available would be max(256, -1048) = 256 and the request would be gutted.
+    const callArgs = (streamLLMPure as any).mock.calls[0]?.[0]
+    expect(callArgs).toBeDefined()
+    expect(callArgs.modelSettings?.maxTokens).toBe(16384)
+  })
+
+  it('floors the truncation retry maxTokens at 256 when promptTokens exceed the context window', async () => {
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 1000,
+        maxTokens: 262000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      // Session-aware: 262K for the session model, 100K for the global default.
+      getCurrentModelContext: vi.fn((sessionId?: string) => (sessionId ? 262000 : 100000)),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(undefined),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    // First call: truncated (finishReason length, promptTokens already past the
+    // window). Second call: the retry with the recomputed budget, which must
+    // never go negative.
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce({
+        content: 'partial response',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 265000, completionTokens: 5000 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'length',
+        modelParams: { maxTokens: 16384 },
+      })
+      .mockResolvedValueOnce({
+        content: 'done',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 100, completionTokens: 10 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: { maxTokens: 256 },
+      })
+
+    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+
+    const calls = (streamLLMPure as any).mock.calls
+    expect(calls.length).toBe(2)
+    // 262000 - 265000 - 2048 = -5048 → floored to 256. A negative maxTokens
+    // would be rejected by the backend (HTTP 400 "max_tokens must be at least 1").
+    expect(calls[1]?.[0].modelSettings?.maxTokens).toBe(256)
+  })
+
   it('passes promptTokens and completionTokens to setCurrentContextSize', async () => {
     mockSessionManager = {
       requireSession: vi.fn().mockReturnValue({

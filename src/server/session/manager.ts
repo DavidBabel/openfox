@@ -183,8 +183,56 @@ export class SessionManager {
     return this.providerManager.getModelSettings(providerId, model)
   }
 
-  getCurrentModelContext(): number {
+  getCurrentModelContext(sessionId?: string): number {
+    if (sessionId) {
+      const sessionContext = this.getSessionModelContext(sessionId)
+      if (sessionContext !== undefined) return sessionContext
+    }
     return this.providerManager.getCurrentModelContext()
+  }
+
+  /**
+   * Resolve the context window for a session's own provider/model, if set.
+   * Exact match first, then fuzzy match (spaces/dashes/underscores variations).
+   * Returns undefined when the session has no model or no matching config —
+   * callers fall back to the global default context.
+   */
+  private getSessionModelContext(sessionId: string): number | undefined {
+    const session = this.getSession(sessionId)
+    if (!session?.providerId || !session.providerModel) return undefined
+    return this.resolveModelContext(session.providerId, session.providerModel)
+  }
+
+  /**
+   * Resolve a provider/model pair's context window (exact, then fuzzy match).
+   * Takes provider/model directly so callers with a raw DB session (e.g.
+   * buildSessionFromDb) can use it without going through getSession, which
+   * would recurse back into this class's session building.
+   */
+  private resolveModelContext(
+    providerId: string | null | undefined,
+    providerModel: string | null | undefined,
+  ): number | undefined {
+    if (!providerId || !providerModel) return undefined
+
+    const provider = this.providerManager.getProviders().find((p) => p.id === providerId)
+    if (!provider) return undefined
+
+    let modelConfig = provider.models.find((m) => m.id === providerModel)
+    if (!modelConfig) {
+      const normalize = (s: string) => s.toLowerCase().replace(/[-_\s]+/g, '')
+      const sessionModelNormalized = normalize(providerModel)
+      modelConfig = provider.models.find((m) => {
+        const modelIdNormalized = normalize(m.id)
+        // Check if normalized IDs match or one contains the other
+        return (
+          modelIdNormalized === sessionModelNormalized ||
+          modelIdNormalized.includes(sessionModelNormalized) ||
+          sessionModelNormalized.includes(modelIdNormalized)
+        )
+      })
+    }
+    return modelConfig?.contextWindow
   }
 
   getModelCompactionThreshold(sessionId: string): number | undefined {
@@ -1047,11 +1095,12 @@ export class SessionManager {
    * Stores promptTokens + completionTokens so the tracked size reflects the
    * true context occupancy — the last call's output is re-fed into the next
    * request as an assistant message, so it must count toward the budget.
-   * maxTokens comes from providerManager.getCurrentModelContext() - the currently selected model's limit.
+   * maxTokens comes from the session model's context window (falling back to
+   * the currently selected model's limit).
    */
   setCurrentContextSize(sessionId: string, promptTokens: number, completionTokens = 0, subAgentId?: string): void {
-    const state = getSessionState(sessionId, this.providerManager.getCurrentModelContext())
-    const maxTokens = this.providerManager.getCurrentModelContext()
+    const state = getSessionState(sessionId, this.getCurrentModelContext(sessionId))
+    const maxTokens = this.getCurrentModelContext(sessionId)
     const currentTokens = promptTokens + completionTokens
     const compactionCount = state?.contextState.compactionCount ?? 0
     const dynamicContextChanged = this.getDynamicContextChanged(sessionId)
@@ -1408,36 +1457,10 @@ export class SessionManager {
     const providerManager = this.providerManager
 
     // Get maxTokens from session's provider/model if set, otherwise use global
-    let maxTokens: number
-    if (session?.providerId && session.providerModel) {
-      // Session has explicit provider/model - get context from that
-      const providers = providerManager.getProviders()
-      const provider = providers.find((p) => p.id === session.providerId)
-      if (provider) {
-        // Try exact match first
-        let modelConfig = provider.models.find((m) => m.id === session.providerModel)
-        // If not found, try fuzzy match (handle spaces/dashes/underscores variations)
-        if (!modelConfig && session.providerModel) {
-          const normalize = (s: string) => s.toLowerCase().replace(/[-_\s]+/g, '')
-          const sessionModelNormalized = normalize(session.providerModel)
-          modelConfig = provider.models.find((m) => {
-            const modelIdNormalized = normalize(m.id)
-            // Check if normalized IDs match or one contains the other
-            return (
-              modelIdNormalized === sessionModelNormalized ||
-              modelIdNormalized.includes(sessionModelNormalized) ||
-              sessionModelNormalized.includes(modelIdNormalized)
-            )
-          })
-        }
-        maxTokens = modelConfig?.contextWindow ?? providerManager.getCurrentModelContext()
-      } else {
-        maxTokens = providerManager.getCurrentModelContext()
-      }
-    } else {
-      // Use global provider/model
-      maxTokens = providerManager.getCurrentModelContext()
-    }
+    const maxTokens =
+      session?.providerId && session.providerModel
+        ? (this.getSessionModelContext(sessionId) ?? providerManager.getCurrentModelContext())
+        : providerManager.getCurrentModelContext()
 
     const state = getSessionState(sessionId, maxTokens)
     const dynamicContextChanged = this.getDynamicContextChanged(sessionId)
@@ -1761,7 +1784,9 @@ export class SessionManager {
    * Build a full Session object from DB session + EventStore state
    */
   private buildSessionFromDb(dbSession: Session): Session {
-    const maxTokens = this.providerManager.getCurrentModelContext()
+    const maxTokens =
+      this.resolveModelContext(dbSession.providerId, dbSession.providerModel) ??
+      this.providerManager.getCurrentModelContext()
     const eventState = getSessionState(dbSession.id, maxTokens, dbSession.mode)
 
     if (!eventState) {

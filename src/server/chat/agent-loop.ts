@@ -328,7 +328,7 @@ export async function runTopLevelAgentLoop(
       const contextState = sessionManager.getContextState(sessionId)
       previousContextTokens = contextState.currentTokens
 
-      const contextWindow = sessionManager.getCurrentModelContext()
+      const contextWindow = sessionManager.getCurrentModelContext(sessionId)
       const availableForOutput = Math.max(256, contextWindow - contextState.currentTokens - OUTPUT_RESERVE_TOKENS)
 
       let modelSettings =
@@ -512,10 +512,10 @@ export async function runTopLevelAgentLoop(
         truncationRetryCount += 1
         const currentMaxTokens = result.modelParams?.maxTokens ?? 16384
         const promptTokens = result.usage.promptTokens
-        const contextWindow = sessionManager.getCurrentModelContext()
+        const contextWindow = sessionManager.getCurrentModelContext(sessionId)
         const newMaxTokens = Math.min(
           Math.floor(currentMaxTokens * 1.5),
-          contextWindow - promptTokens - OUTPUT_RESERVE_TOKENS,
+          Math.max(256, contextWindow - promptTokens - OUTPUT_RESERVE_TOKENS),
         )
         currentMaxTokensOverride = newMaxTokens
         // Finalize the truncated assistant message so the frontend properly closes it
