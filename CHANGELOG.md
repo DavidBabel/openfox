@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.120 - 2026-08-15
+
+### Bug Fixes
+
+- **DeepSeek default temperature matches the model card** — DeepSeek models now sample at 1.0 by default instead of 0.6
+- **Max tokens follow the session's model** — clamping and truncation retry budgets now use the active model's context window, not a global default
+- **Truncation retries no longer send negative max_tokens** — retry budget is floored at 256 tokens, preventing HTTP 400 errors
+
 ## 2.0.119 - 2026-08-14
 
 ### Features
