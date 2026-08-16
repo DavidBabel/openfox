@@ -561,6 +561,7 @@ export class TurnMetrics {
   private startTime: number
   private totalPrefillTokens = 0
   private totalPrefillIncrement = 0
+  private hasPrefillIncrement = false
   private totalPrefillTime = 0 // seconds
   private totalGenTokens = 0
   private totalGenTime = 0 // seconds
@@ -592,10 +593,18 @@ export class TurnMetrics {
     if (modelParams) {
       this.modelParams = modelParams
     }
+    // When the context shrank (e.g. after compaction) the previous prefix is no
+    // longer reusable, so the whole prompt had to be processed again. Only a
+    // non-shrinking prompt can reuse the previous context as its cached prefix.
     const prefTokenIncrement =
-      previousContextTokens !== undefined ? Math.max(0, promptTokens - previousContextTokens) : undefined
+      previousContextTokens !== undefined
+        ? promptTokens >= previousContextTokens
+          ? promptTokens - previousContextTokens
+          : promptTokens
+        : undefined
     if (prefTokenIncrement !== undefined) {
       this.totalPrefillIncrement += prefTokenIncrement
+      this.hasPrefillIncrement = true
     }
     const prefillSource = prefTokenIncrement ?? promptTokens
     this.llmCalls = [
@@ -636,7 +645,7 @@ export class TurnMetrics {
       identity,
       mode,
       totalPrefillTokens: this.totalPrefillTokens,
-      ...(this.totalPrefillIncrement > 0 && { totalPrefillIncrement: this.totalPrefillIncrement }),
+      ...(this.hasPrefillIncrement && { totalPrefillIncrement: this.totalPrefillIncrement }),
       totalGenTokens: this.totalGenTokens,
       totalPrefillTime: this.totalPrefillTime,
       totalGenTime: this.totalGenTime,

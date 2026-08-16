@@ -173,6 +173,38 @@ describe('computeSessionStats', () => {
     expect(result!.avgGenerationSpeed).toBeCloseTo(150, 0)
   })
 
+  it('aggregates cache-aware prefill speeds on the same token source as the per-message speed', () => {
+    // Msg1: 80k total prompt, 2k increment (78k cached) processed in 0.5s ttft -> 4000 tok/s
+    // Msg2: 5k prompt, no cache info, 5k increment processed in 2.5s ttft -> 2000 tok/s
+    const messages = [
+      createMessageWithStats('1', {
+        mode: 'builder',
+        totalTime: 0.5,
+        toolTime: 0,
+        prefillTokens: 80000,
+        prefTokenIncrement: 2000,
+        prefillSpeed: 4000,
+        generationTokens: 500,
+        generationSpeed: 150,
+      }),
+      createMessageWithStats('2', {
+        mode: 'builder',
+        totalTime: 2.5,
+        toolTime: 0,
+        prefillTokens: 5000,
+        prefillSpeed: 2000,
+        generationTokens: 500,
+        generationSpeed: 150,
+      }),
+    ]
+
+    const result = computeSessionStats(messages)
+
+    // Real compute aggregate: sum(source) / sum(ttft) = (2000 + 5000) / (0.5 + 2.5) = 7000/3 = 2333.3 tok/s
+    // The old buggy aggregation recomputed time as prefillTokens/speed, giving 3777.8.
+    expect(result!.avgPrefillSpeed).toBeCloseTo(2333.3, 1)
+  })
+
   it('includes sub-agent (verifier) messages in stats', () => {
     const messages = [
       createMessageWithStats('1', { mode: 'builder' }),

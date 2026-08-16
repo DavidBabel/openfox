@@ -344,9 +344,10 @@ describe('stream-pure', () => {
       expect(stats.prefillSpeed).toBe(25) // 50 / 2 = 25
     })
 
-    it('handles context shrinking (negative increment clamped to 0)', () => {
+    it('treats a shrinking context (e.g. after compaction) as a full cache miss', () => {
       const metrics = new TurnMetrics()
-      // Edge case: compaction reduced context, so new total is smaller
+      // Edge case: compaction reduced context, so the previous 75k prefix is no
+      // longer reusable — all 60k tokens had to be processed again
       metrics.addLLMCall({ ttft: 1, completionTime: 2, tps: 10, prefillTps: 0 }, 60_000, 300, 75_000)
 
       const stats = metrics.buildStats(
@@ -354,7 +355,24 @@ describe('stream-pure', () => {
         'builder',
       )
 
-      expect(stats.llmCalls?.[0]?.prefTokenIncrement).toBe(0) // max(0, 60000 - 75000)
+      expect(stats.llmCalls?.[0]?.prefTokenIncrement).toBe(60_000)
+      expect(stats.prefTokenIncrement).toBe(60_000)
+      expect(stats.prefillSpeed).toBe(60_000) // 60000 / 1 = 60000 tok/s
+    })
+
+    it('reports a zero increment for a fully cached turn instead of the inflated fallback', () => {
+      const metrics = new TurnMetrics()
+      // Prompt unchanged (e.g. a pure cache hit): nothing new to process
+      metrics.addLLMCall({ ttft: 0.5, completionTime: 1, tps: 10, prefillTps: 0 }, 80_000, 500, 80_000)
+
+      const stats = metrics.buildStats(
+        { providerId: 'p', providerName: 'vLLM', backend: 'vllm', model: 'm' },
+        'builder',
+      )
+
+      expect(stats.llmCalls?.[0]?.prefTokenIncrement).toBe(0)
+      expect(stats.prefTokenIncrement).toBe(0)
+      expect(stats.prefillSpeed).toBe(0) // 0 / 0.5 = 0 tok/s, not 80000 / 0.5 = 160000
     })
   })
 

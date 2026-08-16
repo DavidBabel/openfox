@@ -43,6 +43,7 @@ function buildSessionStats(messagesWithStats: MessageWithStats[]): Omit<SessionS
   let toolTime = 0
   let prefillTokens = 0
   let generationTokens = 0
+  let totalPrefillSource = 0
   let totalPrefillTime = 0
   let totalGenTime = 0
 
@@ -59,9 +60,14 @@ function buildSessionStats(messagesWithStats: MessageWithStats[]): Omit<SessionS
     prefillTokens += stats.prefillTokens
     generationTokens += stats.generationTokens
 
-    const prefillTime = stats.prefillSpeed > 0 ? stats.prefillTokens / stats.prefillSpeed : 0
+    // prefillSpeed is computed from the non-cached token source
+    // (prefTokenIncrement when known, else the full prompt), so aggregate on
+    // that same source: source / speed reconstructs the real prefill time (ttft).
+    const prefillSource = stats.prefTokenIncrement ?? stats.prefillTokens
+    const prefillTime = stats.prefillSpeed > 0 ? prefillSource / stats.prefillSpeed : 0
     const genTime = stats.generationSpeed > 0 ? stats.generationTokens / stats.generationSpeed : 0
 
+    totalPrefillSource += prefillSource
     totalPrefillTime += prefillTime
     totalGenTime += genTime
 
@@ -109,7 +115,7 @@ function buildSessionStats(messagesWithStats: MessageWithStats[]): Omit<SessionS
     }
   }
 
-  const avgPrefillSpeed = totalPrefillTime > 0 ? roundTo1(prefillTokens / totalPrefillTime) : 0
+  const avgPrefillSpeed = totalPrefillTime > 0 ? roundTo1(totalPrefillSource / totalPrefillTime) : 0
   const avgGenerationSpeed = totalGenTime > 0 ? roundTo1(generationTokens / totalGenTime) : 0
 
   return {
@@ -132,8 +138,9 @@ function buildSessionStats(messagesWithStats: MessageWithStats[]): Omit<SessionS
  *
  * Returns null if no messages have stats.
  *
- * Weighted average for speeds: totalTokens / totalTime
- * This gives accurate average throughput across varying context sizes.
+ * Weighted average for speeds: totalTokens / totalTime, computed on the same
+ * token source the per-message speed uses (prefTokenIncrement when available,
+ * else the full prompt) so cached prefill work is not counted as processed.
  */
 export function computeSessionStats(messages: Message[]): SessionStats | null {
   const messagesWithStats = messages
