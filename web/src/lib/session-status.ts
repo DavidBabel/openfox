@@ -1,4 +1,4 @@
-import type { Session, SessionPhase, WorkflowExecution } from '@shared/types.js'
+import type { Message, Session, SessionPhase, WorkflowExecution } from '@shared/types.js'
 
 export type SessionStatusState = 'waiting' | 'blocked' | 'completed' | 'running' | null
 
@@ -14,7 +14,7 @@ export interface SessionStatusView {
   state: SessionStatusState
   waitingForUser: boolean
   workflowStep: string | null
-  lastActivityAt: string | null
+  lastPromptAt: string | null
 }
 
 export function projectClientSessionStatus(inputs: ProjectSessionStatusInputs): SessionStatusView {
@@ -39,28 +39,47 @@ export function projectClientSessionStatus(inputs: ProjectSessionStatusInputs): 
     state,
     waitingForUser,
     workflowStep,
-    lastActivityAt: null,
+    lastPromptAt: null,
   }
+}
+
+/**
+ * Timestamp of the last user-initiated action in a session: the most recent
+ * real user prompt, or a workflow-started marker (launching a workflow resets
+ * the "time since" counter instead of falling back to an unrelated older
+ * prompt). System-generated user-role messages (auto-prompts, corrections,
+ * commands) never count. Mirrors the server's "real user message" definition.
+ */
+export function lastUserPromptAt(messages: Message[] | undefined): string | null {
+  if (!messages || messages.length === 0) return null
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (!message || message.role !== 'user') continue
+    if (message.messageKind === 'workflow-started') return message.timestamp
+    if (!message.isSystemGenerated && !message.messageKind) return message.timestamp
+  }
+  return null
 }
 
 export interface ProjectFromSessionStoreInputs {
   currentSession: Session | null
+  messages?: Message[]
   pendingQuestions: unknown[]
   pendingPathConfirmations: unknown[]
   activeWorkflowExecution: WorkflowExecution | null | undefined
 }
 
 export function projectFromSessionStore(inputs: ProjectFromSessionStoreInputs): SessionStatusView & {
-  lastActivityAt: string | null
+  lastPromptAt: string | null
 } {
-  const { currentSession, pendingQuestions, pendingPathConfirmations, activeWorkflowExecution } = inputs
+  const { currentSession, messages = [], pendingQuestions, pendingPathConfirmations, activeWorkflowExecution } = inputs
 
   if (!currentSession) {
     return {
       state: null,
       waitingForUser: false,
       workflowStep: null,
-      lastActivityAt: null,
+      lastPromptAt: null,
     }
   }
 
@@ -74,7 +93,7 @@ export function projectFromSessionStore(inputs: ProjectFromSessionStoreInputs): 
 
   return {
     ...view,
-    lastActivityAt: currentSession.updatedAt,
+    lastPromptAt: lastUserPromptAt(messages),
   }
 }
 

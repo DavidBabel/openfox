@@ -59,6 +59,7 @@ beforeEach(() => {
   document.body.innerHTML = ''
   useSessionStore.setState({
     currentSession: null,
+    messages: [],
     pendingQuestions: [],
     pendingPathConfirmations: [],
     activeWorkflowExecution: null,
@@ -285,37 +286,66 @@ describe('RunningIndicator — factually-derived state from existing client data
     expect(el?.querySelectorAll('a').length).toBe(0)
   })
 
-  it('shows a relative "time since last activity" that ticks every second', () => {
+  it('shows a relative "time since last user prompt" that ticks every second', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))
     useSessionStore.setState({
       currentSession: makeSession({
         phase: 'build',
         isRunning: true,
-        updatedAt: '2024-06-15T12:34:53.000Z',
+        // updatedAt is deliberately later than the prompt — the counter must
+        // anchor on the last user prompt, not on session activity.
+        updatedAt: '2024-06-15T12:34:59.000Z',
       }),
+      messages: [{ id: 'u1', role: 'user', content: 'Fix the bug', timestamp: '2024-06-15T12:34:53.000Z' }],
     })
     const container = render()
     const el = container.querySelector('[data-testid="session-status-indicator"]')
-    // 3s elapsed → relative counter (formatTime rounds sub-10s to one decimal).
-    expect(el?.textContent).toContain('3.0s')
+    // 3s since the user prompt → relative counter with integer seconds.
+    expect(el?.textContent).toContain('3s')
 
     act(() => {
       vi.advanceTimersByTime(2000)
     })
-    expect(el?.textContent).toContain('5.0s')
+    expect(el?.textContent).toContain('5s')
 
     act(() => {
       vi.advanceTimersByTime(4000)
     })
-    expect(el?.textContent).toContain('9.0s')
+    expect(el?.textContent).toContain('9s')
 
     vi.useRealTimers()
   })
 
-  it('does not show the relative counter when last activity is missing', () => {
+  it('resets the counter on workflow launch (workflow-started anchor)', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))
     useSessionStore.setState({
-      currentSession: makeSession({ phase: 'done', isRunning: false, updatedAt: '' }),
+      currentSession: makeSession({ phase: 'build', isRunning: true }),
+      messages: [
+        { id: 'u1', role: 'user', content: 'Old prompt', timestamp: '2024-06-15T11:00:00.000Z' },
+        {
+          id: 'wf1',
+          role: 'user',
+          content: '{"workflowName":"Build"}',
+          isSystemGenerated: true,
+          messageKind: 'workflow-started',
+          timestamp: '2024-06-15T12:34:53.000Z',
+        },
+      ],
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    // Anchored at the workflow launch (3s ago), not the old prompt.
+    expect(el?.textContent).toContain('3s')
+
+    vi.useRealTimers()
+  })
+
+  it('does not show the relative counter when there is no user prompt', () => {
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'done', isRunning: false }),
+      messages: [{ id: 'a1', role: 'assistant', content: 'hi', timestamp: '2024-06-15T12:34:53.000Z' }],
     })
     const container = render()
     const el = container.querySelector('[data-testid="session-status-indicator"]')

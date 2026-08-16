@@ -17,16 +17,18 @@ export function formatSpeed(n: number): string {
 /**
  * Format seconds to human-readable time
  *
- * - < 10s    → "7.8s" (one decimal)
+ * - < 10s    → "7.8s" (one decimal) or "8s" when decimals=false
  * - 10-59s   → "41s"  (integer)
  * - 60-3599  → "31m 41s"
  * - ≥ 3600   → "1h 35m 42s"
  */
-export function formatTime(seconds: number): string {
+export function formatTime(seconds: number, decimals = true): string {
   if (!Number.isFinite(seconds)) return '0s'
 
-  // Sub-10: show raw value with one decimal
-  if (seconds < 10) return `${seconds.toFixed(1)}s`
+  // Sub-10: show raw value with one decimal (or integer when decimals=false)
+  if (seconds < 10) {
+    return decimals ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`
+  }
 
   // 10+: round to nearest second then format
   const totalSecs = Math.round(seconds)

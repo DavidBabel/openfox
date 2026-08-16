@@ -51,7 +51,7 @@ describe('formatTimeSince', () => {
   const NOW = new Date('2024-01-15T12:00:00').getTime()
 
   it('formats the elapsed time since the given ISO timestamp', () => {
-    expect(formatTimeSince('2024-01-15T11:59:57', NOW)).toBe('3.0s')
+    expect(formatTimeSince('2024-01-15T11:59:57', NOW)).toBe('3s')
     expect(formatTimeSince('2024-01-15T11:59:15', NOW)).toBe('45s')
     expect(formatTimeSince('2024-01-15T11:58:00', NOW)).toBe('2m 0s')
     expect(formatTimeSince('2024-01-15T10:48:00', NOW)).toBe('1h 12m 0s')
@@ -62,7 +62,7 @@ describe('formatTimeSince', () => {
   })
 
   it('never goes negative for timestamps in the future', () => {
-    expect(formatTimeSince('2024-01-15T12:05:00', NOW)).toBe('0.0s')
+    expect(formatTimeSince('2024-01-15T12:05:00', NOW)).toBe('0s')
   })
 })
 

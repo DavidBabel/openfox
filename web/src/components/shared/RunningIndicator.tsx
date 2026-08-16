@@ -16,12 +16,14 @@ import { formatTimeSince } from '../../lib/format-date'
 export function RunningIndicator() {
   const aborting = useSessionStore((state) => state.abortInProgress)
   const currentSession = useSessionStore((state) => state.currentSession)
+  const messages = useSessionStore((state) => state.messages)
   const pendingQuestions = useSessionStore((state) => state.pendingQuestions)
   const pendingPathConfirmations = useSessionStore((state) => state.pendingPathConfirmations)
   const activeWorkflowExecution = useSessionStore((state) => state.activeWorkflowExecution)
 
   const view = projectFromSessionStore({
     currentSession,
+    messages,
     pendingQuestions,
     pendingPathConfirmations,
     activeWorkflowExecution,
@@ -29,21 +31,21 @@ export function RunningIndicator() {
 
   const state: SessionStatusState = view.state
 
-  const lastActivityAt = view.lastActivityAt
+  const lastPromptAt = view.lastPromptAt
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!lastActivityAt) return
+    if (!lastPromptAt) return
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(interval)
-  }, [lastActivityAt])
+  }, [lastPromptAt])
 
   if (state === null) return null
 
   const label = statusLabel(state)
   const dotColor = aborting ? 'bg-amber-400' : 'bg-accent-primary'
   const showBounce = state === 'running'
-  const lastActivityAtText = lastActivityAt ? formatTimeSince(lastActivityAt, now) : ''
+  const lastPromptAtText = lastPromptAt ? formatTimeSince(lastPromptAt, now) : ''
 
   return (
     <div
@@ -73,9 +75,9 @@ export function RunningIndicator() {
         </span>
       </div>
       {!aborting && state === 'running' && <span className="text-text-muted hidden sm:inline">esc to interrupt</span>}
-      {lastActivityAtText && (
-        <span className="text-text-muted hidden sm:inline" aria-label="last activity">
-          {lastActivityAtText}
+      {lastPromptAtText && (
+        <span className="text-text-muted hidden sm:inline" aria-label="time since last prompt">
+          {lastPromptAtText}
         </span>
       )}
     </div>

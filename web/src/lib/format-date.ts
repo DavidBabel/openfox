@@ -31,14 +31,15 @@ export function formatTime(isoString: string): string {
 
 /**
  * Format the elapsed time since an ISO timestamp, relative to now.
- * Example: "3.0s", "45s", "2m 0s", "1h 12m 0s"
- * Uses the shared duration formatter; never negative for future timestamps.
+ * Example: "3s", "45s", "2m 0s", "1h 12m 0s"
+ * Uses the shared duration formatter (integer seconds); never negative for
+ * future timestamps.
  */
 export function formatTimeSince(isoString: string, now = Date.now()): string {
   const date = new Date(isoString).getTime()
   if (Number.isNaN(date)) return ''
   const seconds = Math.max(0, Math.floor((now - date) / 1000))
-  return formatDuration(seconds)
+  return formatDuration(seconds, false)
 }
 
 /**

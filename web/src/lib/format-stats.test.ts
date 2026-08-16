@@ -9,6 +9,20 @@ describe('formatTime', () => {
     expect(formatTime(0.123)).toBe('0.1s')
   })
 
+  it('formats sub-10-second values as integers when decimals=false', () => {
+    expect(formatTime(0, false)).toBe('0s')
+    expect(formatTime(0.123, false)).toBe('0s')
+    expect(formatTime(3, false)).toBe('3s')
+    expect(formatTime(7.8, false)).toBe('8s')
+    expect(formatTime(9.4, false)).toBe('9s')
+    expect(formatTime(9.9, false)).toBe('10s')
+  })
+
+  it('keeps the one-decimal default for existing consumers', () => {
+    expect(formatTime(3)).toBe('3.0s')
+    expect(formatTime(7.8)).toBe('7.8s')
+  })
+
   it('formats 10-59 second values as integers', () => {
     expect(formatTime(10)).toBe('10s')
     expect(formatTime(41)).toBe('41s')
