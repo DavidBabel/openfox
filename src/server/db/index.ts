@@ -216,6 +216,22 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE sessions ADD COLUMN provider_model TEXT`)
   }
 
+  // Migration: mark whether the session's provider/model was explicitly picked
+  // by the user (sticky, suppresses agent overrides). Legacy rows default to 0 —
+  // indistinguishable from inherited defaults, reset on the next explicit pick.
+  if (!columnNames.includes('provider_manual')) {
+    logger.info('Migrating sessions table: adding provider_manual column')
+    db.exec(`ALTER TABLE sessions ADD COLUMN provider_manual INTEGER NOT NULL DEFAULT 0`)
+  }
+
+  // Migration: whether the manual pick is currently active. Selecting an agent
+  // with a model override deactivates it (the agent's override is the label
+  // truth); selecting a non-override agent or making a new pick reactivates it.
+  if (!columnNames.includes('provider_manual_active')) {
+    logger.info('Migrating sessions table: adding provider_manual_active column')
+    db.exec(`ALTER TABLE sessions ADD COLUMN provider_manual_active INTEGER NOT NULL DEFAULT 1`)
+  }
+
   // Migration: Add message_count column for efficient sidebar message counts
   if (!columnNames.includes('message_count')) {
     logger.info('Migrating sessions table: adding message_count column')

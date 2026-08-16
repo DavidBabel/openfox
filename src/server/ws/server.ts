@@ -360,62 +360,76 @@ export function createWebSocketServer(
   const sessionLLMClients = new Map<string, { key: string; client: LLMClientWithModel }>()
 
   function getSessionLLMClient(sessionId: string): LLMClientWithModel {
-    const session = sessionManager.getSession(sessionId)
-    if (!session?.providerId || !session?.providerModel || !providerManager) {
+    const effective = sessionManager.resolveEffectiveProviderModel(sessionId)
+    if (!effective.providerId || !effective.model || !providerManager) {
       return getLLMClient()
     }
 
-    const resolvedModel = providerManager.resolveModel(session.providerId, session.providerModel)
-    const effectiveModel = resolvedModel ?? session.providerModel
-    const cacheKey = `${session.providerId}:${effectiveModel}`
+    const resolvedModel = providerManager.resolveModel(effective.providerId, effective.model)
+    const effectiveModel = resolvedModel ?? effective.model
+    const cacheKey = `${effective.providerId}:${effectiveModel}`
     const cached = sessionLLMClients.get(sessionId)
     if (cached && cached.key === cacheKey) {
       return cached.client
     }
 
     // Look up the provider to get URL, apiKey, backend
-    const provider = providerManager.getProviders().find((p) => p.id === session.providerId)
+    const provider = providerManager.getProviders().find((p) => p.id === effective.providerId)
     if (!provider) {
-      // Provider was deleted — clear preference and fall back to global
-      logger.warn('Session references deleted provider, falling back to global', {
+      // Provider is gone — fall back to global. Only clear the STICKY preference
+      // when the preference itself references the deleted provider.
+      logger.warn('Session references missing provider, falling back to global', {
         sessionId,
-        providerId: session.providerId,
+        providerId: effective.providerId,
       })
-      sessionManager.setSessionProvider(sessionId, null, null)
+      const session = sessionManager.getSession(sessionId)
+      if (session?.providerId === effective.providerId) {
+        sessionManager.setSessionProvider(sessionId, null, null, false)
+        sessionManager.setSessionProviderActive(sessionId, true)
+      }
       sessionLLMClients.delete(sessionId)
       return getLLMClient()
     }
 
     // Let ProviderManager create the session client so provider-specific
     // transports (for example External Provider custom) and auth context are preserved.
-    const client = providerManager.createClient(session.providerId, effectiveModel)
+    const client = providerManager.createClient(effective.providerId, effectiveModel)
     if (!client) {
       logger.warn('Could not create session provider client, falling back to global', {
         sessionId,
-        providerId: session.providerId,
-        model: session.providerModel,
+        providerId: effective.providerId,
+        model: effective.model,
       })
       return getLLMClient()
     }
 
     const concreteModel = client.getModel()
-    if (session.providerModel !== concreteModel) {
-      sessionManager.setSessionProvider(sessionId, session.providerId, concreteModel)
+    const session = sessionManager.getSession(sessionId)
+    // Only normalize the stored preference when the EFFECTIVE model is sourced
+    // from that preference (model-name resolution, e.g. 'auto' → concrete). When
+    // the effective model comes from an agent override, never write it back —
+    // it would silently clobber the user's sticky pick.
+    if (
+      session?.providerId === effective.providerId &&
+      session.providerModel === effective.model &&
+      session.providerModel !== concreteModel
+    ) {
+      sessionManager.setSessionProvider(sessionId, effective.providerId, concreteModel)
     }
-    sessionLLMClients.set(sessionId, { key: `${session.providerId}:${concreteModel}`, client })
+    sessionLLMClients.set(sessionId, { key: `${effective.providerId}:${concreteModel}`, client })
     return client
   }
 
   function getSessionStatsIdentity(sessionId: string): StatsIdentity {
-    const session = sessionManager.getSession(sessionId)
-    if (!session?.providerId || !providerManager) {
+    const effective = sessionManager.resolveEffectiveProviderModel(sessionId)
+    if (!effective.providerId || !providerManager) {
       return resolveStatsIdentity(getLLMClient(), getActiveProvider)
     }
 
-    const provider = providerManager.getProviders().find((p) => p.id === session.providerId)
+    const provider = providerManager.getProviders().find((p) => p.id === effective.providerId)
     const client = getSessionLLMClient(sessionId)
     return {
-      providerId: provider?.id ?? session.providerId!,
+      providerId: provider?.id ?? effective.providerId,
       providerName: provider?.name ?? 'Unknown Provider',
       backend: (provider?.backend ?? client.getBackend()) as ProviderBackend,
       model: client.getModel(),

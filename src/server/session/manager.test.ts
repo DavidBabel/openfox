@@ -60,6 +60,13 @@ const mockProviderManager = {
   getActiveProviderId: vi.fn(() => 'test-provider'),
   getCurrentModel: vi.fn(() => 'global-model'),
   getProviders: vi.fn(() => [] as Array<{ id: string; models: Array<{ id: string; contextWindow: number }> }>),
+  getDefaultModelSelection: vi.fn(() => 'default-provider/default-model'),
+  getModelSettings: vi.fn((_providerId: string, modelId: string): { maxTokens: number } | undefined => {
+    if (modelId === 'override-model') return { maxTokens: 32000 }
+    if (modelId === 'session-model') return { maxTokens: 262000 }
+    if (modelId === 'default-model') return { maxTokens: 100000 }
+    return undefined
+  }),
 }
 
 describe('SessionManager', () => {
@@ -847,6 +854,175 @@ describe('SessionManager', () => {
       setAgentModelOverride('verifier', { providerId: 'my-provider', model: 'my-model' })
       manager.createClientForAgent('verifier')
       expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model')
+    })
+  })
+
+  describe('effective model resolution (override > session > default)', () => {
+    const providers = [
+      {
+        id: 'override-provider',
+        models: [{ id: 'override-model', contextWindow: 400000, compactionThreshold: 0.9 }],
+      },
+      {
+        id: 'session-provider',
+        models: [{ id: 'session-model', contextWindow: 262144, compactionThreshold: 0.8 }],
+      },
+      {
+        id: 'default-provider',
+        models: [{ id: 'default-model', contextWindow: 100000, compactionThreshold: 0.7 }],
+      },
+    ]
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      mockProviderManager.getProviders.mockReturnValue(providers as any)
+      mockProviderManager.getDefaultModelSelection.mockReturnValue('default-provider/default-model')
+    })
+
+    it('resolveEffectiveProviderModel returns agent override above session preference', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+
+      expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+        providerId: 'override-provider',
+        model: 'override-model',
+      })
+    })
+
+    it('a manual pick suppresses the agent override for the session', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true)
+      manager.setSessionProviderActive(session.id, true)
+
+      expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+        providerId: 'session-provider',
+        model: 'session-model',
+      })
+      expect(manager.getCurrentModelSettings(session.id, 'planner')?.maxTokens).toBe(262000)
+    })
+
+    it('an inactive manual pick yields to the agent override', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true)
+      manager.setSessionProviderActive(session.id, false)
+
+      expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+        providerId: 'override-provider',
+        model: 'override-model',
+      })
+    })
+
+    it('setMode deactivates the manual pick on override agents and reactivates it otherwise', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true)
+      manager.setSessionProviderActive(session.id, true)
+
+      // Land on a non-override agent first (fresh sessions may default to the override agent)
+      manager.setMode(session.id, 'builder')
+
+      // Switch to the override agent → the label wins: manual pick deactivated.
+      manager.setMode(session.id, 'planner')
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'override-provider',
+        model: 'override-model',
+      })
+
+      // Switch to a non-override agent → manual pick reactivated.
+      manager.setMode(session.id, 'builder')
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'session-provider',
+        model: 'session-model',
+      })
+    })
+
+    it('an inherited (non-manual) preference does not suppress the agent override', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+
+      // Created sessions inherit a default provider with providerManual=false,
+      // so the agent override still wins.
+      expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+        providerId: 'override-provider',
+        model: 'override-model',
+      })
+    })
+
+    it('resolveEffectiveProviderModel falls back to session preference when agent has no override', () => {
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+
+      expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+        providerId: 'session-provider',
+        model: 'session-model',
+      })
+    })
+
+    it('resolveEffectiveProviderModel resolves the session mode agent override when no agentId given', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setMode(session.id, 'planner')
+
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'override-provider',
+        model: 'override-model',
+      })
+    })
+
+    it('resolveEffectiveProviderModel falls back to the config default, ignoring stale provider active state', () => {
+      // ProviderManager reports a stale override as active — must be ignored.
+      mockProviderManager.getActiveProviderId.mockReturnValue('stale-provider')
+      mockProviderManager.getCurrentModel.mockReturnValue('stale-model')
+      const session = manager.createSession(projectId, 'Test Session')
+
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'default-provider',
+        model: 'default-model',
+      })
+    })
+
+    it('getCurrentModelSettings returns the override model settings for an override agent', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session')
+
+      expect(manager.getCurrentModelSettings(session.id, 'planner')?.maxTokens).toBe(32000)
+    })
+
+    it('getCurrentModelSettings returns session settings when agent has no override', () => {
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+
+      expect(manager.getCurrentModelSettings(session.id, 'planner')?.maxTokens).toBe(262000)
+    })
+
+    it('getCurrentModelSettings resolves the config default for a no-preference session, not the stale provider', () => {
+      mockProviderManager.getActiveProviderId.mockReturnValue('stale-provider')
+      mockProviderManager.getCurrentModel.mockReturnValue('stale-model')
+      const session = manager.createSession(projectId, 'Test Session')
+
+      expect(manager.getCurrentModelSettings(session.id)?.maxTokens).toBe(100000)
+    })
+
+    it('getCurrentModelContext uses the override model window for an override agent', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session')
+
+      expect(manager.getCurrentModelContext(session.id, 'planner')).toBe(400000)
+    })
+
+    it('getModelCompactionThreshold uses the override model threshold for an override agent', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session')
+
+      expect(manager.getModelCompactionThreshold(session.id, 'planner')).toBe(0.9)
+    })
+
+    it('sub-agent without override under an override top-level agent uses the session window', () => {
+      setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+
+      // 'verifier' has no override → session preference applies, not the top-level override.
+      expect(manager.getCurrentModelContext(session.id, 'verifier')).toBe(262144)
     })
   })
 })

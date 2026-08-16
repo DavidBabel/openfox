@@ -86,6 +86,7 @@ function createMockSessionManager(): SessionManager {
     getCurrentWindowMessages: vi.fn().mockReturnValue([]),
     updateMessage: vi.fn(),
     getQueueState: vi.fn().mockReturnValue({ queued: 0, processing: false }),
+    resolveEffectiveProviderModel: vi.fn(() => ({ providerId: null, model: null })),
   } as unknown as SessionManager
 }
 
@@ -264,6 +265,46 @@ describe('SubAgentManager', () => {
 
       expect(result.content).toBe('Test result content')
       expect(pm.createClient).not.toHaveBeenCalled()
+    })
+
+    it('uses a session-effective client, not the parent override client, when the sub-agent has no override', async () => {
+      // Top-level agent is running an override — the parent client passed in is
+      // that override's client. A no-override sub-agent must run on its own
+      // effective model (session preference / default), never the parent's.
+      resolveLLMClientForAgentMock.mockReturnValue({
+        client: createMockLLMClient(),
+        usedOverride: false,
+      })
+      const effectiveClient = createMockLLMClient()
+      const pm = {
+        createClient: vi.fn(() => effectiveClient),
+        getProviders: vi.fn(() => [
+          { id: 'session-provider', name: 'Session Provider', backend: 'ollama', models: [] },
+        ]),
+        getModelSettings: vi.fn(() => undefined),
+      } as unknown as ProviderManager
+      const parentClient = createMockLLMClient()
+
+      const mockSessionManager = createMockSessionManager()
+      mockSessionManager.resolveEffectiveProviderModel = vi.fn(() => ({
+        providerId: 'session-provider',
+        model: 'session-model',
+      })) as any
+
+      const result = await executeSubAgent({
+        subAgentType: 'explorer',
+        prompt: 'Explore.',
+        sessionManager: mockSessionManager,
+        sessionId: 'test-session',
+        llmClient: parentClient,
+        toolRegistry: createMockToolRegistry(),
+        turnMetrics: createMockTurnMetrics(),
+        statsIdentity: TEST_STATS_IDENTITY,
+        providerManager: pm,
+      })
+
+      expect(result.content).toBe('Test result content')
+      expect(pm.createClient).toHaveBeenCalledWith('session-provider', 'session-model')
     })
 
     it('uses a dedicated client when an override resolves', async () => {

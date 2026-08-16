@@ -164,6 +164,7 @@ export interface SessionState {
   editCriteria: (sessionId: string, criteria: Criterion[]) => void
   compactContext: (sessionId: string) => void
   setSessionProvider: (sessionId: string, providerId: string, model?: string) => Promise<Session | null>
+  resetSessionProvider: (sessionId: string) => Promise<Session | null>
   updateContextState: (contextState: ContextState) => void
   updateSubAgentContextState: (subAgentId: string, context: ContextState) => void
   clearSubAgentContextState: (subAgentId: string) => void

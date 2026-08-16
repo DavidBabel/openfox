@@ -40,6 +40,7 @@ vi.mock('../../stores/session', () => ({
   useSessionStore: mockStore({
     currentSession: null,
     setSessionProvider: vi.fn(),
+    resetSessionProvider: vi.fn(),
   }),
 }))
 
@@ -107,8 +108,8 @@ vi.mock('../../stores/agents', () => {
   const fn = vi.fn((selector?: (s: typeof state) => any) => {
     return selector ? selector(state) : state
   })
-  ;(fn as any).setState = (partial: Record<string, any>) => {
-    state = { ...state, ...partial }
+  ;(fn as any).setState = (updater: Record<string, any> | ((s: typeof state) => Record<string, any>)) => {
+    state = typeof updater === 'function' ? { ...state, ...updater(state) } : { ...state, ...updater }
   }
   return {
     useAgentsStore: fn,
@@ -846,5 +847,364 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo')
+  })
+
+  it('[AUTOMATED] highlights the effective override model as active, not the session preference', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+        {
+          id: 'provider-2',
+          name: 'Anthropic',
+          url: 'https://api.anthropic.com/v1',
+          backend: 'anthropic',
+          isLocal: false,
+          models: [{ id: 'claude-3', name: 'Claude 3', contextWindow: 200000, selected: true }],
+          isActive: false,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: { id: 'session-1', mode: 'planner', providerId: 'provider-1', providerModel: 'gpt-4' },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({
+      modelOverrides: { planner: 'provider-2/claude-3' },
+    })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    const overrideRow = screen.getByText('Claude 3').parentElement!
+    const sessionRow = screen.getByText('GPT-4').parentElement!
+    expect(overrideRow.textContent).toContain('✓')
+    expect(sessionRow.textContent).not.toContain('✓')
+  })
+
+  it('[AUTOMATED] highlights the session model as active when no override is set', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+        {
+          id: 'provider-2',
+          name: 'Anthropic',
+          url: 'https://api.anthropic.com/v1',
+          backend: 'anthropic',
+          isLocal: false,
+          models: [{ id: 'claude-3', name: 'Claude 3', contextWindow: 200000, selected: true }],
+          isActive: false,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: { id: 'session-1', mode: 'planner', providerId: 'provider-1', providerModel: 'gpt-4' },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({
+      modelOverrides: {},
+    })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    const overrideRow = screen.getByText('Claude 3').parentElement!
+    const sessionRow = screen.getByText('GPT-4').parentElement!
+    expect(sessionRow.textContent).toContain('✓')
+    expect(overrideRow.textContent).not.toContain('✓')
+  })
+
+  it('[AUTOMATED] provider header pick marks the session manual without touching the agent override', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    const { authFetch } = await import('../../lib/api')
+    const { useAgentsStore } = await import('../../stores/agents')
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+        {
+          id: 'provider-2',
+          name: 'Anthropic',
+          url: 'https://api.anthropic.com/v1',
+          backend: 'anthropic',
+          isLocal: false,
+          models: [{ id: 'claude-3', name: 'Claude 3', contextWindow: 200000, selected: true }],
+          isActive: false,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: { id: 'session-1', mode: 'planner', providerId: 'provider-1', providerModel: 'gpt-4' },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    await setAgentsState({ modelOverrides: { planner: 'provider-2/claude-3' } })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    // Click the Anthropic provider header (a provider-level pick)
+    await user.click(screen.getAllByText('Anthropic')[0]!)
+
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-2', undefined)
+    // The agent override must NOT be deleted — the manual pick suppresses it
+    // for this session only, leaving the agent's stored config intact.
+    expect(authFetch).not.toHaveBeenCalledWith('/api/agents/planner/model', { method: 'DELETE' })
+    expect((useAgentsStore as unknown as () => any)().modelOverrides).toEqual({ planner: 'provider-2/claude-3' })
+  })
+
+  it('[AUTOMATED] a manual pick suppresses the override highlight for the session', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+        {
+          id: 'provider-2',
+          name: 'Anthropic',
+          url: 'https://api.anthropic.com/v1',
+          backend: 'anthropic',
+          isLocal: false,
+          models: [{ id: 'claude-3', name: 'Claude 3', contextWindow: 200000, selected: true }],
+          isActive: false,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerManual: true,
+        providerManualActive: true,
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({
+      modelOverrides: { planner: 'provider-2/claude-3' },
+    })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    // The manual pick wins over the agent override within this session.
+    const overrideRow = screen.getByText('Claude 3').parentElement!
+    const sessionRow = screen.getByText('GPT-4').parentElement!
+    expect(sessionRow.textContent).toContain('✓')
+    expect(overrideRow.textContent).not.toContain('✓')
+    // No override dot — the override is suppressed, not active.
+    expect(document.querySelector('.w-2\\.5')).toBeFalsy()
+  })
+
+  it('[AUTOMATED] an inactive manual pick yields to the override highlight', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+        {
+          id: 'provider-2',
+          name: 'Anthropic',
+          url: 'https://api.anthropic.com/v1',
+          backend: 'anthropic',
+          isLocal: false,
+          models: [{ id: 'claude-3', name: 'Claude 3', contextWindow: 200000, selected: true }],
+          isActive: false,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerManual: true,
+        providerManualActive: false,
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({
+      modelOverrides: { planner: 'provider-2/claude-3' },
+    })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    // The agent override (label) wins when the manual pick is inactive.
+    const overrideRow = screen.getByText('Claude 3').parentElement!
+    const sessionRow = screen.getByText('GPT-4').parentElement!
+    expect(overrideRow.textContent).toContain('✓')
+    expect(sessionRow.textContent).not.toContain('✓')
+  })
+
+  it('[AUTOMATED] reset to default clears the manual pick', async () => {
+    const user = userEvent.setup()
+    const mockReset = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerManual: true,
+      },
+      setSessionProvider: vi.fn(),
+      resetSessionProvider: mockReset,
+    })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    const resetBtn = screen.getByText('Reset to default')
+    expect(resetBtn).toBeTruthy()
+    await user.click(resetBtn)
+
+    expect(mockReset).toHaveBeenCalledWith('session-1')
+  })
+
+  it('[AUTOMATED] reset to default is available for a legacy stored preference', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+        {
+          id: 'provider-2',
+          name: 'Anthropic',
+          url: 'https://api.anthropic.com/v1',
+          backend: 'anthropic',
+          isLocal: false,
+          models: [{ id: 'claude-3', name: 'Claude 3', contextWindow: 200000, selected: true }],
+          isActive: false,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-2',
+        providerModel: 'claude-3',
+        // Legacy row: provider_manual defaults to 0, but the stored provider
+        // differs from the global default and must be clearable.
+        providerManual: false,
+      },
+      setSessionProvider: vi.fn(),
+      resetSessionProvider: vi.fn(),
+    })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    expect(screen.getByText('Reset to default')).toBeTruthy()
+  })
+
+  it('[AUTOMATED] reset to default is hidden for a fresh inherited default preference', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerManual: false,
+      },
+      setSessionProvider: vi.fn(),
+      resetSessionProvider: vi.fn(),
+    })
+    render(<ProviderSelector />)
+
+    await user.click(screen.getByRole('button'))
+
+    expect(screen.queryByText('Reset to default')).toBeNull()
   })
 })

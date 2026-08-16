@@ -202,6 +202,24 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
           }),
         )
       }
+    } else {
+      // No override: run on the sub-agent's OWN effective model (session
+      // preference or default), NOT the parent's runtime client — the parent
+      // may be running a top-level override that must not leak into sub-agents.
+      const effective = sessionManager.resolveEffectiveProviderModel(sessionId, subAgentType)
+      if (effective.providerId && effective.model) {
+        const effectiveClient = providerManager.createClient(effective.providerId, effective.model)
+        if (effectiveClient) {
+          llmClient = effectiveClient
+          const provider = providerManager.getProviders().find((p) => p.id === effective.providerId)
+          statsIdentity = {
+            providerId: effective.providerId,
+            providerName: provider?.name ?? effective.providerId,
+            backend: provider?.backend ?? effectiveClient.getBackend(),
+            model: effective.model,
+          }
+        }
+      }
     }
   }
 

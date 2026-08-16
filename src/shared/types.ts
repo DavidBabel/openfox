@@ -92,6 +92,8 @@ export interface Session {
   isRunning: boolean // Is the agent actively working?
   providerId?: string | null // Per-session provider override
   providerModel?: string | null // Per-session model override
+  providerManual?: boolean // true when the provider/model was explicitly picked by the user
+  providerManualActive?: boolean // false while on an override agent (the agent's override is the label truth); a fresh pick re-activates it
   createdAt: string
   updatedAt: string
   messages: Message[]

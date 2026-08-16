@@ -892,25 +892,15 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { buildMessagesFromStoredEvents, foldPendingConfirmations } = await import('./events/folding.js')
     const { getPendingQuestionsForSession } = await import('./tools/index.js')
     const { getMaxVisibleItems } = await import('./db/settings.js')
-    const { getAgentModelOverride } = await import('./agents/model-overrides.js')
-    const { updateSessionProvider } = await import('./db/sessions.js')
 
-    let session = sessionManager.getSession(req.params.id)
+    const session = sessionManager.getSession(req.params.id)
     if (!session) {
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    // If session has no explicit provider but the current agent has a model override, apply it.
-    // This ensures the ProviderSelector always shows the correct model on page load.
-    // Manual selections (non-null providerId) are never overwritten.
-    if (!session.providerId && session.mode) {
-      const override = getAgentModelOverride(session.mode)
-      if (override) {
-        updateSessionProvider(session.id, override.providerId, override.model)
-        session = sessionManager.getSession(session.id)
-      }
-    }
-
+    // Read-only for provider: the stored provider/model is the user's sticky
+    // preference and is returned as-is. The effective model (agent override >
+    // session preference > default) is derived client-side and at runtime.
     const eventStore = getEventStore()
     const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(req.params.id)
     const events = combineEventsWithSnapshot(req.params.id, snapshot, eventsSinceSnapshot)
@@ -1035,8 +1025,11 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const provider = providerManager.getProviders().find((p) => p.id === providerId)
     const resolvedModel = model ?? provider?.models?.[0]?.id ?? 'auto'
 
-    // Set provider for session only — does NOT touch global defaultModelSelection
-    sessionManager.setSessionProvider(sessionId, providerId, resolvedModel)
+    // Set provider for session only — does NOT touch global defaultModelSelection.
+    // This is an explicit user pick: mark it manual AND active so it suppresses
+    // any agent override for this session (agent config is never mutated).
+    sessionManager.setSessionProvider(sessionId, providerId, resolvedModel, true)
+    sessionManager.setSessionProviderActive(sessionId, true)
 
     // Get updated context state
     const contextState = sessionManager.getContextState(sessionId)
@@ -1050,6 +1043,32 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const updatedSession = sessionManager.getSession(sessionId)
 
     res.json({ session: toClientSession(updatedSession!), messages, hiddenCount, contextState })
+  })
+
+  // Reset the session's manual provider pick (REST): clears the sticky preference
+  // so agent overrides and the global default apply again.
+  app.delete('/api/sessions/:id/provider', async (req, res) => {
+    const { getEventStore, combineEventsWithSnapshot: combineEv } = await import('./events/index.js')
+    const { buildMessagesFromStoredEvents } = await import('./events/folding.js')
+    const { getMaxVisibleItems } = await import('./db/settings.js')
+
+    const sessionId = req.params.id
+    const session = sessionManager.getSession(sessionId)
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    sessionManager.setSessionProvider(sessionId, null, null, false)
+    sessionManager.setSessionProviderActive(sessionId, true)
+
+    const eventStore = getEventStore()
+    const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(sessionId)
+    const events = combineEv(sessionId, snapshot, eventsSinceSnapshot)
+    const maxVisibleItems = getMaxVisibleItems()
+    const { messages, hiddenCount } = buildMessagesFromStoredEvents(events, maxVisibleItems || undefined)
+    const updatedSession = sessionManager.getSession(sessionId)
+
+    res.json({ session: toClientSession(updatedSession!), messages, hiddenCount })
   })
 
   // Set global default model (persisted to config, used for new sessions)
@@ -1170,8 +1189,6 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { getEventStore, combineEventsWithSnapshot: combineEv } = await import('./events/index.js')
     const { buildMessagesFromStoredEvents } = await import('./events/folding.js')
     const { getMaxVisibleItems } = await import('./db/settings.js')
-    const { getAgentModelOverride } = await import('./agents/model-overrides.js')
-    const { updateSessionProvider } = await import('./db/sessions.js')
 
     const sessionId = req.params.id
     const session = sessionManager.getSession(sessionId)
@@ -1189,27 +1206,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       return res.status(400).json({ error: `Invalid mode. Must be one of: ${topLevelIds.join(', ')}` })
     }
 
+    // Pure mode switch: the session's stored provider/model is the user's sticky
+    // preference and is never touched here. The effective model is derived at
+    // runtime (agent override > session preference > default).
     sessionManager.setMode(sessionId, mode)
-
-    // Auto-set session provider/model: override if agent has one, else reset to default.
-    // When resetting to default, also activate the global default provider/model so the
-    // LLM client is ready for the next turn — otherwise a stale override client lingers.
-    const override = getAgentModelOverride(mode)
-    if (override) {
-      updateSessionProvider(sessionId, override.providerId, override.model)
-    } else {
-      updateSessionProvider(sessionId, null, null)
-      const { providerId: defaultProviderId, model: defaultModel } = parseDefaultModelSelection(
-        config.defaultModelSelection,
-      )
-      if (defaultProviderId && defaultModel) {
-        const currentActiveProviderId = providerManager.getActiveProviderId()
-        const currentModel = providerManager.getCurrentModel()
-        if (currentActiveProviderId !== defaultProviderId || currentModel !== defaultModel) {
-          await providerManager.activateProvider(defaultProviderId, { model: defaultModel })
-        }
-      }
-    }
 
     const eventStore = getEventStore()
     const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(sessionId)
@@ -1426,17 +1426,18 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       return res.json({ success: false, reason: 'already_warmed' })
     }
 
-    // Activate session provider if configured (same pattern as queue processor)
-    if (session.providerId && session.providerModel) {
+    // Activate the session's effective provider/model (override > preference > default)
+    const effective = sessionManager.resolveEffectiveProviderModel(sessionId)
+    if (effective.providerId && effective.model) {
       const currentActiveProviderId = providerManager.getActiveProviderId()
       const currentModel = providerManager.getCurrentModel()
 
-      if (currentActiveProviderId !== session.providerId || currentModel !== session.providerModel) {
-        const result = await providerManager.activateProvider(session.providerId, { model: session.providerModel })
+      if (currentActiveProviderId !== effective.providerId || currentModel !== effective.model) {
+        const result = await providerManager.activateProvider(effective.providerId, { model: effective.model })
         if (!result.success) {
           logger.error('Failed to activate session provider for warmup', {
             sessionId,
-            providerId: session.providerId,
+            providerId: effective.providerId,
             error: result.error,
           })
         }
@@ -3263,13 +3264,14 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   // through the same shared launcher as runner.launch (src/server/runner/launch.ts).
   const { launchWorkflowRun, abortRunnerRun } = await import('./runner/launch.js')
   deferTasksLaunchWorkflow = (sessionId, launch) => {
-    // Honor the session's pinned provider/model (set from the task at seed time)
-    // exactly like the WS session-aware client path — never force the global model.
-    const session = sessionManager.getSession(sessionId)
+    // Honor the session's effective provider/model (agent override > session
+    // preference > default) exactly like the WS session-aware client path —
+    // never force the global model.
+    const effective = sessionManager.resolveEffectiveProviderModel(sessionId)
     let llmClient = getLLMClient()
-    if (session?.providerId && session.providerModel) {
-      const resolvedModel = providerManager.resolveModel(session.providerId, session.providerModel)
-      llmClient = getLLMClientForProvider(session.providerId, resolvedModel ?? session.providerModel) ?? getLLMClient()
+    if (effective.providerId && effective.model) {
+      const resolvedModel = providerManager.resolveModel(effective.providerId, effective.model)
+      llmClient = getLLMClientForProvider(effective.providerId, resolvedModel ?? effective.model) ?? getLLMClient()
     }
     const provider = providerManager.getActiveProvider()
     const controller = new AbortController()

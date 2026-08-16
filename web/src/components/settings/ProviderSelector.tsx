@@ -70,6 +70,7 @@ export function ProviderSelector() {
     null,
   )
   const setSessionProvider = useSessionStore((state) => state.setSessionProvider)
+  const resetSessionProvider = useSessionStore((state) => state.resetSessionProvider)
   const [isOpen, setIsOpen] = useState(false)
   const [expandedProviderIds, setExpandedProviderIds] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState<string | null>(null)
@@ -125,9 +126,24 @@ export function ProviderSelector() {
   const agentOverrideModel = agentOverride ? (agentOverride.split('/').slice(1).join('/') ?? null) : null
   const agentColor = currentAgentId ? getAgentColor([...agentDefaults, ...agentUserItems], currentAgentId) : undefined
 
-  const isAgentOverrideActive = !!agentOverride
-  const effectiveProviderId = agentOverrideProviderId ?? sessionProviderId ?? defaultProviderId
-  const effectiveModel = agentOverrideModel ?? sessionModel ?? defaultModel
+  const isSessionManual = !!currentSession?.providerManual && !!currentSession?.providerManualActive
+  // Show "Reset to default" when there's a session preference to clear: an explicit
+  // manual pick, or a stored provider that differs from the global default (e.g. a
+  // legacy auto-set value that can't be cleared otherwise). A fresh session that
+  // simply inherits the default needs no reset affordance.
+  const preferenceKey =
+    currentSession?.providerId && currentSession?.providerModel
+      ? `${currentSession.providerId}/${currentSession.providerModel}`
+      : null
+  const hasSessionPreference =
+    !!currentSession?.providerManual || (preferenceKey !== null && preferenceKey !== defaultModelSelection)
+  // An explicit manual pick wins over the agent override only while it is active;
+  // selecting an override agent deactivates it (the agent's override is the label truth).
+  const isAgentOverrideActive = !isSessionManual && !!agentOverride
+  const effectiveProviderId = isSessionManual
+    ? sessionProviderId
+    : (agentOverrideProviderId ?? sessionProviderId ?? defaultProviderId)
+  const effectiveModel = isSessionManual ? sessionModel : (agentOverrideModel ?? sessionModel ?? defaultModel)
   const shortModelName = effectiveModel
     ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
     : 'No model'
@@ -217,7 +233,7 @@ export function ProviderSelector() {
 
   const isSessionActive = (providerId: string, modelId: string): boolean => {
     if (!currentSession) return false
-    return currentSession.providerId === providerId && currentSession.providerModel === modelId
+    return effectiveProviderId === providerId && effectiveModel === modelId
   }
 
   const isDefault = (providerId: string, modelId: string): boolean => {
@@ -252,6 +268,8 @@ export function ProviderSelector() {
     }
 
     if (currentSession && sessionId) {
+      // Explicit pick — marked manual server-side so it suppresses the agent
+      // override for this session without touching the agent's stored config.
       setSessionProvider(sessionId, provider.id, undefined)
       setIsOpen(false)
       setExpandedProviderIds([])
@@ -266,6 +284,14 @@ export function ProviderSelector() {
 
   const handleChevronClick = (provider: Provider) => {
     toggleProviderExpansion(provider)
+  }
+
+  const handleResetProvider = async () => {
+    if (currentSession && sessionId) {
+      resetSessionProvider(sessionId)
+      setIsOpen(false)
+      setExpandedProviderIds([])
+    }
   }
 
   const handleRefreshClick = async (e: React.MouseEvent, providerId: string) => {
@@ -372,22 +398,18 @@ export function ProviderSelector() {
   }
 
   const handleModelClick = async (providerId: string, newModel: string) => {
-    // When user manually picks a model that differs from the agent override, clear the override
-    // so their selection truly sticks (the server always prefers the override at runtime).
-    if (currentAgentId && agentOverride && agentOverride !== `${providerId}/${newModel}`) {
-      authFetch(`/api/agents/${currentAgentId}/model`, { method: 'DELETE' }).catch(() => {})
-      // Optimistically update the store so the UI reflects the change immediately
-      useAgentsStore.setState((state) => {
-        const next = { ...state.modelOverrides }
-        delete next[currentAgentId]
-        return { modelOverrides: next }
-      })
-    }
-
     if (currentSession && sessionId) {
       useSessionStore.setState((state) => ({
         ...state,
-        currentSession: state.currentSession ? { ...state.currentSession, providerId, providerModel: newModel } : null,
+        currentSession: state.currentSession
+          ? {
+              ...state.currentSession,
+              providerId,
+              providerModel: newModel,
+              providerManual: true,
+              providerManualActive: true,
+            }
+          : null,
       }))
       setSessionProvider(sessionId, providerId, newModel)
       setExpandedProviderIds([])
@@ -647,8 +669,20 @@ export function ProviderSelector() {
             </div>
           </ScrollArea>
           <div
-            className={`border-t border-border px-3 py-2 ${isManageHighlighted ? 'bg-bg-tertiary' : ''} flex-shrink-0`}
+            className={`border-t border-border px-3 py-2 flex items-center justify-between gap-2 ${
+              isManageHighlighted ? 'bg-bg-tertiary' : ''
+            } flex-shrink-0`}
           >
+            {hasSessionPreference && (
+              <button
+                type="button"
+                onClick={handleResetProvider}
+                className="text-xs text-text-muted hover:text-text-primary hover:underline"
+                title="Clear this session's manually picked model so agent overrides and the global default apply again"
+              >
+                Reset to default
+              </button>
+            )}
             <button onClick={() => navigate('/onboarding')} className="text-xs text-accent-primary hover:underline">
               Manage providers
             </button>

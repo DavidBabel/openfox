@@ -1045,6 +1045,28 @@ export const useSessionStore = create<SessionState>((set, get) => {
       }
     },
 
+    resetSessionProvider: async (sessionId) => {
+      try {
+        if (!paneFor(get(), sessionId)?.session) return null
+        const res = await authFetch(`/api/sessions/${sessionId}/provider`, { method: 'DELETE' })
+        if (!res.ok) return null
+        const data = await res.json()
+        set((state) => {
+          const prior = state.panes[sessionId] ?? paneFromFlat(state)
+          const nextPane: SessionPane = {
+            ...prior,
+            session: data.session,
+            messages: data.messages ?? prior.messages,
+            hiddenCount: (data.hiddenCount as number | undefined) ?? prior.hiddenCount,
+          }
+          return replacePane(state, sessionId, nextPane)
+        })
+        return data.session
+      } catch {
+        return null
+      }
+    },
+
     updateContextState: (contextState) => {
       const sid = get().focusedSessionId ?? get().currentSession?.id
       if (!sid) return

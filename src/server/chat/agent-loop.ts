@@ -225,7 +225,7 @@ export async function runTopLevelAgentLoop(
         ...(skills.length > 0 ? { skills } : {}),
       })
 
-      const modelSettings = sessionManager.getCurrentModelSettings(sessionId)
+      const modelSettings = sessionManager.getCurrentModelSettings(sessionId, config.mode)
 
       await resolveClient().complete({
         messages: [{ role: 'system', content: assembledRequest.systemPrompt }],
@@ -328,14 +328,14 @@ export async function runTopLevelAgentLoop(
       const contextState = sessionManager.getContextState(sessionId)
       previousContextTokens = contextState.currentTokens
 
-      const contextWindow = sessionManager.getCurrentModelContext(sessionId)
+      const contextWindow = sessionManager.getCurrentModelContext(sessionId, config.mode)
       const availableForOutput = Math.max(256, contextWindow - contextState.currentTokens - OUTPUT_RESERVE_TOKENS)
 
       let modelSettings =
         config.modelSettings ??
         (currentMaxTokensOverride !== undefined
-          ? { ...sessionManager.getCurrentModelSettings(sessionId), maxTokens: currentMaxTokensOverride }
-          : sessionManager.getCurrentModelSettings(sessionId))
+          ? { ...sessionManager.getCurrentModelSettings(sessionId, config.mode), maxTokens: currentMaxTokensOverride }
+          : sessionManager.getCurrentModelSettings(sessionId, config.mode))
 
       if (modelSettings) {
         const requestedMaxTokens = modelSettings.maxTokens ?? 16384
@@ -498,7 +498,8 @@ export async function runTopLevelAgentLoop(
         shouldCompact(
           contextState.currentTokens,
           contextState.maxTokens,
-          sessionManager.getModelCompactionThreshold(sessionId) ?? runtimeConfig.context.compactionThreshold,
+          sessionManager.getModelCompactionThreshold(sessionId, config.mode) ??
+            runtimeConfig.context.compactionThreshold,
         )
       ) {
         appendCompactionPrompt(sessionId, append)
@@ -512,7 +513,7 @@ export async function runTopLevelAgentLoop(
         truncationRetryCount += 1
         const currentMaxTokens = result.modelParams?.maxTokens ?? 16384
         const promptTokens = result.usage.promptTokens
-        const contextWindow = sessionManager.getCurrentModelContext(sessionId)
+        const contextWindow = sessionManager.getCurrentModelContext(sessionId, config.mode)
         const newMaxTokens = Math.min(
           Math.floor(currentMaxTokens * 1.5),
           Math.max(256, contextWindow - promptTokens - OUTPUT_RESERVE_TOKENS),

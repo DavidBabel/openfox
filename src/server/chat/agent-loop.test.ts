@@ -654,8 +654,8 @@ describe('maxTokens clamping', () => {
     await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
 
     // The clamp and truncation budget must resolve the SESSION model's window,
-    // so the context lookup must be scoped to the session.
-    expect(mockSessionManager.getCurrentModelContext).toHaveBeenCalledWith('test-session')
+    // so the context lookup must be scoped to the session and its running agent.
+    expect(mockSessionManager.getCurrentModelContext).toHaveBeenCalledWith('test-session', 'planner')
   })
 
   it('clamps against the session model context window, not the default model', async () => {

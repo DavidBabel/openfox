@@ -376,6 +376,10 @@ function createSessionManager(overrides: Record<string, unknown> = {}) {
     getSession: vi.fn(() => session),
     requireSession: vi.fn(() => session),
     getLatestWorkflowExecution: vi.fn(() => null),
+    resolveEffectiveProviderModel: vi.fn((sessionId: string) => {
+      const s = (manager as { getSession: (id: string) => any }).getSession(sessionId)
+      return { providerId: s?.providerId ?? null, model: s?.providerModel ?? null }
+    }),
     getContextState: vi.fn(() => ({
       currentTokens: 10,
       maxTokens: 200000,
@@ -1793,6 +1797,95 @@ describe('createWebSocketServer', () => {
       }),
     )
     expect(createLLMClientMock).not.toHaveBeenCalled()
+
+    await harness.close()
+  })
+
+  it('does not normalize the sticky preference from an override-derived effective model', async () => {
+    const overrideClient = {
+      getModel: () => 'override-model',
+      getBackend: () => 'openai',
+      setBackend: vi.fn(),
+      setModel: vi.fn(),
+      complete: vi.fn(),
+      stream: vi.fn(),
+      getProfile: vi.fn(),
+    } as never
+    createLLMClientMock.mockReturnValue(overrideClient)
+    runOrchestratorMock.mockResolvedValue({ success: true })
+
+    const provider = {
+      id: 'deepseek-provider',
+      name: 'DeepSeek',
+      url: 'https://api.deepseek.com',
+      backend: 'openai',
+      apiKey: 'sk-real-key-12345',
+      models: [{ id: 'override-model', contextWindow: 64000 }],
+      isActive: true,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    }
+
+    const createClientMock = vi.fn(() => overrideClient)
+    const providerManager = {
+      getProviders: vi.fn(() => [provider]),
+      createClient: createClientMock,
+      resolveModel: vi.fn(() => 'override-model'),
+      getActiveProvider: vi.fn(() => provider),
+      getActiveProviderId: vi.fn(() => 'deepseek-provider'),
+      getCurrentModel: vi.fn(() => 'override-model'),
+      getCurrentModelContext: vi.fn(() => 64000),
+      getLLMClient: vi.fn(() => overrideClient),
+      activateProvider: vi.fn(),
+      addProvider: vi.fn(),
+      removeProvider: vi.fn(),
+      setProviders: vi.fn(),
+      getProviderStatus: vi.fn(),
+      getProviderModels: vi.fn(),
+      setDefaultModelSelection: vi.fn(),
+      updateModelContext: vi.fn(),
+      updateModelSettings: vi.fn(),
+      refreshProviderModels: vi.fn(),
+      getModelSettings: vi.fn(),
+    } as never
+
+    // The user picked deepseek-provider/manual-model, then switched to an override
+    // agent whose override is the SAME provider with override-model. The effective
+    // model is override-derived (manual pick deactivated), so the WS normalization
+    // must NOT write the override's model into the sticky preference.
+    const session = {
+      id: 'session-normalize-test',
+      projectId: 'project-1',
+      workdir: '/tmp/project',
+      mode: 'planner' as const,
+      phase: 'build' as const,
+      isRunning: false,
+      criteria: [{ id: 'tests-pass', description: 'Tests pass', status: { type: 'pending' }, attempts: [] }],
+      providerId: 'deepseek-provider',
+      providerModel: 'manual-model',
+      providerManual: true,
+      providerManualActive: false,
+      metadata: { totalTokensUsed: 0, totalToolCalls: 0, iterationCount: 0 },
+    }
+
+    const setSessionProvider = vi.fn()
+    const sessionManager = createSessionManager({
+      getSession: vi.fn(() => session),
+      requireSession: vi.fn(() => session),
+      setSessionProvider,
+      resolveEffectiveProviderModel: vi.fn(() => ({ providerId: 'deepseek-provider', model: 'override-model' })),
+    })
+
+    const harness = await createHarness({ sessionManager, providerManager })
+
+    harness.send({ id: 'sl-ok', type: 'session.load', payload: { sessionId: 'session-normalize-test' } })
+    await harness.nextMessage((message) => message.id === 'sl-ok')
+
+    harness.send({ id: 'runner-launch', type: 'runner.launch', payload: {} })
+    expect(await harness.nextMessage((message) => message.id === 'runner-launch')).toMatchObject({ type: 'ack' })
+
+    expect(createClientMock).toHaveBeenCalledWith('deepseek-provider', 'override-model')
+    // The override-derived model must never overwrite the sticky manual preference.
+    expect(setSessionProvider).not.toHaveBeenCalled()
 
     await harness.close()
   })

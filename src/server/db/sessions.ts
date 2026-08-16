@@ -72,6 +72,8 @@ export function createSession(
     isRunning: false,
     providerId: providerId ?? null,
     providerModel: providerModel ?? null,
+    providerManual: false,
+    providerManualActive: true,
     createdAt: now,
     updatedAt: now,
     messages: [],
@@ -124,15 +126,35 @@ export function getSession(id: string): Session | null {
   }
 }
 
-export function updateSessionProvider(id: string, providerId: string | null, providerModel: string | null): void {
+export function updateSessionProvider(
+  id: string,
+  providerId: string | null,
+  providerModel: string | null,
+  providerManual?: boolean,
+): void {
   const db = getDatabase()
   const now = new Date().toISOString()
 
-  db.prepare(
-    `
-    UPDATE sessions SET provider_id = ?, provider_model = ?, updated_at = ? WHERE id = ?
-  `,
-  ).run(providerId, providerModel, now, id)
+  if (providerManual !== undefined) {
+    db.prepare(
+      `
+      UPDATE sessions SET provider_id = ?, provider_model = ?, provider_manual = ?, updated_at = ? WHERE id = ?
+    `,
+    ).run(providerId, providerModel, providerManual ? 1 : 0, now, id)
+  } else {
+    // Preserve the existing manual flag (e.g. model-name normalization).
+    db.prepare(
+      `
+      UPDATE sessions SET provider_id = ?, provider_model = ?, updated_at = ? WHERE id = ?
+    `,
+    ).run(providerId, providerModel, now, id)
+  }
+}
+
+export function updateSessionProviderActive(id: string, active: boolean): void {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  db.prepare('UPDATE sessions SET provider_manual_active = ?, updated_at = ? WHERE id = ?').run(active ? 1 : 0, now, id)
 }
 
 export function updateSessionMode(id: string, mode: SessionMode): void {
@@ -458,6 +480,8 @@ function mapSessionBase(row: SessionRow | SessionSummaryRow): {
   isRunning: boolean
   providerId: string | null
   providerModel: string | null
+  providerManual: boolean
+  providerManualActive: boolean
   createdAt: string
   updatedAt: string
 } {
@@ -472,6 +496,8 @@ function mapSessionBase(row: SessionRow | SessionSummaryRow): {
     isRunning: Boolean(row.is_running),
     providerId: row.provider_id ?? null,
     providerModel: row.provider_model ?? null,
+    providerManual: Boolean((row as SessionRow).provider_manual),
+    providerManualActive: Boolean((row as SessionRow).provider_manual_active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -510,6 +536,8 @@ interface SessionRow {
   summary: string | null
   provider_id: string | null
   provider_model: string | null
+  provider_manual: number
+  provider_manual_active: number
   created_at: string
   updated_at: string
   title: string | null

@@ -67,6 +67,10 @@ describe('QueueProcessor', () => {
         queueItems = queueItems.filter((q) => q.queueId !== queueId)
       }),
       getQueueState: vi.fn(() => queueItems),
+      resolveEffectiveProviderModel: vi.fn(() => ({
+        providerId: sessionState.providerId ?? null,
+        model: sessionState.providerModel ?? null,
+      })),
       getContextState: vi.fn(() => ({
         currentTokens: 100,
         maxTokens: 1000,

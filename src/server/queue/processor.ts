@@ -157,21 +157,25 @@ export class QueueProcessor {
 
   private async runTurn(sessionId: string, controller: AbortController): Promise<void> {
     const { sessionManager, getLLMClient, getActiveProvider, broadcastForSession, providerManager } = this.deps
-    const session = sessionManager.getSession(sessionId)
 
-    if (session?.providerId && session.providerModel) {
+    // Activate the session's EFFECTIVE provider/model (agent override > session
+    // preference > default), not the raw stored preference — otherwise the
+    // runtime client would be wrong on an override agent, or a stale override
+    // would linger after switching back to a non-override agent.
+    const effective = sessionManager.resolveEffectiveProviderModel(sessionId)
+    if (effective.providerId && effective.model) {
       const currentActiveProviderId = providerManager.getActiveProviderId()
       const currentModel = providerManager.getCurrentModel()
 
-      if (currentActiveProviderId !== session.providerId || currentModel !== session.providerModel) {
-        logger.info('Switching to session provider', {
+      if (currentActiveProviderId !== effective.providerId || currentModel !== effective.model) {
+        logger.info('Switching to session effective provider', {
           sessionId,
           fromProvider: currentActiveProviderId,
           fromModel: currentModel,
-          toProvider: session.providerId,
-          toModel: session.providerModel,
+          toProvider: effective.providerId,
+          toModel: effective.model,
         })
-        const result = await providerManager.activateProvider(session.providerId, { model: session.providerModel })
+        const result = await providerManager.activateProvider(effective.providerId, { model: effective.model })
         if (!result.success) {
           logger.error('Failed to activate session provider', { sessionId, error: result.error })
         }
@@ -191,10 +195,10 @@ export class QueueProcessor {
     // Re-resolve the session's LLM client for each retry attempt so a provider
     // switch made mid-turn (e.g. during backoff) takes effect on the next attempt.
     const getSessionLLMClient = (): LLMClientWithModel => {
-      const current = sessionManager.getSession(sessionId)
-      if (current?.providerId && current.providerModel && this.deps.getLLMClientForProvider) {
-        const resolvedModel = providerManager.resolveModel?.(current.providerId, current.providerModel)
-        const effectiveModel = resolvedModel ?? current.providerModel
+      const current = sessionManager.resolveEffectiveProviderModel(sessionId)
+      if (current.providerId && current.model && this.deps.getLLMClientForProvider) {
+        const resolvedModel = providerManager.resolveModel?.(current.providerId, current.model)
+        const effectiveModel = resolvedModel ?? current.model
         const client = this.deps.getLLMClientForProvider(current.providerId, effectiveModel)
         if (client) return client
       }

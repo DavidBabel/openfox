@@ -270,6 +270,7 @@ export interface ProviderManager {
   getActiveProvider(): Provider | undefined
   getActiveProviderId(): string | undefined
   getCurrentModel(): string | undefined
+  getDefaultModelSelection(): string | undefined
   getCurrentModelContext(): number
   getLLMClient(): LLMClientWithModel
   activateProvider(providerId: string, options?: { model?: string }): Promise<{ success: boolean; error?: string }>
@@ -330,6 +331,13 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
   // Enrich all models with profile defaults for display
   providers = providers.map((p) => ({ ...p, models: p.models.map((m) => enrichWithProfileDefaults(m)) }))
   let defaultModelSelection: string | undefined = config.defaultModelSelection
+  // Config-derived default (the user's global default model choice). Unlike
+  // `defaultModelSelection` — the runtime ACTIVE selection, mutated by
+  // activateProvider/addProvider/removeProvider — this is only updated when the
+  // config default itself changes (setProviders / setDefaultModelSelection).
+  // Effective-model resolution reads this so a stale runtime activation never
+  // leaks into the "default" tier.
+  let configDefaultModelSelection: string | undefined = config.defaultModelSelection
   let llmClient = createLLMClient(config)
   const providerStatus = new Map<string, 'connected' | 'disconnected' | 'unknown'>()
 
@@ -465,6 +473,10 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     getCurrentModel() {
       const { model } = parseDefaultModelSelection(defaultModelSelection)
       return model
+    },
+
+    getDefaultModelSelection() {
+      return configDefaultModelSelection
     },
 
     getLLMClient() {
@@ -613,6 +625,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     setProviders(newProviders, newDefaultModelSelection) {
       providers = [...newProviders]
       defaultModelSelection = newDefaultModelSelection
+      configDefaultModelSelection = newDefaultModelSelection
 
       providerStatus.clear()
       for (const p of providers) {
@@ -666,6 +679,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
       llmClient = createClientForProvider(provider, model)
 
       defaultModelSelection = `${providerId}/${model}`
+      configDefaultModelSelection = `${providerId}/${model}`
       providers = providers.map((p) => ({ ...p, isActive: p.id === providerId }))
 
       return { success: true }

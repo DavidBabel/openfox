@@ -1,8 +1,10 @@
 /**
  * Mode Switch + Agent Model Override Tests
  *
- * Tests that switching to an agent with a model override auto-sets
- * session.providerId and session.providerModel (last-write-wins).
+ * Plan B semantics: `session.provider_id`/`provider_model` are the user's STICKY
+ * preference, written only by an explicit pick (POST /provider). Mode switch is a
+ * pure `setMode` — it never writes, clears, or re-derives the stored provider.
+ * The effective model is always derived: agent override > session preference > default.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -14,30 +16,32 @@ import { createProject } from '../db/projects.js'
 import { initEventStore } from '../events/index.js'
 import { SessionManager } from '../session/manager.js'
 import { setAgentModelOverride } from '../agents/model-overrides.js'
-import { getSession } from '../db/sessions.js'
+import { getSession, updateSessionProvider } from '../db/sessions.js'
 
-describe('PUT /api/sessions/:id/mode — agent model override', () => {
+const mockProviderManager = {
+  getCurrentModelContext: () => 200000,
+  getLLMClient: () => ({
+    getModel: () => 'global-model',
+    setModel: () => {},
+    getProfile: () => {},
+    getBackend: () => 'unknown',
+    setBackend: () => {},
+    complete: async () => {},
+    stream: async function* () {},
+  }),
+  getActiveProviderId: () => 'test-provider',
+  getCurrentModel: () => 'global-model',
+  createClient: () => undefined,
+  getProviders: () => [],
+  getModelSettings: () => undefined,
+  getDefaultModelSelection: () => 'test-provider/global-model',
+}
+
+describe('PUT /api/sessions/:id/mode — pure mode switch (never writes provider)', () => {
   let server: Server
   let baseUrl: string
   let sessionManager: SessionManager
   let sessionId: string
-
-  const mockProviderManager = {
-    getCurrentModelContext: () => 200000,
-    getLLMClient: () => ({
-      getModel: () => 'global-model',
-      setModel: () => {},
-      getProfile: () => {},
-      getBackend: () => 'unknown',
-      setBackend: () => {},
-      complete: async () => {},
-      stream: async function* () {},
-    }),
-    getActiveProviderId: () => 'test-provider',
-    getCurrentModel: () => 'global-model',
-    createClient: () => undefined,
-    getProviders: () => [],
-  }
 
   beforeEach(async () => {
     closeDatabase()
@@ -56,11 +60,8 @@ describe('PUT /api/sessions/:id/mode — agent model override', () => {
     const app = express()
     app.use(express.json())
 
-    // Mini mode switch handler matching the real one
+    // Mini mode switch handler matching the real one: setMode only, no provider writes
     app.put('/api/sessions/:id/mode', async (req, res) => {
-      const { getAgentModelOverride: getOverride } = await import('../agents/model-overrides.js')
-      const { updateSessionProvider } = await import('../db/sessions.js')
-
       const sid = req.params.id
       const sess = sessionManager.getSession(sid)
       if (!sess) return res.status(404).json({ error: 'Session not found' })
@@ -69,15 +70,6 @@ describe('PUT /api/sessions/:id/mode — agent model override', () => {
       if (!mode) return res.status(400).json({ error: 'mode is required' })
 
       sessionManager.setMode(sid, mode)
-
-      // Auto-set session provider/model: override if agent has one, else reset to default
-      const override = getOverride(mode)
-      if (override) {
-        updateSessionProvider(sid, override.providerId, override.model)
-      } else {
-        updateSessionProvider(sid, null, null)
-      }
-
       const updated = sessionManager.getSession(sid)
       res.json({ session: updated })
     })
@@ -95,7 +87,7 @@ describe('PUT /api/sessions/:id/mode — agent model override', () => {
     closeDatabase()
   })
 
-  it('sets session provider/model when agent has override', async () => {
+  it('does not write the session provider when the agent has an override', async () => {
     setAgentModelOverride('planner', { providerId: 'my-provider', model: 'my-model' })
 
     const res = await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
@@ -106,77 +98,87 @@ describe('PUT /api/sessions/:id/mode — agent model override', () => {
     expect(res.status).toBe(200)
 
     const session = getSession(sessionId)
-    expect(session?.providerId).toBe('my-provider')
-    expect(session?.providerModel).toBe('my-model')
-  })
-
-  it('leaves session provider/model unchanged when agent has no override', async () => {
-    const res = await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'planner' }),
-    })
-    expect(res.status).toBe(200)
-
-    const session = getSession(sessionId)
     expect(session?.providerId).toBeNull()
     expect(session?.providerModel).toBeNull()
   })
 
-  it('switch to agent without override resets to default', async () => {
-    // Set a manual override on the session
-    const { updateSessionProvider } = await import('../db/sessions.js')
+  it('does not clear a manual session provider when switching to an agent without override', async () => {
     updateSessionProvider(sessionId, 'manual-provider', 'manual-model')
 
-    // Switch to an agent without override — resets to default
     const res = await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'planner' }),
+      body: JSON.stringify({ mode: 'builder' }),
     })
     expect(res.status).toBe(200)
 
     const session = getSession(sessionId)
-    expect(session?.providerId).toBeNull()
-    expect(session?.providerModel).toBeNull()
+    expect(session?.providerId).toBe('manual-provider')
+    expect(session?.providerModel).toBe('manual-model')
   })
 
-  it('switching back to agent reapplies override', async () => {
+  it('manual pick survives a round-trip through an override agent', async () => {
     setAgentModelOverride('planner', { providerId: 'agent-provider', model: 'agent-model' })
+    updateSessionProvider(sessionId, 'manual-provider', 'manual-model', true)
 
-    // Switch to planner — override applied
+    // Switch to override agent — stored preference (and its manual flag) untouched
     await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'planner' }),
     })
-
     let session = getSession(sessionId)
-    expect(session?.providerModel).toBe('agent-model')
+    expect(session?.providerId).toBe('manual-provider')
+    expect(session?.providerModel).toBe('manual-model')
+    expect(session?.providerManual).toBe(true)
 
-    // Switch to builder (no override) — resets to default
+    // Switch back to an agent without override — preference still intact
+    await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'builder' }),
+    })
+    session = getSession(sessionId)
+    expect(session?.providerId).toBe('manual-provider')
+    expect(session?.providerModel).toBe('manual-model')
+    expect(session?.providerManual).toBe(true)
+  })
+
+  it('mode switch toggles the manual pick active flag without clearing the preference', async () => {
+    setAgentModelOverride('planner', { providerId: 'agent-provider', model: 'agent-model' })
+    updateSessionProvider(sessionId, 'manual-provider', 'manual-model', true)
+    sessionManager.setSessionProviderActive(sessionId, true)
+
+    // Land on a non-override agent first (fresh sessions may default to the override agent)
     await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'builder' }),
     })
 
-    session = getSession(sessionId)
-    expect(session?.providerModel).toBeNull()
-
-    // Switch back to planner — override reapplied (last write wins)
+    // Switch to the override agent → preference intact, flag deactivated (label wins)
     await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'planner' }),
     })
+    let session = getSession(sessionId)
+    expect(session?.providerId).toBe('manual-provider')
+    expect(session?.providerManual).toBe(true)
+    expect(session?.providerManualActive).toBe(false)
 
+    // Switch to a non-override agent → flag reactivated
+    await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'builder' }),
+    })
     session = getSession(sessionId)
-    expect(session?.providerModel).toBe('agent-model')
+    expect(session?.providerId).toBe('manual-provider')
+    expect(session?.providerManualActive).toBe(true)
   })
 
   it('handles missing override gracefully (no crash)', async () => {
-    // Don't set any override, just switch to a valid agent
     const res = await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -186,28 +188,11 @@ describe('PUT /api/sessions/:id/mode — agent model override', () => {
   })
 })
 
-describe('GET /api/sessions/:id — applies override when provider is null', () => {
+describe('DELETE /api/sessions/:id/provider — reset manual pick', () => {
   let server: Server
   let baseUrl: string
   let sessionManager: SessionManager
   let sessionId: string
-
-  const mockProviderManager = {
-    getCurrentModelContext: () => 200000,
-    getLLMClient: () => ({
-      getModel: () => 'global-model',
-      setModel: () => {},
-      getProfile: () => {},
-      getBackend: () => 'unknown',
-      setBackend: () => {},
-      complete: async () => {},
-      stream: async function* () {},
-    }),
-    getActiveProviderId: () => 'test-provider',
-    getCurrentModel: () => 'global-model',
-    createClient: () => undefined,
-    getProviders: () => [],
-  }
 
   beforeEach(async () => {
     closeDatabase()
@@ -226,26 +211,15 @@ describe('GET /api/sessions/:id — applies override when provider is null', () 
     const app = express()
     app.use(express.json())
 
-    // GET handler matching the real one with override logic
-    app.get('/api/sessions/:id', async (req, res) => {
-      const { getAgentModelOverride: getOverride } = await import('../agents/model-overrides.js')
-      const { updateSessionProvider } = await import('../db/sessions.js')
-
-      let session = sessionManager.getSession(req.params.id)
-      if (!session) {
-        return res.status(404).json({ error: 'Session not found' })
-      }
-
-      // If session has no explicit provider but the current agent has a model override, apply it
-      if (!session.providerId && session.mode) {
-        const override = getOverride(session.mode)
-        if (override) {
-          updateSessionProvider(session.id, override.providerId, override.model)
-          session = sessionManager.getSession(session.id)
-        }
-      }
-
-      res.json({ session })
+    // Mini reset handler matching the real one
+    app.delete('/api/sessions/:id/provider', async (req, res) => {
+      const sid = req.params.id
+      const sess = sessionManager.getSession(sid)
+      if (!sess) return res.status(404).json({ error: 'Session not found' })
+      sessionManager.setSessionProvider(sid, null, null, false)
+      sessionManager.setSessionProviderActive(sid, true)
+      const updated = sessionManager.getSession(sid)
+      res.json({ session: updated })
     })
 
     await new Promise<void>((resolve) => {
@@ -261,52 +235,95 @@ describe('GET /api/sessions/:id — applies override when provider is null', () 
     closeDatabase()
   })
 
-  it('applies override when session providerId is null and agent has override', async () => {
-    setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+  it('clears the manual pick so agent overrides apply again', async () => {
+    setAgentModelOverride('planner', { providerId: 'agent-provider', model: 'agent-model' })
+    sessionManager.setSessionProvider(sessionId, 'manual-provider', 'manual-model', true)
 
-    // Switch to planner mode so session.mode = 'planner'
-    await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'planner' }),
+    const res = await fetch(`${baseUrl}/api/sessions/${sessionId}/provider`, { method: 'DELETE' })
+    expect(res.status).toBe(200)
+    const data = (await res.json()) as { session: { providerId: string | null; providerModel: string | null } }
+    expect(data.session.providerId).toBeNull()
+    expect(data.session.providerModel).toBeNull()
+
+    const session = getSession(sessionId)
+    expect(session?.providerManual).toBe(false)
+    expect(session?.providerManualActive).toBe(true)
+  })
+})
+
+describe('GET /api/sessions/:id — read-only provider (never materializes override)', () => {
+  let server: Server
+  let baseUrl: string
+  let sessionManager: SessionManager
+  let sessionId: string
+
+  beforeEach(async () => {
+    closeDatabase()
+    const config = loadConfig()
+    config.database.path = ':memory:'
+    initDatabase(config)
+    initEventStore(getDatabase())
+
+    const workdir = '/tmp/test'
+    const projectId = createProject('Test', workdir).id
+
+    sessionManager = new SessionManager(mockProviderManager as any)
+    const session = sessionManager.createSession(projectId)
+    sessionId = session.id
+
+    const app = express()
+    app.use(express.json())
+
+    // GET handler matching the real one: returns the stored session as-is
+    app.get('/api/sessions/:id', async (req, res) => {
+      const sess = sessionManager.getSession(req.params.id)
+      if (!sess) {
+        return res.status(404).json({ error: 'Session not found' })
+      }
+      res.json({ session: sess })
     })
 
-    // Manually reset provider to null (simulating stale session)
-    const { updateSessionProvider } = await import('../db/sessions.js')
-    updateSessionProvider(sessionId, null, null)
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => {
+        baseUrl = `http://localhost:${(server.address() as { port: number }).port}`
+        resolve()
+      })
+    })
+  })
 
-    // GET should re-apply the override
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    closeDatabase()
+  })
+
+  it('returns the stored provider as-is and never materializes an override', async () => {
+    setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
+    sessionManager.setMode(sessionId, 'planner')
+
     const res = await fetch(`${baseUrl}/api/sessions/${sessionId}`)
     expect(res.status).toBe(200)
     const data = (await res.json()) as { session: { providerId: string | null; providerModel: string | null } }
-    expect(data.session.providerId).toBe('override-provider')
-    expect(data.session.providerModel).toBe('override-model')
+    expect(data.session.providerId).toBeNull()
+    expect(data.session.providerModel).toBeNull()
   })
 
-  it('does NOT override when session has explicit providerId (manual selection)', async () => {
+  it('does not mutate a manual provider on GET', async () => {
     setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
-
-    // Switch to planner mode
-    await fetch(`${baseUrl}/api/sessions/${sessionId}/mode`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'planner' }),
-    })
-
-    // Manually set a different provider (simulating user override)
-    const { updateSessionProvider } = await import('../db/sessions.js')
     updateSessionProvider(sessionId, 'manual-provider', 'manual-model')
+    sessionManager.setMode(sessionId, 'planner')
 
-    // GET should NOT overwrite the manual selection
     const res = await fetch(`${baseUrl}/api/sessions/${sessionId}`)
     expect(res.status).toBe(200)
     const data = (await res.json()) as { session: { providerId: string | null; providerModel: string | null } }
     expect(data.session.providerId).toBe('manual-provider')
     expect(data.session.providerModel).toBe('manual-model')
+
+    // Stored value unchanged after GET
+    const session = getSession(sessionId)
+    expect(session?.providerId).toBe('manual-provider')
   })
 
   it('does nothing when agent has no override', async () => {
-    // Don't set any override
     const res = await fetch(`${baseUrl}/api/sessions/${sessionId}`)
     expect(res.status).toBe(200)
     const data = (await res.json()) as { session: { providerId: string | null; providerModel: string | null } }

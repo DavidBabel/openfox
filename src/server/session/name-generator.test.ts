@@ -383,6 +383,10 @@ describe('Session Name Generator', () => {
       const sessionManager = {
         getSession: vi.fn().mockReturnValue(session),
         getDisplayWorkflowExecution: vi.fn().mockReturnValue(waitingExec),
+        resolveEffectiveProviderModel: vi.fn(() => ({
+          providerId: (session as any).providerId ?? null,
+          model: (session as any).providerModel ?? null,
+        })),
       }
       const client = {
         complete: vi.fn().mockResolvedValue({
@@ -439,7 +443,13 @@ describe('Session Name Generator', () => {
         }),
       }
       const getLLMClientForProvider = vi.fn().mockReturnValue(sessionClient)
-      const sessionManager = { getSession: vi.fn().mockReturnValue(session) }
+      const sessionManager = {
+        getSession: vi.fn().mockReturnValue(session),
+        resolveEffectiveProviderModel: vi.fn(() => ({
+          providerId: (session as any).providerId ?? null,
+          model: (session as any).providerModel ?? null,
+        })),
+      }
       const providerManager = {
         getProviders: vi.fn().mockReturnValue([
           {

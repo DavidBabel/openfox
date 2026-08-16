@@ -28,6 +28,7 @@ import {
   deleteSession as dbDeleteSession,
   updateSessionMetadata,
   updateSessionProvider,
+  updateSessionProviderActive,
   updateSessionDangerLevel,
   updateSessionRunning,
   updateSessionCachedPrompt,
@@ -62,7 +63,8 @@ import { logger } from '../utils/logger.js'
 import { EventEmitter, type Unsubscribe } from '../utils/async.js'
 import { getLspManager as getOrCreateLspManager, shutdownLspManager, type LspManager } from '../lsp/index.js'
 import { devServerManager } from '../dev-server/manager.js'
-import { resolveLLMClientForAgent } from '../agents/model-overrides.js'
+import { resolveLLMClientForAgent, getAgentModelOverride } from '../agents/model-overrides.js'
+import { parseDefaultModelSelection } from '../provider-manager.js'
 import { getEventStore } from '../events/store.js'
 import {
   getSessionState,
@@ -160,18 +162,59 @@ export class SessionManager {
     return resolved.client
   }
 
+  /**
+   * Resolve the effective provider/model for a session.
+   *
+   * Precedence: agent model override > session preference > global default.
+   * The session preference is the user's sticky manual pick (written only by an
+   * explicit pick) — agent overrides and the effective model are never written
+   * into it. The global default comes from config (pure), never from the provider
+   * manager's active state, so a stale override never lingers.
+   *
+   * When `agentId` is omitted, the current session mode's agent override applies.
+   */
+  resolveEffectiveProviderModel(
+    sessionId: string,
+    agentId?: string,
+  ): { providerId: string | null; model: string | null } {
+    const dbSession = dbGetSession(sessionId)
+    // An explicit manual pick that is currently ACTIVE wins over any agent
+    // override. Selecting an override agent deactivates it (the agent's override
+    // is the label truth); a fresh pick or a non-override agent reactivates it.
+    if (
+      dbSession?.providerManual &&
+      dbSession?.providerManualActive &&
+      dbSession.providerId &&
+      dbSession.providerModel
+    ) {
+      return { providerId: dbSession.providerId, model: dbSession.providerModel }
+    }
+    const mode = agentId ?? dbSession?.mode ?? undefined
+    const override = mode ? getAgentModelOverride(mode) : undefined
+    if (override) {
+      return { providerId: override.providerId, model: override.model }
+    }
+    if (dbSession?.providerId && dbSession?.providerModel) {
+      return { providerId: dbSession.providerId, model: dbSession.providerModel }
+    }
+    const { providerId, model } = parseDefaultModelSelection(this.providerManager.getDefaultModelSelection())
+    if (providerId && model) {
+      return { providerId, model }
+    }
+    return { providerId: null, model: null }
+  }
+
   getCurrentModelSettings(
     sessionId?: string,
+    agentId?: string,
   ): { temperature?: number; topP?: number; topK?: number; maxTokens?: number; supportsVision?: boolean } | undefined {
     let providerId: string | undefined
     let model: string | undefined
 
     if (sessionId) {
-      const session = this.getSession(sessionId)
-      if (session?.providerId && session?.providerModel) {
-        providerId = session.providerId
-        model = session.providerModel
-      }
+      const effective = this.resolveEffectiveProviderModel(sessionId, agentId)
+      providerId = effective.providerId ?? undefined
+      model = effective.model ?? undefined
     }
 
     if (!providerId || !model) {
@@ -183,9 +226,10 @@ export class SessionManager {
     return this.providerManager.getModelSettings(providerId, model)
   }
 
-  getCurrentModelContext(sessionId?: string): number {
+  getCurrentModelContext(sessionId?: string, agentId?: string): number {
     if (sessionId) {
-      const sessionContext = this.getSessionModelContext(sessionId)
+      const { providerId, model } = this.resolveEffectiveProviderModel(sessionId, agentId)
+      const sessionContext = this.resolveModelContext(providerId, model)
       if (sessionContext !== undefined) return sessionContext
     }
     return this.providerManager.getCurrentModelContext()
@@ -196,18 +240,6 @@ export class SessionManager {
    * Exact match first, then fuzzy match (spaces/dashes/underscores variations).
    * Returns undefined when the session has no model or no matching config —
    * callers fall back to the global default context.
-   */
-  private getSessionModelContext(sessionId: string): number | undefined {
-    const session = this.getSession(sessionId)
-    if (!session?.providerId || !session.providerModel) return undefined
-    return this.resolveModelContext(session.providerId, session.providerModel)
-  }
-
-  /**
-   * Resolve a provider/model pair's context window (exact, then fuzzy match).
-   * Takes provider/model directly so callers with a raw DB session (e.g.
-   * buildSessionFromDb) can use it without going through getSession, which
-   * would recurse back into this class's session building.
    */
   private resolveModelContext(
     providerId: string | null | undefined,
@@ -235,15 +267,13 @@ export class SessionManager {
     return modelConfig?.contextWindow
   }
 
-  getModelCompactionThreshold(sessionId: string): number | undefined {
-    const session = this.getSession(sessionId)
-    const providerId = session?.providerId ?? this.providerManager.getActiveProviderId()
-    const modelId = session?.providerModel ?? this.providerManager.getCurrentModel()
-    if (!providerId || !modelId) return undefined
+  getModelCompactionThreshold(sessionId: string, agentId?: string): number | undefined {
+    const { providerId, model } = this.resolveEffectiveProviderModel(sessionId, agentId)
+    if (!providerId || !model) return undefined
     return this.providerManager
       .getProviders()
       .find((provider) => provider.id === providerId)
-      ?.models.find((model) => model.id === modelId)?.compactionThreshold
+      ?.models.find((modelConfig) => modelConfig.id === model)?.compactionThreshold
   }
 
   /**
@@ -541,6 +571,11 @@ export class SessionManager {
 
     emitModeChanged(sessionId, toMode, false)
 
+    // The agent's override is the label truth: selecting an agent with an
+    // override deactivates the manual pick (so the override wins); selecting a
+    // non-override agent reactivates it. The preference itself is never touched.
+    this.setSessionProviderActive(sessionId, !getAgentModelOverride(toMode))
+
     const updatedSession = this.requireSession(sessionId)
 
     this.emit({ type: 'mode_changed', sessionId, from: fromMode, to: toMode })
@@ -629,15 +664,32 @@ export class SessionManager {
   /**
    * Set session provider/model. Updates DB directly.
    */
-  setSessionProvider(sessionId: string, providerId: string | null, providerModel: string | null): Session {
+  setSessionProvider(
+    sessionId: string,
+    providerId: string | null,
+    providerModel: string | null,
+    providerManual?: boolean,
+  ): Session {
     logger.debug('Setting session provider', { sessionId, providerId, providerModel })
 
-    updateSessionProvider(sessionId, providerId, providerModel)
+    updateSessionProvider(sessionId, providerId, providerModel, providerManual)
 
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
 
     return updatedSession
+  }
+
+  /**
+   * Toggle whether the manual pick is currently active (does NOT emit — used as
+   * part of larger operations such as mode switches, which emit their own event).
+   * Selecting an agent with a model override deactivates the manual pick so the
+   * agent's override (its label) wins; a fresh pick or a non-override agent
+   * reactivates it.
+   */
+  setSessionProviderActive(sessionId: string, active: boolean): void {
+    logger.debug('Setting session provider manual-active', { sessionId, active })
+    updateSessionProviderActive(sessionId, active)
   }
 
   // ============================================================================
@@ -1453,13 +1505,13 @@ export class SessionManager {
    * Get the current context state for a session.
    */
   getContextState(sessionId: string): ContextState {
-    const session = this.getSession(sessionId)
     const providerManager = this.providerManager
 
-    // Get maxTokens from session's provider/model if set, otherwise use global
+    // Get maxTokens from the session's effective model if resolvable, otherwise use global
+    const { providerId, model } = this.resolveEffectiveProviderModel(sessionId)
     const maxTokens =
-      session?.providerId && session.providerModel
-        ? (this.getSessionModelContext(sessionId) ?? providerManager.getCurrentModelContext())
+      providerId && model
+        ? (this.resolveModelContext(providerId, model) ?? providerManager.getCurrentModelContext())
         : providerManager.getCurrentModelContext()
 
     const state = getSessionState(sessionId, maxTokens)

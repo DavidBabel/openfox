@@ -299,6 +299,24 @@ describe('ProviderManager - Model Selection', () => {
 
       expect(result).toEqual({ success: false, error: 'Provider not found' })
     })
+
+    it('getDefaultModelSelection stays the config default after runtime activation', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ id: 'model-x' }] }),
+      })
+
+      // Config default is provider-1/model-a
+      expect(providerManager.getDefaultModelSelection()).toBe('provider-1/model-a')
+
+      // Runtime activation switches the ACTIVE selection...
+      await providerManager.activateProvider('provider-2', { model: 'model-x' })
+      expect(providerManager.getActiveProviderId()).toBe('provider-2')
+
+      // ...but the config-derived default must not change — the default tier of
+      // the effective-model resolution comes from config, never active state.
+      expect(providerManager.getDefaultModelSelection()).toBe('provider-1/model-a')
+    })
   })
 
   describe('updateModelContext', () => {

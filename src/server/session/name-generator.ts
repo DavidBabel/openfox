@@ -229,6 +229,7 @@ export interface GenerateSessionNameForSessionDeps {
   sessionManager: {
     getSession: (id: string) => Session | null
     getDisplayWorkflowExecution?: (id: string) => import('../../shared/types.js').WorkflowExecution | null
+    resolveEffectiveProviderModel: (id: string, agentId?: string) => { providerId: string | null; model: string | null }
   }
   providerManager: ProviderManager
   broadcastForSession: (sessionId: string, msg: ServerMessage) => void
@@ -244,20 +245,23 @@ export interface GenerateSessionNameForSessionDeps {
 }
 
 /**
- * Resolve the provider config for a session: finds the provider by session.providerId
- * (falling back to the active provider), and returns its URL, apiKey, and the effective model.
+ * Resolve the provider config for a session: finds the provider by the session's
+ * effective provider/model (agent override > session preference > default, falling
+ * back to the active provider), and returns its URL, apiKey, and the effective model.
  */
 function resolveSessionProvider(
   session: Session,
   providerManager: ProviderManager,
+  effective?: { providerId: string | null; model: string | null },
 ): { providerId: string; baseUrl: string; apiKey?: string; model: string } | undefined {
   const providers = providerManager.getProviders()
-  const effectiveModel = session.providerModel ?? providerManager.getCurrentModel()
+  const effectiveProviderId = effective?.providerId ?? session.providerId ?? undefined
+  const effectiveModel = effective?.model ?? session.providerModel ?? providerManager.getCurrentModel()
   if (!effectiveModel) return undefined
 
-  // Try session's provider first, then active provider
-  const provider = session.providerId
-    ? providers.find((p) => p.id === session.providerId)
+  // Try the effective provider first, then active provider
+  const provider = effectiveProviderId
+    ? providers.find((p) => p.id === effectiveProviderId)
     : providers.find((p) => p.isActive)
 
   if (!provider) return undefined
@@ -294,7 +298,11 @@ export async function generateSessionNameForSession(
   const messageCount = getSessionMessageCount(sessionId)
   if (!needsNameGenerationCheck(sessionId, session.metadata.title, messageCount)) return
 
-  const providerConfig = resolveSessionProvider(session, providerManager)
+  const providerConfig = resolveSessionProvider(
+    session,
+    providerManager,
+    sessionManager.resolveEffectiveProviderModel(sessionId),
+  )
 
   // Get non-thinking model settings for the session's model on its provider
   const modelSettings = providerConfig
