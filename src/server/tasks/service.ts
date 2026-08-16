@@ -640,6 +640,7 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
       `This session is now working on task "${promptLabel(task.prompt)}" from the project task board.`,
       `Previous state: ${prettyStatus(from)} → In Progress. Session: ${sessionId.slice(0, 8)}.`,
       gateLine,
+      'Do not move the task, fill gate values, or commit changes without explicit user approval or a system instruction.',
     ].join('\n')
   }
 

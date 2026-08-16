@@ -66,8 +66,10 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
         'Kanban task board for this project. Core loop: list → move → set_gate_value.\n\n' +
         'Rules:\n' +
         '- Moving to in_progress binds the task to YOUR current session.\n' +
-        '- Moving to done is blocked by unmet gates: the error names the missing fields — fill them via ' +
-        "set_gate_value (that's part of the work), then retry the move.\n" +
+        '- Do not move tasks or fill gate values without explicit user approval or a system instruction — ' +
+        'complete the work, then let the user review before the task advances.\n' +
+        '- Moving to done is blocked by unmet gates: the error names the missing fields — fill them only with ' +
+        'user approval, then retry the move.\n' +
         '- Stale writes fail with CONFLICT — re-list and retry.\n\n' +
         'Actions:\n' +
         '- list: tasks (status, gate values, queue position, bound session, audit trail); defaults to open tasks, ' +

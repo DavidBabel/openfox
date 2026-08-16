@@ -615,6 +615,17 @@ describe('project tasks service', () => {
       expect(autoReminder.content).not.toContain('To Do → In Progress')
     })
 
+    it('instructs the agent not to move the task or fill gates without approval', async () => {
+      const task = create('Reminder task')
+      await service.move(projectId, task.id, 'in_progress', { actor: 'human' })
+      const sessionId = sm.createdSessions[0]!.id
+
+      const reminder = sm.reminders.find((r) => r.sessionId === sessionId)!
+      expect(reminder.content).toContain(
+        'Do not move the task, fill gate values, or commit changes without explicit user approval or a system instruction.',
+      )
+    })
+
     it('labels a Done re-open reminder with the true previous state', async () => {
       const task = create('Iterate')
       await service.move(projectId, task.id, 'in_progress', { actor: 'human' })
