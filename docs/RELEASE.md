@@ -145,6 +145,16 @@ npm run patch
 
 This runs `npm version patch` which creates a commit (`2.0.88`) and a tag (`v2.0.88`).
 
+### 8b. Sync the web lockfile version
+
+`npm version patch` bumps the root package but not `web/package-lock.json`, which embeds the root version in its `".."` reference — the next `npm install` in `web/` then rewrites it, producing a spurious diff. Sync it now (produces a minimal, dependency-free diff):
+
+```bash
+cd web && npm install --package-lock-only --no-audit --no-fund && cd ..
+git add web/package-lock.json
+git commit -m "chore: sync web lockfile to the released version"
+```
+
 ### 9. Publish
 
 ```bash
