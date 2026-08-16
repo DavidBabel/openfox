@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.122 - 2026-08-16
+
+### Features
+
+- **Live "time since your last prompt" counter** — the status bar ticks every second while the agent works
+- **Right-click a message for its timestamp** — sent/received time in 24h format (2026/08/16 14:44)
+
+### Enhancements
+
+- **Task moves and gate fills need your approval** — the agent no longer advances the board on its own
+- **Status label is cleaner** — dropped the redundant phase suffix (it was always "Plan" outside workflows)
+
 ## 2.0.121 - 2026-08-16
 
 ### Features
