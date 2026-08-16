@@ -5,8 +5,10 @@ import { createPortal } from 'react-dom'
 export interface ContextMenuItem {
   label: string
   icon?: React.ReactNode
-  onClick: () => void
+  onClick?: () => void
   danger?: boolean
+  /** Render as static informational text (e.g. a timestamp), not an action. */
+  info?: boolean
 }
 
 interface ContextMenuProps {
@@ -46,11 +48,15 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
           e.preventDefault()
           setSelectedIndex((prev) => (prev > 0 ? prev - 1 : items.length - 1))
           break
-        case 'Enter':
+        case 'Enter': {
           e.preventDefault()
-          items[selectedIndex]?.onClick()
-          onClose()
+          const item = items[selectedIndex]
+          if (item && !item.info) {
+            item.onClick?.()
+            onClose()
+          }
           break
+        }
       }
     }
 
@@ -82,28 +88,40 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
       style={{ left, top }}
     >
       <ScrollArea className="max-h-[60vh]" onMouseLeave={() => setSelectedIndex(-1)}>
-        {items.map((item, i) => (
-          <button
-            key={i}
-            onClick={() => {
-              item.onClick()
-              onClose()
-            }}
-            onMouseEnter={() => setSelectedIndex(i)}
-            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
-              i < items.length - 1 ? 'border-b border-border' : ''
-            } ${
-              item.danger
-                ? 'text-accent-error hover:bg-accent-error/10'
-                : i === selectedIndex
-                  ? 'bg-accent-primary/20 text-text-primary'
-                  : 'hover:bg-bg-tertiary text-text-primary'
-            }`}
-          >
-            {item.icon && <span className="w-4 h-4 flex-shrink-0">{item.icon}</span>}
-            {item.label}
-          </button>
-        ))}
+        {items.map((item, i) => {
+          const divider = i < items.length - 1 ? 'border-b border-border' : ''
+          if (item.info) {
+            return (
+              <div
+                key={i}
+                className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 text-text-muted ${divider}`}
+              >
+                {item.icon && <span className="w-4 h-4 flex-shrink-0">{item.icon}</span>}
+                {item.label}
+              </div>
+            )
+          }
+          return (
+            <button
+              key={i}
+              onClick={() => {
+                item.onClick?.()
+                onClose()
+              }}
+              onMouseEnter={() => setSelectedIndex(i)}
+              className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${divider} ${
+                item.danger
+                  ? 'text-accent-error hover:bg-accent-error/10'
+                  : i === selectedIndex
+                    ? 'bg-accent-primary/20 text-text-primary'
+                    : 'hover:bg-bg-tertiary text-text-primary'
+              }`}
+            >
+              {item.icon && <span className="w-4 h-4 flex-shrink-0">{item.icon}</span>}
+              {item.label}
+            </button>
+          )
+        })}
       </ScrollArea>
     </div>,
     document.body,

@@ -175,6 +175,27 @@ describe('AssistantMessage', () => {
     expect(dialogText).not.toContain('null')
   })
 
+  it('shows the message timestamp in the right-click menu', () => {
+    render(
+      <AssistantMessage
+        sessionId="s1"
+        message={{
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Hello there',
+          timestamp: '2026-08-16T14:44:00',
+          tokenCount: 0,
+          isStreaming: false,
+        }}
+      />,
+    )
+    const feedItem = screen.getByText('Hello there').closest('.feed-item')
+    expect(feedItem).not.toBeNull()
+    fireEvent.contextMenu(feedItem!)
+    expect(screen.getByText('2026/08/16 14:44')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '2026/08/16 14:44' })).toBeNull()
+  })
+
   it('strips provider path prefix from model name', () => {
     const html = renderToStaticMarkup(
       <AssistantMessage

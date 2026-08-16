@@ -78,29 +78,12 @@ export function projectFromSessionStore(inputs: ProjectFromSessionStoreInputs): 
   }
 }
 
-export function formatPhaseLabel(phase: SessionPhase): string {
-  switch (phase) {
-    case 'plan':
-      return 'Plan'
-    case 'build':
-      return 'Build'
-    case 'verification':
-      return 'Verification'
-    case 'waiting':
-      return 'Waiting'
-    case 'blocked':
-      return 'Blocked'
-    case 'done':
-      return 'Done'
-  }
-}
-
-export function statusLabel(state: SessionStatusState, phase: SessionPhase): string {
+export function statusLabel(state: SessionStatusState): string {
   switch (state) {
     case 'running':
-      return `Running • ${formatPhaseLabel(phase)}`
+      return 'Running'
     case 'waiting':
-      return phase === 'waiting' ? 'Waiting for input' : `Waiting for input • ${formatPhaseLabel(phase)}`
+      return 'Waiting for input'
     case 'completed':
       return 'Completed'
     case 'blocked':

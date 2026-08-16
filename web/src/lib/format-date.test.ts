@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { formatDateHeader, formatTime, extractDateKey, groupSessionsByDate } from './format-date.js'
+import {
+  formatDateHeader,
+  formatTime,
+  formatTimeSince,
+  formatDateTime,
+  extractDateKey,
+  groupSessionsByDate,
+} from './format-date.js'
 import type { SessionSummary } from '@shared/types.js'
 
 describe('formatDateHeader', () => {
@@ -37,6 +44,44 @@ describe('formatTime', () => {
   it('pads hours and minutes with leading zeros', () => {
     expect(formatTime('2024-01-15T01:02:00')).toBe('01:02')
     expect(formatTime('2024-01-15T00:00:00')).toBe('00:00')
+  })
+})
+
+describe('formatTimeSince', () => {
+  const NOW = new Date('2024-01-15T12:00:00').getTime()
+
+  it('formats the elapsed time since the given ISO timestamp', () => {
+    expect(formatTimeSince('2024-01-15T11:59:57', NOW)).toBe('3.0s')
+    expect(formatTimeSince('2024-01-15T11:59:15', NOW)).toBe('45s')
+    expect(formatTimeSince('2024-01-15T11:58:00', NOW)).toBe('2m 0s')
+    expect(formatTimeSince('2024-01-15T10:48:00', NOW)).toBe('1h 12m 0s')
+  })
+
+  it('returns an empty string for invalid timestamps', () => {
+    expect(formatTimeSince('not-a-date', NOW)).toBe('')
+  })
+
+  it('never goes negative for timestamps in the future', () => {
+    expect(formatTimeSince('2024-01-15T12:05:00', NOW)).toBe('0.0s')
+  })
+})
+
+describe('formatDateTime', () => {
+  it('formats to "YYYY/MM/DD HH:MM" 24-hour format', () => {
+    // Use local time timestamps (without Z suffix)
+    expect(formatDateTime('2026-08-16T14:44:00')).toBe('2026/08/16 14:44')
+    expect(formatDateTime('2026-01-05T09:05:00')).toBe('2026/01/05 09:05')
+    expect(formatDateTime('2026-12-31T23:59:00')).toBe('2026/12/31 23:59')
+  })
+
+  it('pads month, day, hours and minutes with leading zeros', () => {
+    expect(formatDateTime('2026-01-05T00:00:00')).toBe('2026/01/05 00:00')
+    expect(formatDateTime('2026-05-01T01:02:00')).toBe('2026/05/01 01:02')
+  })
+
+  it('never uses 12-hour AM/PM formatting', () => {
+    expect(formatDateTime('2026-08-16T14:44:00')).not.toMatch(/(AM|PM|am|pm)/)
+    expect(formatDateTime('2026-08-16T00:30:00')).not.toMatch(/(AM|PM|am|pm)/)
   })
 })
 

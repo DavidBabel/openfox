@@ -1,4 +1,5 @@
 import type { SessionSummary } from '@shared/types.js'
+import { formatTime as formatDuration } from './format-stats.js'
 
 /**
  * Format a date string to "Dayname YYYY/MM/DD" format
@@ -26,6 +27,31 @@ export function formatTime(isoString: string): string {
   const hours = String(date.getHours()).padStart(2, '0')
   const minutes = String(date.getMinutes()).padStart(2, '0')
   return `${hours}:${minutes}`
+}
+
+/**
+ * Format the elapsed time since an ISO timestamp, relative to now.
+ * Example: "3.0s", "45s", "2m 0s", "1h 12m 0s"
+ * Uses the shared duration formatter; never negative for future timestamps.
+ */
+export function formatTimeSince(isoString: string, now = Date.now()): string {
+  const date = new Date(isoString).getTime()
+  if (Number.isNaN(date)) return ''
+  const seconds = Math.max(0, Math.floor((now - date) / 1000))
+  return formatDuration(seconds)
+}
+
+/**
+ * Format a date string to "YYYY/MM/DD HH:MM" 24-hour format
+ * Example: "2026/08/16 14:44"
+ * Uses local time to match user's timezone. No AM/PM.
+ */
+export function formatDateTime(isoString: string): string {
+  const date = new Date(isoString)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}/${month}/${day} ${formatTime(isoString)}`
 }
 
 /**

@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { projectFromSessionStore, statusLabel, type SessionStatusState } from '../../lib/session-status'
+import { formatTimeSince } from '../../lib/format-date'
 
 /**
  * Session status indicator shown at the bottom of the chat.
@@ -27,12 +29,21 @@ export function RunningIndicator() {
 
   const state: SessionStatusState = view.state
 
+  const lastActivityAt = view.lastActivityAt
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!lastActivityAt) return
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [lastActivityAt])
+
   if (state === null) return null
 
-  const label = statusLabel(state, currentSession?.phase ?? 'plan')
+  const label = statusLabel(state)
   const dotColor = aborting ? 'bg-amber-400' : 'bg-accent-primary'
   const showBounce = state === 'running'
-  const lastActivityAtText = view.lastActivityAt ? formatLastActivity(view.lastActivityAt) : ''
+  const lastActivityAtText = lastActivityAt ? formatTimeSince(lastActivityAt, now) : ''
 
   return (
     <div
@@ -69,15 +80,4 @@ export function RunningIndicator() {
       )}
     </div>
   )
-}
-
-function formatLastActivity(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }

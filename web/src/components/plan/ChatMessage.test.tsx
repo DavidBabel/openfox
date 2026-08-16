@@ -102,7 +102,14 @@ describe('ChatMessage replay and edit controls', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
   })
 
-  it('shows the existing attachment while editing and lets it be removed', async () => {
+  it('shows the message sent timestamp in the right-click menu', () => {
+    render(<ChatMessage message={userMessage({ timestamp: '2026-08-16T14:44:00' })} messageId="m1" sessionId="s1" />)
+    fireEvent.contextMenu(screen.getByText('Fix the login bug'))
+    expect(screen.getByText('2026/08/16 14:44')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '2026/08/16 14:44' })).toBeNull()
+  })
+
+  it('shows the attachment while editing and lets it be removed', async () => {
     render(
       <ChatMessage
         message={userMessage({ attachments: [att('a1', 'report.txt'), att('a2', 'image.png')] })}

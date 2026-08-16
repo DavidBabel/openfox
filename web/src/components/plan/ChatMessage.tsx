@@ -14,6 +14,7 @@ import { replayMessage, forkSession } from '../../lib/api.js'
 import { AUTOSCROLL_REARM_EVENT } from './feed-window'
 import { useSessionStore } from '../../stores/session.js'
 import { copyToClipboard } from '../../lib/clipboard.js'
+import { formatDateTime } from '../../lib/format-date.js'
 import { shouldAutofocus } from '../../lib/device'
 import { useLocation } from 'wouter'
 import { useContextMenu } from '../../hooks/useContextMenu'
@@ -249,6 +250,10 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
       </div>
 
       {contextMenu([
+        {
+          label: formatDateTime(message.timestamp),
+          info: true,
+        },
         {
           label: 'Copy',
           icon: <CopyIcon className="w-4 h-4" />,

@@ -14,6 +14,7 @@ import { forkSession } from '../../lib/api.js'
 import { deriveToolCallStatus } from '../../lib/toolStatus'
 import { useLocation } from 'wouter'
 import { formatTime } from '../../lib/format-stats'
+import { formatDateTime } from '../../lib/format-date'
 import { copyToClipboard } from '../../lib/clipboard.js'
 import { useContextMenu } from '../../hooks/useContextMenu'
 
@@ -335,6 +336,10 @@ export const AssistantMessage = memo(function AssistantMessage({
       </div>
 
       {contextMenu([
+        {
+          label: formatDateTime(message.timestamp),
+          info: true,
+        },
         {
           label: 'Copy',
           icon: <CopyIcon className="w-4 h-4" />,

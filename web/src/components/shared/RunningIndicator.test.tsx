@@ -1,10 +1,16 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { flushSync } from 'react-dom'
+import { act } from 'react'
 import { RunningIndicator } from './RunningIndicator'
 import { useSessionStore } from '../../stores/session'
 import type { Session } from '@shared/types.js'
+
+// This file drives a live 1s ticker via fake timers, so enable React's act()
+// environment locally (scoped to this file — enabling it globally makes other
+// suites like AskUserCard warn about unwrapped updates they don't expect).
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -42,6 +48,11 @@ function render(): HTMLElement {
 afterEach(() => {
   for (const r of roots) r.unmount()
   roots.length = 0
+  vi.useRealTimers()
+  // Reset the act-environment flag so it doesn't leak into other test files
+  // sharing this worker (a leaked `true` makes unrelated suites warn about
+  // unwrapped updates, e.g. AskUserCard).
+  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
 })
 
 beforeEach(() => {
@@ -69,7 +80,7 @@ describe('RunningIndicator — factually-derived state from existing client data
     expect(container.querySelector('[data-testid="session-status-indicator"]')).toBeNull()
   })
 
-  it('renders "Running • Build" when isRunning=true and phase=build', () => {
+  it('renders "Running" without a phase suffix when isRunning=true and phase=build', () => {
     useSessionStore.setState({
       currentSession: makeSession({ phase: 'build', isRunning: true }),
     })
@@ -78,30 +89,34 @@ describe('RunningIndicator — factually-derived state from existing client data
     expect(el).not.toBeNull()
     expect(el?.getAttribute('data-state')).toBe('running')
     expect(el?.textContent).toContain('Running')
-    expect(el?.textContent).toContain('Build')
+    // Session phase is legacy (always "plan" outside workflows) — no suffix.
+    expect(el?.textContent).not.toContain('Build')
+    expect(el?.textContent).not.toContain('•')
   })
 
-  it('renders "Running • Plan" when isRunning=true and phase=plan', () => {
+  it('renders "Running" regardless of the legacy phase value', () => {
     useSessionStore.setState({
       currentSession: makeSession({ phase: 'plan', isRunning: true }),
     })
     const container = render()
     const el = container.querySelector('[data-testid="session-status-indicator"]')
     expect(el?.getAttribute('data-state')).toBe('running')
-    expect(el?.textContent).toContain('Plan')
+    expect(el?.textContent).toContain('Running')
+    expect(el?.textContent).not.toContain('Plan')
   })
 
-  it('renders "Running • Verification" when isRunning=true and phase=verification', () => {
+  it('renders "Running" when phase=verification (no phase suffix)', () => {
     useSessionStore.setState({
       currentSession: makeSession({ phase: 'verification', isRunning: true }),
     })
     const container = render()
     const el = container.querySelector('[data-testid="session-status-indicator"]')
     expect(el?.getAttribute('data-state')).toBe('running')
-    expect(el?.textContent).toContain('Verification')
+    expect(el?.textContent).toContain('Running')
+    expect(el?.textContent).not.toContain('Verification')
   })
 
-  it('renders "Waiting for input • Build" when there are pending questions', () => {
+  it('renders "Waiting for input" when there are pending questions (no phase suffix)', () => {
     useSessionStore.setState({
       currentSession: makeSession({ phase: 'build' }),
       pendingQuestions: [{ callId: 'q1', question: 'Pick?', type: 'choice', options: undefined }],
@@ -110,7 +125,7 @@ describe('RunningIndicator — factually-derived state from existing client data
     const el = container.querySelector('[data-testid="session-status-indicator"]')
     expect(el?.getAttribute('data-state')).toBe('waiting')
     expect(el?.textContent).toContain('Waiting for input')
-    expect(el?.textContent).toContain('Build')
+    expect(el?.textContent).not.toContain('Build')
   })
 
   it('renders "Waiting for input" without phase suffix when phase=waiting (no pendingQuestions)', () => {
@@ -268,5 +283,43 @@ describe('RunningIndicator — factually-derived state from existing client data
     expect(el?.querySelectorAll('button').length).toBe(0)
     // No anchor links.
     expect(el?.querySelectorAll('a').length).toBe(0)
+  })
+
+  it('shows a relative "time since last activity" that ticks every second', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))
+    useSessionStore.setState({
+      currentSession: makeSession({
+        phase: 'build',
+        isRunning: true,
+        updatedAt: '2024-06-15T12:34:53.000Z',
+      }),
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    // 3s elapsed → relative counter (formatTime rounds sub-10s to one decimal).
+    expect(el?.textContent).toContain('3.0s')
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(el?.textContent).toContain('5.0s')
+
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(el?.textContent).toContain('9.0s')
+
+    vi.useRealTimers()
+  })
+
+  it('does not show the relative counter when last activity is missing', () => {
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'done', isRunning: false, updatedAt: '' }),
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(el?.textContent).toContain('Completed')
+    expect(el?.textContent).not.toMatch(/\d+(\.\d+)?s/)
   })
 })
