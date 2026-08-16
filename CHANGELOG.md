@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.0.121 - 2026-08-16
+
+### Features
+
+- **New "Reset to default" action in the model selector** — undoes your manual model pick so the agent's own model or the global default applies again
+
+### Enhancements
+
+- **Clearer workflow nudge** — builders are told to mark fixed criteria completed, not verified
+
+### Bug Fixes
+
+- **Manual model pick is sticky** — switching agents or modes no longer overwrites your chosen model
+- **Agent overrides survive model picks** — picking a model no longer deletes the agent's saved override
+- **Sub-agents without overrides use the session model** — no longer inherit the parent agent's client
+- **Prefill speed stats are cache-aware** — cached tokens are no longer counted as freshly processed
+- **Compaction now counts as a prefill cache miss** — no longer reports zero tokens processed
+- **Code review sees the raw diff again** — no longer re-verifies criteria from verifier notes
+
 ## 2.0.120 - 2026-08-15
 
 ### Bug Fixes
