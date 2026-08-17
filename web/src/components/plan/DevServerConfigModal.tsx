@@ -37,7 +37,22 @@ export function DevServerConfigModal({ isOpen, onClose, workdir }: DevServerConf
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Dev Server Config" size="sm">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Dev Server Config"
+      size="sm"
+      footer={
+        <div className="flex justify-end gap-2">
+          <button className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving || !command.trim() || !url.trim()}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      }
+    >
       <div className="space-y-4">
         <div>
           <label className="block text-xs text-text-secondary mb-1">Command</label>
@@ -85,15 +100,6 @@ export function DevServerConfigModal({ isOpen, onClose, workdir }: DevServerConf
           <label htmlFor="disableInspect" className="text-xs text-text-secondary">
             Disable inspect feedback
           </label>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving || !command.trim() || !url.trim()}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
         </div>
       </div>
     </Modal>

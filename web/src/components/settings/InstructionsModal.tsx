@@ -64,7 +64,15 @@ export function InstructionsModal({
   const isBusy = isLoading || saving
 
   return (
-    <Modal isOpen={isOpen} onClose={handleCancel} title={title} size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleCancel}
+      title={title}
+      size="lg"
+      footer={
+        <ModalFooter onCancel={handleCancel} onSave={handleSave} saving={saving} saveDisabled={!isDirty || isBusy} />
+      }
+    >
       <div className="flex flex-col h-full -mt-1">
         <label className="block text-sm font-medium text-text-primary mb-1 flex-shrink-0">{label}</label>
         <p className="text-sm text-text-muted mb-3 flex-shrink-0">{description}</p>
@@ -88,8 +96,6 @@ export function InstructionsModal({
             disabled={isBusy}
           />
         </div>
-
-        <ModalFooter onCancel={handleCancel} onSave={handleSave} saving={saving} saveDisabled={!isDirty || isBusy} />
       </div>
     </Modal>
   )

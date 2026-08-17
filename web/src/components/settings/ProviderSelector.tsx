@@ -6,6 +6,7 @@ import { useSessionStore } from '../../stores/session'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 import { useAgentsStore, getAgentColor } from '../../stores/agents'
 import { ProviderModal, providerFormPayload, type ProviderFormData } from '../shared/ProviderModal'
+import { Modal } from '../shared/Modal'
 import { authFetch } from '../../lib/api'
 import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon } from '../shared/icons'
 import { useKeybindings, useBinding } from '../../hooks/useKeybindings'
@@ -690,92 +691,65 @@ export function ProviderSelector() {
         </div>
       )}
       {deviceChallenge && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="provider-device-title"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeDeviceChallenge()
-          }}
-        >
-          <div className="w-full max-w-md rounded-xl border border-border bg-bg-secondary p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="provider-device-title" className="text-lg font-semibold text-text-primary">
-                  Connect provider
-                </h2>
-                <p className="mt-1 text-sm text-text-muted">
-                  Follow the provider instructions to complete authorization.
-                </p>
-              </div>
+        <Modal isOpen onClose={closeDeviceChallenge} title="Connect provider" size="md">
+          <p className="text-sm text-text-muted">Follow the provider instructions to complete authorization.</p>
+
+          {deviceChallenge.mode !== 'browser' ? (
+            <>
               <button
                 type="button"
-                onClick={closeDeviceChallenge}
-                className="rounded px-2 py-1 text-xl leading-none text-text-muted hover:bg-bg-tertiary hover:text-text-primary"
-                aria-label="Close"
+                onClick={copyDeviceCode}
+                className="mt-6 w-full select-all rounded-lg border border-accent-primary/40 bg-bg-primary px-4 py-5 font-mono text-3xl font-semibold tracking-[0.2em] text-accent-primary hover:bg-bg-tertiary"
+                title="Copy code"
               >
-                ×
+                {deviceChallenge.userCode ?? 'Continue'}
               </button>
-            </div>
 
-            {deviceChallenge.mode !== 'browser' ? (
-              <>
+              <div className="mt-3 text-center text-xs text-text-muted">
+                {codeCopied ? 'Copied to clipboard' : 'Click the code to copy it'}
+              </div>
+
+              <div className="mt-6 flex gap-3">
                 <button
                   type="button"
                   onClick={copyDeviceCode}
-                  className="mt-6 w-full select-all rounded-lg border border-accent-primary/40 bg-bg-primary px-4 py-5 font-mono text-3xl font-semibold tracking-[0.2em] text-accent-primary hover:bg-bg-tertiary"
-                  title="Copy code"
+                  className="flex-1 rounded-lg border border-border px-4 py-2 text-sm text-text-primary hover:bg-bg-tertiary"
                 >
-                  {deviceChallenge.userCode ?? 'Continue'}
+                  {codeCopied ? 'Copied' : 'Copy code'}
                 </button>
+                <button
+                  type="button"
+                  onClick={openDeviceAuthorization}
+                  className="flex-1 rounded-lg bg-accent-primary px-4 py-2 text-sm font-medium text-text-primary hover:bg-accent-primary/90"
+                >
+                  {devicePageOpened ? 'Reopen authorization' : 'Open authorization'}
+                </button>
+              </div>
 
-                <div className="mt-3 text-center text-xs text-text-muted">
-                  {codeCopied ? 'Copied to clipboard' : 'Click the code to copy it'}
-                </div>
+              <p className="mt-4 text-center text-xs text-text-muted">
+                {devicePageOpened
+                  ? 'If the browser blocked or closed the tab, reopen authorization.'
+                  : 'OpenFox stays open while you complete authorization in the other tab.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-6 text-sm text-text-secondary leading-relaxed bg-bg-primary p-4 rounded-lg border border-border">
+                {deviceChallenge.instructions}
+              </p>
 
-                <div className="mt-6 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={copyDeviceCode}
-                    className="flex-1 rounded-lg border border-border px-4 py-2 text-sm text-text-primary hover:bg-bg-tertiary"
-                  >
-                    {codeCopied ? 'Copied' : 'Copy code'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openDeviceAuthorization}
-                    className="flex-1 rounded-lg bg-accent-primary px-4 py-2 text-sm font-medium text-text-primary hover:bg-accent-primary/90"
-                  >
-                    {devicePageOpened ? 'Reopen authorization' : 'Open authorization'}
-                  </button>
-                </div>
-
-                <p className="mt-4 text-center text-xs text-text-muted">
-                  {devicePageOpened
-                    ? 'If the browser blocked or closed the tab, reopen authorization.'
-                    : 'OpenFox stays open while you complete authorization in the other tab.'}
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="mt-6 text-sm text-text-secondary leading-relaxed bg-bg-primary p-4 rounded-lg border border-border">
-                  {deviceChallenge.instructions}
-                </p>
-
-                <div className="mt-6 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={openDeviceAuthorization}
-                    className="w-full rounded-lg bg-accent-primary px-4 py-2 text-sm font-medium text-text-primary hover:bg-accent-primary/90"
-                  >
-                    {devicePageOpened ? 'Reopen authorization' : 'Open authorization'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={openDeviceAuthorization}
+                  className="w-full rounded-lg bg-accent-primary px-4 py-2 text-sm font-medium text-text-primary hover:bg-accent-primary/90"
+                >
+                  {devicePageOpened ? 'Reopen authorization' : 'Open authorization'}
+                </button>
+              </div>
+            </>
+          )}
+        </Modal>
       )}
 
       {editingModel && showProviderModal && (

@@ -303,6 +303,16 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
         onClose={handleViewClose}
         title={`Default: ${defaultItem?.name ?? viewingDefaultId}`}
         size="xl"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={handleViewClose}>
+              Close
+            </Button>
+            <Button variant="primary" onClick={handleDuplicateFromView}>
+              Duplicate & Customize
+            </Button>
+          </div>
+        }
       >
         <div className="flex flex-col h-full">
           <div className="space-y-3 mb-3">
@@ -332,15 +342,6 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
               placeholder="..."
               className="flex-1 w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm font-mono resize-none opacity-60"
             />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 mt-3 border-t border-border flex-shrink-0">
-            <Button variant="secondary" onClick={handleViewClose}>
-              Close
-            </Button>
-            <Button variant="primary" onClick={handleDuplicateFromView}>
-              Duplicate & Customize
-            </Button>
           </div>
         </div>
       </Modal>

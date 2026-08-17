@@ -116,8 +116,37 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={handleCancel} title="Create New Project" size="sm">
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <Modal
+        isOpen={isOpen}
+        onClose={handleCancel}
+        title="Create New Project"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={handleCancel} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="create-project-form"
+              variant="primary"
+              disabled={loading || !projectName.trim()}
+              data-testid="create-project-submit-button"
+              className="min-w-[100px]"
+            >
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <PlusMdIcon className="h-4 w-4" />
+                  Creating...
+                </span>
+              ) : (
+                'Create'
+              )}
+            </Button>
+          </div>
+        }
+      >
+        <form id="create-project-form" onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-2">
               Project Name
@@ -149,29 +178,6 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                 {error}
               </div>
             )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={handleCancel} disabled={loading}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={loading || !projectName.trim()}
-              data-testid="create-project-submit-button"
-              className="min-w-[100px]"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <PlusMdIcon className="h-4 w-4" />
-                  Creating...
-                </span>
-              ) : (
-                'Create'
-              )}
-            </Button>
           </div>
         </form>
       </Modal>

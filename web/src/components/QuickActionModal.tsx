@@ -1,8 +1,7 @@
-import { ScrollArea } from './shared/ScrollArea'
+import { SearchResultsList, SelectableListButton } from './shared/SearchResultsList'
+import { Modal } from './shared/Modal'
 import { useEffect, useState, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { useLocation } from 'wouter'
-import { CloseButton } from './shared/IconButton'
 
 function getProjectIdFromPath(path: string): string | undefined {
   const match = path.match(/^\/p\/([^/]+)/)
@@ -205,61 +204,36 @@ export function QuickActionModal({
     )
   }
 
-  return isOpen
-    ? createPortal(
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-          <div className="relative w-full max-w-md bg-bg-secondary border border-border rounded shadow-xl">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <input
-                ref={searchRef}
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setSelectedIndex(0)
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Search..."
-                className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-text-muted"
-              />
-              <CloseButton onClick={onClose} className="shrink-0" aria-label="Close" />
-            </div>
-            <ScrollArea className="max-h-[60vh] p-2">
-              {filteredItems.length === 0 ? (
-                <div className="px-3 py-4 text-center text-text-muted text-sm">
-                  {commandDefaults.length +
-                    commandUserItems.length +
-                    workflowDefaults.length +
-                    workflowUserItems.length >
-                  0
-                    ? 'No matches'
-                    : 'No agents, commands, or workflows yet'}
-                </div>
-              ) : (
-                filteredItems.map((item, index) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      item.action()
-                      onClose()
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                      index === selectedIndex
-                        ? 'bg-accent-primary/20 text-text-primary'
-                        : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-                    }`}
-                  >
-                    <span className="text-text-muted font-normal">{item.prefix} </span>
-                    <span>{item.name}</span>
-                  </button>
-                ))
-              )}
-            </ScrollArea>
-          </div>
-        </div>,
-        document.body,
-      )
-    : null
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Quick Actions" size="md" scrollable={false}>
+      <SearchResultsList
+        searchValue={search}
+        onSearchChange={(value) => {
+          setSearch(value)
+          setSelectedIndex(0)
+        }}
+        onSearchKeyDown={handleKeyDown}
+        placeholder="Search..."
+        searchRef={searchRef}
+        rows={filteredItems.map((item, index) => (
+          <SelectableListButton
+            key={item.id}
+            selected={index === selectedIndex}
+            onClick={() => {
+              item.action()
+              onClose()
+            }}
+          >
+            <span className="text-text-muted font-normal">{item.prefix} </span>
+            <span>{item.name}</span>
+          </SelectableListButton>
+        ))}
+        emptyText={
+          commandDefaults.length + commandUserItems.length + workflowDefaults.length + workflowUserItems.length > 0
+            ? 'No matches'
+            : 'No agents, commands, or workflows yet'
+        }
+      />
+    </Modal>
+  )
 }

@@ -52,7 +52,28 @@ export function DynamicContextPreviewModal({ isOpen, onClose, isRunning, onApply
   }, [isOpen, fetchPreview])
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Update system prompt" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Update system prompt"
+      size="lg"
+      footer={
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm rounded bg-bg-tertiary text-text-primary hover:bg-border transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onApply}
+            className="px-3 py-1.5 text-sm rounded bg-accent-primary text-white hover:opacity-90 transition-colors"
+          >
+            {isRunning ? 'Queue update' : 'Update'}
+          </button>
+        </div>
+      }
+    >
       <p className="text-sm text-text-secondary mb-4">
         Applying the new system prompt will rebuild the cached prompt, which may cause the next response to take longer
         while the LLM reprocesses the prefix.
@@ -75,20 +96,6 @@ export function DynamicContextPreviewModal({ isOpen, onClose, isRunning, onApply
           identical. Applying the update will still rebuild the cached prompt to ensure consistency.
         </p>
       )}
-      <div className="flex justify-end gap-2 mt-4">
-        <button
-          onClick={onClose}
-          className="px-3 py-1.5 text-sm rounded bg-bg-tertiary text-text-primary hover:bg-border transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onApply}
-          className="px-3 py-1.5 text-sm rounded bg-accent-primary text-white hover:opacity-90 transition-colors"
-        >
-          {isRunning ? 'Queue update' : 'Update'}
-        </button>
-      </div>
     </Modal>
   )
 }

@@ -88,7 +88,19 @@ export function PermissionDeniedModal({ isOpen, onClose, path, onRetry }: Permis
   const showJoinGroupAndExtend = !userInGroup && !groupHasWrite
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Permission Denied" size="sm">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Permission Denied"
+      size="sm"
+      footer={
+        <div className="flex justify-end">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+        </div>
+      }
+    >
       <div className="space-y-4">
         <div className="text-sm text-text-secondary">
           <p>
@@ -174,11 +186,6 @@ export function PermissionDeniedModal({ isOpen, onClose, path, onRetry }: Permis
                 <code className="block mt-1 p-2 bg-bg-tertiary rounded break-all">sudo chmod g+w "{path}"</code>
               </div>
             )}
-            <div className="flex justify-end">
-              <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
-                Cancel
-              </Button>
-            </div>
           </div>
         ) : null}
       </div>

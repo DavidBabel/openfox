@@ -512,6 +512,35 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
         onClose={handleCancelEdit}
         title={isReadOnly ? formName : editingId ? 'Edit Workflow' : 'New Workflow'}
         size="full"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={handleCancelEdit}>
+              Close
+            </Button>
+            {isReadOnly ? (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setFormName(formName + ' (copy)')
+                  setFormId(`${editingId}-copy-${Date.now()}`)
+                  setEditingId(null)
+                  setIsReadOnly(false)
+                }}
+              >
+                Duplicate & Customize
+              </Button>
+            ) : (
+              <>
+                <Button variant="primary" onClick={handleSave}>
+                  Save
+                </Button>
+                <Button variant="primary" onClick={handleSaveAndClose}>
+                  Save & Close
+                </Button>
+              </>
+            )}
+          </div>
+        }
       >
         {formError && (
           <div className="text-accent-error text-sm px-3 py-2 bg-accent-error/10 rounded mb-3">{formError}</div>
@@ -927,34 +956,6 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
               )}
             </ScrollArea>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-3 mt-3 border-t border-border">
-          <Button variant="secondary" onClick={handleCancelEdit}>
-            Close
-          </Button>
-          {isReadOnly ? (
-            <Button
-              variant="primary"
-              onClick={() => {
-                setFormName(formName + ' (copy)')
-                setFormId(`${editingId}-copy-${Date.now()}`)
-                setEditingId(null)
-                setIsReadOnly(false)
-              }}
-            >
-              Duplicate & Customize
-            </Button>
-          ) : (
-            <>
-              <Button variant="primary" onClick={handleSave}>
-                Save
-              </Button>
-              <Button variant="primary" onClick={handleSaveAndClose}>
-                Save & Close
-              </Button>
-            </>
-          )}
         </div>
       </Modal>
     )

@@ -57,7 +57,7 @@ describe('ProviderModal - thinkingLevel persistence', () => {
 
     // Find the reasoning effort input (free-text variant; the select variant is
     // matched via the same aria-label in other tests)
-    const effortInput = container.querySelector('input[aria-label="Reasoning effort"]') as HTMLInputElement | null
+    const effortInput = document.body.querySelector('input[aria-label="Reasoning effort"]') as HTMLInputElement | null
 
     if (thinkingLevel !== undefined && effortInput) {
       // React controlled components listen to 'input' event with native setter
@@ -67,7 +67,7 @@ describe('ProviderModal - thinkingLevel persistence', () => {
     }
 
     // Click "Save Provider" (no separate review step anymore)
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     if (saveButton) saveButton.click()
 
     return { modelId }
@@ -122,7 +122,9 @@ describe('ProviderModal - thinkingLevel persistence', () => {
       setTimeout(resolve, 200)
     })
 
-    const effortSelect = container.querySelector('select[aria-label="Reasoning effort"]') as HTMLSelectElement | null
+    const effortSelect = document.body.querySelector(
+      'select[aria-label="Reasoning effort"]',
+    ) as HTMLSelectElement | null
     expect(effortSelect).toBeTruthy()
     expect(effortSelect?.value).toBe('medium')
     expect(Array.from(effortSelect?.options ?? []).map((option) => option.value)).toEqual([
@@ -134,7 +136,7 @@ describe('ProviderModal - thinkingLevel persistence', () => {
       'max',
     ])
 
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
@@ -169,12 +171,12 @@ describe('ProviderModal - thinkingLevel persistence', () => {
       setTimeout(resolve, 200)
     })
 
-    const effortSelect = container.querySelector('select[aria-label="Reasoning effort"]') as HTMLSelectElement
+    const effortSelect = document.body.querySelector('select[aria-label="Reasoning effort"]') as HTMLSelectElement
     const nativeSelectValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set
     nativeSelectValueSetter?.call(effortSelect, 'high')
     effortSelect.dispatchEvent(new Event('change', { bubbles: true }))
 
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
@@ -247,7 +249,7 @@ describe('ProviderModal - thinkingLevel persistence', () => {
 
     // Save immediately without touching any field — reopening the modal must not
     // silently reset previously-persisted advanced parameters to undefined/defaults.
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     expect(onSaveMock).toHaveBeenCalledTimes(1)
@@ -277,9 +279,9 @@ describe('ProviderModal - thinkingLevel persistence', () => {
     })
 
     // On step 2, the save button is visible (no separate review step)
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     expect(saveButton).toBeTruthy()
-    expect(container.querySelector('[data-testid="provider-modal-next"]')).toBeNull()
+    expect(document.body.querySelector('[data-testid="provider-modal-next"]')).toBeNull()
 
     // Simulate parent re-render with new editProvider reference (identical data)
     root.render(
@@ -295,8 +297,8 @@ describe('ProviderModal - thinkingLevel persistence', () => {
     await new Promise((resolve) => setTimeout(resolve, 100))
 
     // MUST still be on step 2 — save button still visible
-    expect(container.querySelector('[data-testid="provider-modal-save"]')).toBeTruthy()
-    expect(container.querySelector('[data-testid="provider-modal-next"]')).toBeNull()
+    expect(document.body.querySelector('[data-testid="provider-modal-save"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="provider-modal-next"]')).toBeNull()
   })
   it('prefills the catalog context window when a model is selected', async () => {
     vi.stubGlobal(
@@ -333,14 +335,14 @@ describe('ProviderModal - thinkingLevel persistence', () => {
       setTimeout(resolve, 200)
     })
 
-    const availableRows = Array.from(container.querySelectorAll('[role="checkbox"]'))
+    const availableRows = Array.from(document.body.querySelectorAll('[role="checkbox"]'))
     const catalogRow = availableRows.find((row) => row.textContent?.includes('Catalog model')) as
       HTMLElement | undefined
     expect(catalogRow).toBeTruthy()
     catalogRow?.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
@@ -391,20 +393,22 @@ describe('ProviderModal - thinkingLevel persistence', () => {
     })
 
     // The manual model input is available even though discovery failed.
-    const manualInput = container.querySelector('[data-testid="provider-modal-manual-model-input"]') as HTMLInputElement
+    const manualInput = document.body.querySelector(
+      '[data-testid="provider-modal-manual-model-input"]',
+    ) as HTMLInputElement
     expect(manualInput).toBeTruthy()
 
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
     nativeInputValueSetter?.call(manualInput, 'my-cline-model')
     manualInput.dispatchEvent(new Event('input', { bubbles: true }))
 
-    const addButton = container.querySelector(
+    const addButton = document.body.querySelector(
       '[data-testid="provider-modal-manual-model-add"]',
     ) as HTMLButtonElement | null
     addButton?.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     expect(onSaveMock).toHaveBeenCalledTimes(1)
@@ -435,21 +439,23 @@ describe('ProviderModal - thinkingLevel persistence', () => {
       setTimeout(resolve, 200)
     })
 
-    const manualInput = container.querySelector('[data-testid="provider-modal-manual-model-input"]') as HTMLInputElement
+    const manualInput = document.body.querySelector(
+      '[data-testid="provider-modal-manual-model-input"]',
+    ) as HTMLInputElement
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
     nativeInputValueSetter?.call(manualInput, 'existing-model')
     manualInput.dispatchEvent(new Event('input', { bubbles: true }))
 
-    const addButton = container.querySelector(
+    const addButton = document.body.querySelector(
       '[data-testid="provider-modal-manual-model-add"]',
     ) as HTMLButtonElement | null
     addButton?.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
     // An error message is shown and the duplicate was not added.
-    expect(container.textContent).toContain('already in the list')
+    expect(document.body.textContent).toContain('already in the list')
 
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
@@ -500,7 +506,7 @@ describe('ProviderModal - thinkingLevel persistence', () => {
     })
 
     const buttonByText = (text: string) =>
-      Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === text) as
+      Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.trim() === text) as
         HTMLButtonElement | undefined
 
     buttonByText('Account Provider')?.click()
@@ -508,12 +514,12 @@ describe('ProviderModal - thinkingLevel persistence', () => {
     buttonByText(engineName)?.click()
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    const nextButton = container.querySelector('[data-testid="provider-modal-next"]') as HTMLButtonElement | null
+    const nextButton = document.body.querySelector('[data-testid="provider-modal-next"]') as HTMLButtonElement | null
     expect(nextButton?.disabled).toBe(false)
     nextButton?.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     expect(onSaveMock).toHaveBeenCalledTimes(1)
@@ -563,13 +569,13 @@ describe('ProviderModal - thinkingLevel persistence', () => {
       setTimeout(resolve, 200)
     })
 
-    const autoConfigButton = Array.from(container.querySelectorAll('button')).find(
+    const autoConfigButton = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent?.trim() === 'Auto-config',
     ) as HTMLButtonElement | undefined
     autoConfigButton?.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
 
     const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
@@ -617,15 +623,15 @@ describe('ProviderModal - sampling param Send checkboxes', () => {
   }
 
   function getSendCheckbox(paramKey: string): HTMLInputElement | null {
-    return container.querySelector(`input[data-testid="send-${paramKey}"]`) as HTMLInputElement | null
+    return document.body.querySelector(`input[data-testid="send-${paramKey}"]`) as HTMLInputElement | null
   }
 
   function getParamInput(paramKey: string): HTMLInputElement | null {
-    return container.querySelector(`input[data-testid="param-${paramKey}"]`) as HTMLInputElement | null
+    return document.body.querySelector(`input[data-testid="param-${paramKey}"]`) as HTMLInputElement | null
   }
 
   function save() {
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
   }
 
@@ -709,7 +715,7 @@ describe('ProviderModal - sampling param Send checkboxes', () => {
       'test-model',
     )
 
-    const reEnableCb = container.querySelector(
+    const reEnableCb = document.body.querySelector(
       'input[data-testid="re-enable-reasoning_effort"]',
     ) as HTMLInputElement | null
     expect(reEnableCb).toBeTruthy()
@@ -729,7 +735,7 @@ describe('ProviderModal - sampling param Send checkboxes', () => {
       'test-model',
     )
 
-    const reEnableCb = container.querySelector(
+    const reEnableCb = document.body.querySelector(
       'input[data-testid="re-enable-reasoning_effort"]',
     ) as HTMLInputElement | null
     expect(reEnableCb).toBeTruthy()

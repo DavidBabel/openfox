@@ -24,9 +24,12 @@ export function ConfirmModal({
   disabled = false,
 }: ConfirmModalProps) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
-      <div className="space-y-4">
-        <div className="text-text-secondary">{message}</div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      size="sm"
+      footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={disabled}>
             Cancel
@@ -35,7 +38,9 @@ export function ConfirmModal({
             {confirmLabel}
           </Button>
         </div>
-      </div>
+      }
+    >
+      <div className="text-text-secondary">{message}</div>
     </Modal>
   )
 }

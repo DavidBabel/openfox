@@ -1,4 +1,5 @@
 import { ScrollArea } from './ScrollArea'
+import { Modal } from './Modal'
 import { useState, useEffect, useRef } from 'react'
 import { authFetch } from '../../lib/api'
 import type { Backend } from '../../stores/config'
@@ -1061,19 +1062,64 @@ export function ProviderModal({
 
   if (!isOpen) return null
 
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <ScrollArea className="bg-bg-secondary border border-border rounded-xl w-[640px] max-h-[85vh] shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-text-primary">{editProvider ? 'Edit Provider' : 'Add Provider'}</h3>
-          <button onClick={handleClose} className="text-text-muted hover:text-text-primary text-xl leading-none p-1">
-            &times;
+  const footer = (
+    <div className="flex items-center justify-between">
+      <div>
+        {formStep > 1 && (
+          <button
+            onClick={() => {
+              if (formStep === 2) resetStep2()
+              setFormStep((formStep - 1) as 1 | 2)
+            }}
+            className="text-sm text-text-muted hover:text-text-secondary transition-colors"
+          >
+            ← Back
           </button>
-        </div>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={handleClose}
+          className="px-4 py-2 text-sm text-text-muted hover:text-text-secondary transition-colors"
+        >
+          Cancel
+        </button>
+        {formStep === 1 ? (
+          <button
+            onClick={() => setFormStep(2)}
+            disabled={!formUrl}
+            data-testid="provider-modal-next"
+            className="px-5 py-2 bg-accent-primary text-text-primary rounded-lg text-sm font-medium hover:bg-accent-primary/90 disabled:opacity-50 transition-colors"
+          >
+            Next — Test &amp; Configure
+          </button>
+        ) : (
+          <button
+            onClick={handleSave}
+            disabled={autoConfigState.loading}
+            data-testid="provider-modal-save"
+            className="px-5 py-2 bg-accent-primary text-text-primary rounded-lg text-sm font-medium hover:bg-accent-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {autoConfigState.loading ? 'Configuring...' : 'Save Provider'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
 
+  return (
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={handleClose}
+        title={editProvider ? 'Edit Provider' : 'Add Provider'}
+        size="lg"
+        footer={footer}
+        closeOnBackdropClick={false}
+        closeOnEscape={!showDefaults && !rawModalData}
+      >
         {/* Step indicator */}
-        <div className="flex gap-1.5 px-6 pt-4">
+        <div className="flex gap-1.5 pt-2">
           {[1, 2].map((s) => (
             <div
               key={s}
@@ -1086,7 +1132,7 @@ export function ProviderModal({
 
         {/* Step 1: Basic Info */}
         {formStep === 1 && (
-          <div className="px-6 py-4 space-y-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-sm text-text-secondary mb-2">Inference engine</label>
               <div className="grid grid-cols-5 gap-2">
@@ -1237,7 +1283,7 @@ export function ProviderModal({
 
         {/* Step 2: Test & Configure Models */}
         {formStep === 2 && (
-          <div className="px-6 py-4 space-y-4">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-text-primary">Test &amp; Configure Models</h4>
               <button
@@ -1624,120 +1670,17 @@ export function ProviderModal({
             )}
           </div>
         )}
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-border">
-          <div>
-            {formStep > 1 && (
-              <button
-                onClick={() => {
-                  if (formStep === 2) resetStep2()
-                  setFormStep((formStep - 1) as 1 | 2)
-                }}
-                className="text-sm text-text-muted hover:text-text-secondary transition-colors"
-              >
-                ← Back
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleClose}
-              className="px-4 py-2 text-sm text-text-muted hover:text-text-secondary transition-colors"
-            >
-              Cancel
-            </button>
-            {formStep === 1 ? (
-              <button
-                onClick={() => setFormStep(2)}
-                disabled={!formUrl}
-                data-testid="provider-modal-next"
-                className="px-5 py-2 bg-accent-primary text-text-primary rounded-lg text-sm font-medium hover:bg-accent-primary/90 disabled:opacity-50 transition-colors"
-              >
-                Next — Test &amp; Configure
-              </button>
-            ) : (
-              <button
-                onClick={handleSave}
-                disabled={autoConfigState.loading}
-                data-testid="provider-modal-save"
-                className="px-5 py-2 bg-accent-primary text-text-primary rounded-lg text-sm font-medium hover:bg-accent-primary/90 disabled:opacity-50 transition-colors"
-              >
-                {autoConfigState.loading ? 'Configuring...' : 'Save Provider'}
-              </button>
-            )}
-          </div>
-        </div>
-      </ScrollArea>
+      </Modal>
 
       {/* Provider defaults modal */}
       {showDefaults && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowDefaults(false)
-          }}
-        >
-          <div className="bg-bg-secondary border border-border rounded-xl w-[480px] shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-base font-semibold text-text-primary">Provider-Level Defaults</h3>
-              <button
-                onClick={() => setShowDefaults(false)}
-                className="text-text-muted hover:text-text-primary text-xl leading-none p-1"
-              >
-                &times;
-              </button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <p className="text-xs text-text-muted">These apply to all models unless overridden per-model.</p>
-              <div>
-                <label className="text-xs text-text-secondary block mb-1">Non-thinking mode params</label>
-                <input
-                  type="text"
-                  defaultValue='{"chat_template_kwargs":{"enable_thinking":false}}'
-                  readOnly
-                  className="w-full px-3 py-2 bg-bg-primary border border-border rounded text-sm text-text-secondary font-mono"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-text-secondary block mb-1">Thinking mode params</label>
-                <input
-                  type="text"
-                  defaultValue='reasoning_effort: "low"'
-                  readOnly
-                  className="w-full px-3 py-2 bg-bg-primary border border-border rounded text-sm text-text-secondary font-mono"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-text-secondary block mb-1">
-                  Thinking response field <span className="text-text-muted">(override)</span>
-                </label>
-                <input
-                  type="text"
-                  value={thinkingField}
-                  onChange={(e) => setThinkingField(e.target.value)}
-                  placeholder="Leave blank for auto-detect"
-                  className="w-full px-3 py-2 bg-bg-primary border border-border rounded text-sm text-text-primary font-mono"
-                />
-                <p className="text-xs text-text-muted mt-1">
-                  Field name the backend uses for reasoning/thinking content (e.g. reasoning, reasoning_content,
-                  thinking).
-                </p>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={sendReasoningInMessages}
-                  onChange={(e) => setSendReasoningInMessages(e.target.checked)}
-                  className="rounded border-border bg-bg-primary text-accent-primary focus:ring-accent-primary"
-                />
-                <span className="text-sm text-text-secondary">Send reasoning in messages</span>
-                <span className="text-xs text-text-muted ml-auto">
-                  When disabled, strips reasoning/thinking content from assistant messages sent to this provider
-                </span>
-              </label>
-            </div>
-            <div className="flex justify-end px-6 py-4 border-t border-border">
+        <Modal
+          isOpen
+          onClose={() => setShowDefaults(false)}
+          title="Provider-Level Defaults"
+          size="md"
+          footer={
+            <div className="flex justify-end">
               <button
                 onClick={() => setShowDefaults(false)}
                 className="px-5 py-2 bg-accent-primary text-text-primary rounded-lg text-sm font-medium hover:bg-accent-primary/90 transition-colors"
@@ -1745,36 +1688,68 @@ export function ProviderModal({
                 Done
               </button>
             </div>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-text-muted">These apply to all models unless overridden per-model.</p>
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">Non-thinking mode params</label>
+              <input
+                type="text"
+                defaultValue='{"chat_template_kwargs":{"enable_thinking":false}}'
+                readOnly
+                className="w-full px-3 py-2 bg-bg-primary border border-border rounded text-sm text-text-secondary font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">Thinking mode params</label>
+              <input
+                type="text"
+                defaultValue='reasoning_effort: "low"'
+                readOnly
+                className="w-full px-3 py-2 bg-bg-primary border border-border rounded text-sm text-text-secondary font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">
+                Thinking response field <span className="text-text-muted">(override)</span>
+              </label>
+              <input
+                type="text"
+                value={thinkingField}
+                onChange={(e) => setThinkingField(e.target.value)}
+                placeholder="Leave blank for auto-detect"
+                className="w-full px-3 py-2 bg-bg-primary border border-border rounded text-sm text-text-primary font-mono"
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Field name the backend uses for reasoning/thinking content (e.g. reasoning, reasoning_content,
+                thinking).
+              </p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sendReasoningInMessages}
+                onChange={(e) => setSendReasoningInMessages(e.target.checked)}
+                className="rounded border-border bg-bg-primary text-accent-primary focus:ring-accent-primary"
+              />
+              <span className="text-sm text-text-secondary">Send reasoning in messages</span>
+              <span className="text-xs text-text-muted ml-auto">
+                When disabled, strips reasoning/thinking content from assistant messages sent to this provider
+              </span>
+            </label>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Raw response modal */}
       {rawModalData && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setRawModalData(null)
-          }}
-        >
-          <div className="bg-bg-secondary border border-border rounded-xl w-[640px] max-h-[80vh] shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <h3 className="text-base font-semibold text-text-primary">Raw Response</h3>
-              <button
-                onClick={() => setRawModalData(null)}
-                className="text-text-muted hover:text-text-primary text-xl leading-none p-1"
-              >
-                &times;
-              </button>
-            </div>
-            <ScrollArea horizontal>
-              <pre className="px-6 py-4 text-xs text-text-secondary font-mono whitespace-pre-wrap break-all">
-                {rawModalData}
-              </pre>
-            </ScrollArea>
-          </div>
-        </div>
+        <Modal isOpen onClose={() => setRawModalData(null)} title="Raw Response" size="lg">
+          <ScrollArea horizontal>
+            <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap break-all">{rawModalData}</pre>
+          </ScrollArea>
+        </Modal>
       )}
-    </div>
+    </>
   )
 }

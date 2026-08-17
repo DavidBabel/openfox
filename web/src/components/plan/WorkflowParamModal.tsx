@@ -34,8 +34,32 @@ export function WorkflowParamModal({
   const allRequiredFilled = sorted.every((p) => !p.required || (values[p.id]?.trim() ?? '') !== '')
 
   return (
-    <Modal isOpen onClose={onCancel} title={`Run: ${workflowName}`} size="sm" closeOnEscape closeOnBackdropClick>
-      <div className="space-y-3 py-2">
+    <Modal
+      isOpen
+      onClose={onCancel}
+      title={`Run: ${workflowName}`}
+      size="sm"
+      closeOnEscape
+      closeOnBackdropClick
+      footer={
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 text-sm text-text-muted hover:text-text-primary transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!allRequiredFilled}
+            className="px-4 py-1.5 text-sm font-medium rounded bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
         {sorted.map((p) => (
           <label key={p.id} className="block">
             <span className="text-sm text-text-primary font-medium">
@@ -52,21 +76,6 @@ export function WorkflowParamModal({
             />
           </label>
         ))}
-      </div>
-      <div className="flex justify-end gap-2 pt-3 border-t border-border">
-        <button
-          onClick={onCancel}
-          className="px-3 py-1.5 text-sm text-text-muted hover:text-text-primary transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={!allRequiredFilled}
-          className="px-4 py-1.5 text-sm font-medium rounded bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          {confirmLabel}
-        </button>
       </div>
     </Modal>
   )

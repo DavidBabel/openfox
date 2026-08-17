@@ -1,9 +1,9 @@
-import { ScrollArea } from '../shared/ScrollArea'
+import { SearchResultsList, SelectableListButton } from '../shared/SearchResultsList'
+import { Modal } from '../shared/Modal'
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import type { ReactNode } from 'react'
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { createPortal } from 'react-dom'
-import { SearchIcon, XCloseIcon, UserIcon, ThinkingIcon, AgentIcon } from '../shared/icons'
+import { SearchIcon, UserIcon, ThinkingIcon, AgentIcon } from '../shared/icons'
 import { fuzzyMatch, handleModalNavigation } from '../../lib/modal-utils'
 import { shouldAutofocus } from '../../lib/device'
 import type { DisplayItem } from './groupMessages'
@@ -238,98 +238,72 @@ export function MessageSearchModal({ isOpen, onClose, displayItems, onNavigate }
 
   const getRealIndex = (item: DisplayItem): number => displayItems.indexOf(item)
 
-  return isOpen
-    ? createPortal(
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-          <div className="relative w-full max-w-lg bg-bg-secondary border border-border rounded shadow-xl">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <SearchIcon />
-              <input
-                ref={searchRef}
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setSelectedIndex(0)
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Search timeline..."
-                className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-text-muted"
-              />
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-                aria-label="Close"
-              >
-                <XCloseIcon className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex gap-1.5 px-4 py-2 border-b border-border">
-              {FILTER_CATEGORIES.map((cat) => {
-                const isActive = activeFilters.has(cat.key)
-                return (
-                  <button
-                    key={cat.key}
-                    type="button"
-                    onClick={() => toggleFilter(cat.key)}
-                    className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                      isActive
-                        ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/40'
-                        : 'bg-bg-tertiary text-text-muted border border-border hover:text-text-secondary'
-                    }`}
-                  >
-                    {cat.label}
-                  </button>
-                )
-              })}
-            </div>
-            <ScrollArea ref={listRef} className="max-h-[60vh] p-2">
-              {filteredItems.length === 0 ? (
-                <div className="px-3 py-4 text-center text-text-muted text-sm">
-                  {visibleItems.length > 0 ? 'No matches' : 'No messages yet'}
-                </div>
-              ) : (
-                filteredItems.map((item, index) => {
-                  const realIndex = getRealIndex(item)
-                  const icon = getItemIcon(item)
-                  const label = getItemLabel(item)
-                  const style = getItemStyle(item)
-                  const timestamp = getTimestamp(item)
-                  const isUser = item.type === 'message' && item.message.role === 'user'
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Search timeline" size="md" scrollable={false}>
+      <SearchResultsList
+        searchValue={search}
+        onSearchChange={(value) => {
+          setSearch(value)
+          setSelectedIndex(0)
+        }}
+        onSearchKeyDown={handleKeyDown}
+        placeholder="Search timeline..."
+        searchRef={searchRef}
+        icon={<SearchIcon />}
+        listRef={listRef}
+        rows={filteredItems.map((item, index) => {
+          const realIndex = getRealIndex(item)
+          const icon = getItemIcon(item)
+          const label = getItemLabel(item)
+          const style = getItemStyle(item)
+          const timestamp = getTimestamp(item)
+          const isUser = item.type === 'message' && item.message.role === 'user'
 
-                  return (
-                    <button
-                      ref={index === selectedIndex ? selectedItemRef : null}
-                      key={`${realIndex}-${item.type}`}
-                      type="button"
-                      onClick={() => handleSelect(item)}
-                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                        index === selectedIndex
-                          ? 'bg-accent-primary/20 text-text-primary'
-                          : isUser
-                            ? 'bg-accent-primary/5 text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary'
-                            : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="flex-shrink-0">{icon}</span>
-                          <span className={`truncate flex-1 ${style}`}>{label}</span>
-                        </div>
-                        {timestamp && (
-                          <span className="text-text-muted text-xs shrink-0">{formatTimestamp(timestamp)}</span>
-                        )}
-                      </div>
-                    </button>
-                  )
-                })
-              )}
-            </ScrollArea>
-          </div>
-        </div>,
-        document.body,
-      )
-    : null
+          return (
+            <SelectableListButton
+              ref={index === selectedIndex ? selectedItemRef : null}
+              key={`${realIndex}-${item.type}`}
+              selected={index === selectedIndex}
+              onClick={() => handleSelect(item)}
+              {...(isUser
+                ? {
+                    unselectedClassName:
+                      'bg-accent-primary/5 text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary',
+                  }
+                : {})}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className="flex-shrink-0">{icon}</span>
+                  <span className={`truncate flex-1 ${style}`}>{label}</span>
+                </div>
+                {timestamp && <span className="text-text-muted text-xs shrink-0">{formatTimestamp(timestamp)}</span>}
+              </div>
+            </SelectableListButton>
+          )
+        })}
+        emptyText={visibleItems.length > 0 ? 'No matches' : 'No messages yet'}
+      >
+        <div className="flex gap-1.5 pb-3 shrink-0">
+          {FILTER_CATEGORIES.map((cat) => {
+            const isActive = activeFilters.has(cat.key)
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => toggleFilter(cat.key)}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/40'
+                    : 'bg-bg-tertiary text-text-muted border border-border hover:text-text-secondary'
+                }`}
+              >
+                {cat.label}
+              </button>
+            )
+          })}
+        </div>
+      </SearchResultsList>
+    </Modal>
+  )
 }

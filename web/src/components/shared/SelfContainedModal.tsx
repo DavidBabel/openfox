@@ -99,12 +99,14 @@ export function Modal({
                   className={`relative w-full ${sizeClasses[size]} max-h-[90vh] bg-bg-secondary border border-border rounded shadow-xl flex flex-col`}
                 >
                   {(title || headerRight || showCloseButton) && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 border-b border-border">
-                      {title && <h2 className="text-lg font-semibold text-text-primary">{title}</h2>}
-                      <div className="flex items-center gap-2 ml-auto w-full sm:w-auto min-w-0">
-                        {headerRight}
-                        {showCloseButton && <CloseButton onClick={close} aria-label="Close" />}
+                    <div className="flex items-start gap-3 px-4 py-3 border-b border-border">
+                      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-2">
+                        {title && <h2 className="text-lg font-semibold text-text-primary">{title}</h2>}
+                        {headerRight && <div className="flex items-center gap-2 min-w-0">{headerRight}</div>}
                       </div>
+                      {showCloseButton && (
+                        <CloseButton onClick={close} aria-label="Close" className="shrink-0" iconSize="w-5 h-5" />
+                      )}
                     </div>
                   )}
                   {scrollable ? (

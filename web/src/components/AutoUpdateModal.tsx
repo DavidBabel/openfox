@@ -275,6 +275,62 @@ export function AutoUpdateModal({ isOpen, onClose, versionInfo }: AutoUpdateModa
       size="md"
       closeOnBackdropClick={canClose}
       showCloseButton={canClose}
+      footer={
+        <div className="flex flex-col gap-2">
+          {state === 'ready' && (
+            <button
+              onClick={handleUpdate}
+              className="w-full px-3 py-2 text-sm rounded bg-accent-primary hover:brightness-110 transition-all text-white font-medium"
+            >
+              Update OpenFox
+            </button>
+          )}
+
+          {/* Service installs can opt into an automatic restart; the checkbox stays
+              live through the download so the decision can be made mid-update. */}
+          {(state === 'ready' || state === 'updating') && serviceMode && (
+            <label className="flex items-center justify-center gap-2 text-xs text-text-muted cursor-pointer select-none">
+              <input type="checkbox" checked={autoRestart} onChange={(e) => toggleAutoRestart(e.target.checked)} />
+              Auto-restart once update is done
+            </label>
+          )}
+
+          {state === 'complete' && restartAvailable && (
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleRestartNow}
+                className="w-full px-3 py-2 text-sm rounded bg-accent-primary hover:brightness-110 transition-all text-white font-medium"
+              >
+                Restart OpenFox now
+              </button>
+              <button
+                onClick={onClose}
+                className="w-full px-3 py-2 text-sm rounded bg-bg-tertiary hover:bg-bg-secondary transition-colors text-text-primary font-medium"
+              >
+                Later
+              </button>
+            </div>
+          )}
+
+          {state === 'complete' && !restartAvailable && (
+            <button
+              onClick={onClose}
+              className="w-full px-3 py-2 text-sm rounded bg-bg-tertiary hover:bg-bg-secondary transition-colors text-text-primary font-medium"
+            >
+              Close
+            </button>
+          )}
+
+          {(state === 'failed' || state === 'restartFailed') && (
+            <button
+              onClick={onClose}
+              className="w-full px-3 py-2 text-sm rounded bg-bg-tertiary hover:bg-bg-secondary transition-colors text-text-primary font-medium"
+            >
+              Close
+            </button>
+          )}
+        </div>
+      }
     >
       <div className="flex flex-col gap-4">
         {modalVersionInfo && (
@@ -329,59 +385,6 @@ export function AutoUpdateModal({ isOpen, onClose, versionInfo }: AutoUpdateModa
           />
         )}
       </div>
-
-      {state === 'ready' && (
-        <button
-          onClick={handleUpdate}
-          className="w-full px-3 py-2 text-sm rounded bg-accent-primary hover:brightness-110 transition-all text-white font-medium"
-        >
-          Update OpenFox
-        </button>
-      )}
-
-      {/* Service installs can opt into an automatic restart; the checkbox stays
-          live through the download so the decision can be made mid-update. */}
-      {(state === 'ready' || state === 'updating') && serviceMode && (
-        <label className="flex items-center justify-center gap-2 text-xs text-text-muted cursor-pointer select-none mt-2">
-          <input type="checkbox" checked={autoRestart} onChange={(e) => toggleAutoRestart(e.target.checked)} />
-          Auto-restart once update is done
-        </label>
-      )}
-
-      {state === 'complete' && restartAvailable && (
-        <div className="flex flex-col gap-2 mt-2">
-          <button
-            onClick={handleRestartNow}
-            className="w-full px-3 py-2 text-sm rounded bg-accent-primary hover:brightness-110 transition-all text-white font-medium"
-          >
-            Restart OpenFox now
-          </button>
-          <button
-            onClick={onClose}
-            className="w-full px-3 py-2 text-sm rounded bg-bg-tertiary hover:bg-bg-secondary transition-colors text-text-primary font-medium"
-          >
-            Later
-          </button>
-        </div>
-      )}
-
-      {state === 'complete' && !restartAvailable && (
-        <button
-          onClick={onClose}
-          className="w-full px-3 py-2 text-sm rounded bg-bg-tertiary hover:bg-bg-secondary transition-colors text-text-primary font-medium mt-2"
-        >
-          Close
-        </button>
-      )}
-
-      {(state === 'failed' || state === 'restartFailed') && (
-        <button
-          onClick={onClose}
-          className="w-full px-3 py-2 text-sm rounded bg-bg-tertiary hover:bg-bg-secondary transition-colors text-text-primary font-medium mt-2"
-        >
-          Close
-        </button>
-      )}
     </Modal>
   )
 }

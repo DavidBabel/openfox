@@ -33,8 +33,23 @@ export function PasswordModal({ isOpen, isRetry, onSubmit, onCancel }: PasswordM
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onCancel} title={isRetry ? 'Invalid Password' : 'Password Required'} size="sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal
+      isOpen={isOpen}
+      onClose={onCancel}
+      title={isRetry ? 'Invalid Password' : 'Password Required'}
+      size="sm"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" form="password-form" disabled={!password.trim()}>
+            {isRetry ? 'Try Again' : 'Connect'}
+          </Button>
+        </div>
+      }
+    >
+      <form id="password-form" onSubmit={handleSubmit} className="space-y-4">
         <p className="text-text-secondary text-sm">
           {isRetry
             ? 'The password you entered was incorrect. Please try again.'
@@ -48,14 +63,6 @@ export function PasswordModal({ isOpen, isRetry, onSubmit, onCancel }: PasswordM
           placeholder="Enter password"
           autoFocus={shouldAutofocus()}
         />
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={!password.trim()}>
-            {isRetry ? 'Try Again' : 'Connect'}
-          </Button>
-        </div>
       </form>
     </Modal>
   )
