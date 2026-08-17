@@ -32,11 +32,16 @@ interface TaskEditorProps {
 
 const DRAFT_KEY = 'openfox:task-draft'
 
+// Height buffer added on top of the measured content height so the textarea
+// never shows an internal scrollbar from sub-pixel overflow rounding.
+const TEXTAREA_RESIZE_PAD = 8
+
 /**
  * Task create/edit composer. Mirrors the chat composer's capabilities — drafts,
  * undo, slash commands & workflows with inline parameter hints, @-mentions,
  * attachments, and agent/model selection — with one deliberate difference:
- * Shift+Enter submits, while plain Enter inserts a newline (inverted from chat).
+ * Ctrl+Enter submits, while plain Enter and Shift+Enter insert newlines
+ * (inverted from chat).
  */
 export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEditorProps) {
   const isEdit = !!initialTask
@@ -130,6 +135,19 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
     }, 300)
     return () => clearTimeout(timer)
   }, [prompt, draftKey])
+
+  // Auto-resize the prompt textarea to fit its content: grow unboundedly, and
+  // shrink back when the text is edited down. Skipping the scrollHeight read on
+  // an empty prompt avoids the wrapped-placeholder inflation seen in narrow
+  // layouts — the CSS min-height governs the empty state instead.
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    if (prompt) {
+      textarea.style.height = `${textarea.scrollHeight + TEXTAREA_RESIZE_PAD}px`
+    }
+  }, [prompt])
 
   const addFiles = useCallback((files: FileList | File[]) => {
     for (const file of Array.from(files)) {
@@ -267,7 +285,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
       undoPrompt()
       return
     }
-    if (e.key === 'Enter' && e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
       e.preventDefault()
       void save()
     }
@@ -300,7 +318,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
           <span className="text-sm text-text-muted truncate">
             {isAlreadyRunning
               ? 'This task is already in progress — changes apply to the next run.'
-              : 'Shift+Enter to save · Enter for a new line'}
+              : 'Ctrl/Cmd+Enter to save · Enter for a new line'}
           </span>
           <div className="flex items-center gap-2 shrink-0">
             <Button onClick={onClose}>Cancel</Button>
@@ -334,6 +352,7 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
               onPaste={onPaste}
               onKeyDown={onKeyDown}
               rows={6}
+              spellCheck={false}
               placeholder={
                 'Describe the task. Slash commands (/cmd) and workflows resolve exactly as in chat when the task launches.'
               }

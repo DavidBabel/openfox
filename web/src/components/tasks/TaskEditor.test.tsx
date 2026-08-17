@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TaskEditor } from './TaskEditor'
@@ -14,6 +14,10 @@ import type { ProjectTask } from '@shared/types.js'
 vi.mock('../../lib/api', () => ({
   authFetch: vi.fn(),
 }))
+
+const SCROLL_HEIGHT_DESC = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight')
+
+let mockScrollHeight = 0
 
 const task = (overrides: Partial<ProjectTask> = {}): ProjectTask => ({
   id: 't-edit',
@@ -33,6 +37,13 @@ const task = (overrides: Partial<ProjectTask> = {}): ProjectTask => ({
 
 describe('TaskEditor', () => {
   beforeEach(() => {
+    mockScrollHeight = 0
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return mockScrollHeight
+      },
+    })
     document.body.innerHTML = ''
     localStorage.clear()
     useTasksStore.setState({
@@ -60,6 +71,12 @@ describe('TaskEditor', () => {
     useCommandsStore.setState({ defaults: [], userItems: [], projectItems: [], fetchCommands: vi.fn() })
     vi.mocked(authFetch).mockReset()
     vi.mocked(authFetch).mockResolvedValue({ ok: true, json: async () => ({}) } as unknown as Response)
+  })
+
+  afterEach(() => {
+    if (SCROLL_HEIGHT_DESC) {
+      Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', SCROLL_HEIGHT_DESC)
+    }
   })
 
   it('shows the running-task note in edit mode for a launched task', () => {
@@ -102,7 +119,7 @@ describe('TaskEditor', () => {
     })
   })
 
-  it('saves via Shift+Enter and clears the draft', async () => {
+  it('saves via Ctrl+Enter and clears the draft', async () => {
     vi.mocked(authFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ task: task({ prompt: 'Save me' }) }),
@@ -119,7 +136,7 @@ describe('TaskEditor', () => {
     render(<TaskEditor projectId="proj-1" initialTask={task()} onClose={() => {}} onSaved={() => {}} />)
     const promptEl = screen.getByPlaceholderText(/Describe the task/i) as HTMLTextAreaElement
     fireEvent.change(promptEl, { target: { value: 'Save me' } })
-    fireEvent.keyDown(promptEl, { key: 'Enter', shiftKey: true })
+    fireEvent.keyDown(promptEl, { key: 'Enter', ctrlKey: true })
     await waitFor(() => {
       expect(localStorage.getItem('openfox:task-draft:proj-1:t-edit')).toBeNull()
     })
@@ -143,6 +160,73 @@ describe('TaskEditor', () => {
         '/api/projects/proj-1/tasks/t-edit',
         expect.objectContaining({ method: 'PUT' }),
       )
+    })
+  })
+
+  it('lets Shift+Enter insert a newline without saving', async () => {
+    render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+    const promptEl = screen.getByPlaceholderText(/Describe the task/i) as HTMLTextAreaElement
+    fireEvent.change(promptEl, { target: { value: 'First line' } })
+    fireEvent.keyDown(promptEl, { key: 'Enter', shiftKey: true })
+    fireEvent.change(promptEl, { target: { value: 'First line\nSecond line' } })
+    expect(promptEl.value).toBe('First line\nSecond line')
+    await waitFor(() => {
+      expect(vi.mocked(authFetch)).not.toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks',
+        expect.objectContaining({ method: 'POST' }),
+      )
+      expect(vi.mocked(authFetch)).not.toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/t-edit',
+        expect.objectContaining({ method: 'PUT' }),
+      )
+    })
+  })
+
+  it('disables spell checking on the prompt textarea', () => {
+    render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+    const promptEl = screen.getByPlaceholderText(/Describe the task/i) as HTMLTextAreaElement
+    expect(promptEl.getAttribute('spellcheck')).toBe('false')
+  })
+
+  describe('auto-resize', () => {
+    const promptEl = () => screen.getByPlaceholderText(/Describe the task/i) as HTMLTextAreaElement
+
+    it('grows on mount when editing a task with a large prompt', () => {
+      mockScrollHeight = 240
+      render(
+        <TaskEditor
+          projectId="proj-1"
+          initialTask={task({ prompt: 'line one\nline two\nline three\nline four' })}
+          onClose={() => {}}
+          onSaved={() => {}}
+        />,
+      )
+      expect(promptEl().style.height).toBe('248px')
+      expect(promptEl().className).toContain('resize-y')
+    })
+
+    it('grows as the prompt grows while typing', () => {
+      mockScrollHeight = 160
+      render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+      fireEvent.change(promptEl(), { target: { value: 'Some longer content that needs more room' } })
+      expect(promptEl().style.height).toBe('168px')
+    })
+
+    it('shrinks back to the content height when the prompt is edited down', () => {
+      mockScrollHeight = 160
+      render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+      fireEvent.change(promptEl(), { target: { value: 'Longer content that needs a taller box' } })
+      mockScrollHeight = 90
+      fireEvent.change(promptEl(), { target: { value: 'Short' } })
+      expect(promptEl().style.height).toBe('98px')
+    })
+
+    it('lets the CSS min-height govern when the prompt is emptied', () => {
+      mockScrollHeight = 240
+      render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
+      fireEvent.change(promptEl(), { target: { value: 'Some content' } })
+      fireEvent.change(promptEl(), { target: { value: '' } })
+      expect(promptEl().style.height).toBe('auto')
     })
   })
 
@@ -234,7 +318,7 @@ describe('TaskEditor', () => {
 
       render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', ctrlKey: true })
       await waitFor(() => expect(postedBody()).toBeTruthy())
       expect(postedBody()).not.toHaveProperty('agentId')
     })
@@ -256,7 +340,7 @@ describe('TaskEditor', () => {
       render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
       fireEvent.change(agentSelect(), { target: { value: 'explorer' } })
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', ctrlKey: true })
       await waitFor(() => expect(postedBody()).toBeTruthy())
       expect(postedBody().agentId).toBe('explorer')
     })
@@ -297,7 +381,7 @@ describe('TaskEditor', () => {
       )
       fireEvent.change(agentSelect(), { target: { value: '' } })
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', ctrlKey: true })
       await waitFor(() => expect(putBody()).toBeTruthy())
       expect(putBody().agentId).toBeNull()
     })
@@ -358,7 +442,7 @@ describe('TaskEditor', () => {
       )
       await clearModelViaPicker()
       typePrompt()
-      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', shiftKey: true })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Describe the task/i), { key: 'Enter', ctrlKey: true })
       await waitFor(() => expect(putBody()).toBeTruthy())
       expect(putBody().model).toBeNull()
       expect(putBody().providerId).toBeNull()
