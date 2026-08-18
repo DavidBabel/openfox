@@ -542,6 +542,14 @@ describe('path-security', () => {
         expect(paths).not.toContain('/foo+')
       })
 
+      it('does not flag division expressions like "length / 4" as the root path', () => {
+        const paths = extractAbsolutePathsFromCommand(
+          'grep -rn "charsPerToken\\|CHARS_PER\\|/ 4\\b\\|/4\\b\\|length / 4\\|Math.ceil(.*length" src --include="*.ts" | grep -v test | grep -i "token\\|/ 4" | head',
+        )
+        expect(paths).not.toContain('/')
+        expect(paths).toHaveLength(0)
+      })
+
       it('still extracts paths containing braces {}', () => {
         const paths = extractAbsolutePathsFromCommand("cat '/path/with{braces}/file.txt'")
         expect(paths).toContain('/path/with{braces}/file.txt')
@@ -614,6 +622,11 @@ describe('path-security', () => {
 
       it('flags a bare root for ls /', () => {
         const paths = extractAbsolutePathsFromCommand('ls /')
+        expect(paths).toContain('/')
+      })
+
+      it('flags a root followed by a numeric redirect like find / 2>/dev/null', () => {
+        const paths = extractAbsolutePathsFromCommand('find / 2>/dev/null')
         expect(paths).toContain('/')
       })
 

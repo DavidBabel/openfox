@@ -631,8 +631,20 @@ export function extractAbsolutePathsFromCommand(command: string): string[] {
 
     // A lone `/` token is the root filesystem — flag it (find /, ls /, cd /).
     // `//` comment lines and JSX `/>` self-closing tags are not roots.
+    // A space-surrounded `/` whose next operand is numeric is the division
+    // operator (`length / 4`, `100 / 4`), not a path — but a numeric redirect
+    // right after the root (`find / 2>/dev/null`) is still a real root.
     const rootPattern = /(?:^|[\s=(])\/(?=$|[\s'"`|&;,<()])/g
-    if (rootPattern.test(sanitized)) {
+    let isRoot = false
+    for (const match of sanitized.matchAll(rootPattern)) {
+      const rest = sanitized.slice(match.index! + match[0].length)
+      if (/^\s+[0-9]/.test(rest) && !/^\s+[0-9]+[>]/.test(rest)) {
+        continue // division expression, e.g. "length / 4"
+      }
+      isRoot = true
+      break
+    }
+    if (isRoot) {
       paths.push('/')
     }
 
