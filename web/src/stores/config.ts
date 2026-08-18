@@ -58,6 +58,11 @@ interface ConfigState {
   refreshModel: () => Promise<void>
   activateProvider: (providerId: string) => Promise<boolean>
   setDefaultModel: (providerId: string, model: string) => Promise<boolean>
+  updateModelSettings: (
+    providerId: string,
+    modelId: string,
+    settings: { thinkingLevel?: string; thinkingEnabled?: boolean },
+  ) => Promise<boolean>
   startAutoRefresh: () => void
   stopAutoRefresh: () => void
   refreshProviderModels: (providerId: string) => Promise<boolean>
@@ -250,6 +255,32 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
           ...p,
           isActive: p.id === providerId,
         })),
+      })
+      return true
+    } catch {
+      return false
+    }
+  },
+
+  updateModelSettings: async (
+    providerId: string,
+    modelId: string,
+    settings: { thinkingLevel?: string; thinkingEnabled?: boolean },
+  ) => {
+    const { providers } = get()
+    try {
+      const response = await authFetch(`/api/providers/${providerId}/models/${encodeURIComponent(modelId)}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      })
+      if (!response.ok) return false
+      set({
+        providers: providers.map((p) =>
+          p.id === providerId
+            ? { ...p, models: p.models.map((m) => (m.id === modelId ? { ...m, ...settings } : m)) }
+            : p,
+        ),
       })
       return true
     } catch {

@@ -130,6 +130,7 @@ export function ProviderSelector() {
   const refreshModel = useConfigStore((state) => state.refreshModel)
   const refreshProviderModels = useConfigStore((state) => state.refreshProviderModels)
   const setDefaultModel = useConfigStore((state) => state.setDefaultModel)
+  const updateModelSettings = useConfigStore((state) => state.updateModelSettings)
   const fetchConfig = useConfigStore((state) => state.fetchConfig)
 
   const keybindings = useKeybindings()
@@ -477,7 +478,7 @@ export function ProviderSelector() {
     providerId: string,
     newModel: string,
     effort: string | null,
-  ) => {
+  ): Promise<boolean> => {
     const prevSession = currentSession
     if (prevSession) {
       // Optimistic update for responsiveness; rolled back if the server rejects.
@@ -497,15 +498,16 @@ export function ProviderSelector() {
         // The write failed — restore the previous session and keep the dropdown
         // open so the user can retry instead of being shown a silent no-op.
         useSessionStore.setState((state) => ({ ...state, currentSession: prevSession }))
-        return
+        return false
       }
     } else {
       const saved = await setSessionProvider(targetSessionId, providerId, newModel, effort)
-      if (!saved) return
+      if (!saved) return false
     }
     setExpandedProviderIds([])
     setIsOpen(false)
     focusChatTextarea()
+    return true
   }
 
   const handleModelClick = async (providerId: string, newModel: string, reasoningEffort?: string) => {
@@ -534,13 +536,21 @@ export function ProviderSelector() {
           const choice = await gate.requestEffortSwitch({ fromEffort: displayEffort, toEffort: reasoningEffort })
           if (choice === 'keep') {
             // Commit the provider/model pick at the current effort so the
-            // transition proceeds without invalidating the cache.
+            // transition proceeds without invalidating the cache. Keep declines
+            // the clicked effort entirely — the model default stays untouched.
             await commitSessionPick(sessionId, providerId, newModel, displayEffort ?? null)
             return
           }
         }
+        // The picked effort is committed: make it sticky as the model's default
+        // so future sessions inherit it (equivalent to the advanced params).
+        const committed = await commitSessionPick(sessionId, providerId, newModel, reasoningEffort)
+        if (committed) {
+          await updateModelSettings(providerId, newModel, { thinkingLevel: reasoningEffort, thinkingEnabled: true })
+        }
+        return
       }
-      await commitSessionPick(sessionId, providerId, newModel, reasoningEffort ?? null)
+      await commitSessionPick(sessionId, providerId, newModel, null)
       return
     }
 

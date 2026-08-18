@@ -2540,6 +2540,53 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     res.json({ models })
   })
 
+  // Persist a single model's settings (e.g. the sticky reasoning-effort default
+  // picked in the model selector) to the config file and in-memory state.
+  app.put('/api/providers/:id/models/:modelId/settings', async (req, res) => {
+    const { id, modelId } = req.params
+    const { thinkingLevel, thinkingEnabled } = req.body as {
+      thinkingLevel?: string
+      thinkingEnabled?: boolean
+    }
+    if (thinkingLevel !== undefined && !isReasoningEffortValue(thinkingLevel)) {
+      return res.status(400).json({ error: `Invalid reasoning effort '${thinkingLevel}'` })
+    }
+    if (thinkingEnabled !== undefined && typeof thinkingEnabled !== 'boolean') {
+      return res.status(400).json({ error: 'thinkingEnabled must be a boolean' })
+    }
+    try {
+      const { loadGlobalConfig, saveGlobalConfig, updateProvider } = await import('../cli/config.js')
+      const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
+      const provider = globalConfig.providers.find((p) => p.id === id)
+      if (!provider) {
+        return res.status(404).json({ error: 'Provider not found' })
+      }
+      const models = provider.models ?? []
+      if (!models.some((m) => m.id === modelId)) {
+        return res.status(404).json({ error: 'Model not found' })
+      }
+      const updatedModels = models.map((m) =>
+        m.id === modelId
+          ? {
+              ...m,
+              ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+              ...(thinkingEnabled !== undefined ? { thinkingEnabled } : {}),
+            }
+          : m,
+      )
+      const updatedConfig = updateProvider(globalConfig, id, { models: updatedModels })
+      await saveGlobalConfig(config.mode ?? 'production', updatedConfig, config.globalConfigPath)
+      // Keep the in-memory provider in sync without clobbering enriched state.
+      await providerManager.updateModelSettings(id, modelId, {
+        ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+        ...(thinkingEnabled !== undefined ? { thinkingEnabled } : {}),
+      })
+      res.json({ success: true, model: updatedModels.find((m) => m.id === modelId) })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to update model settings' })
+    }
+  })
+
   app.post('/api/providers/:id/activate', async (req, res) => {
     const { id } = req.params
     const body = req.body as { model?: string }

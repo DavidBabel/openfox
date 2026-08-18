@@ -57,6 +57,7 @@ vi.mock('../../stores/config', () => ({
     refreshModel: vi.fn(),
     refreshProviderModels: vi.fn(),
     setDefaultModel: vi.fn(),
+    updateModelSettings: vi.fn(),
     fetchConfig: vi.fn(),
   }),
   getBackendDisplayName: (backend: string) => {
@@ -2132,5 +2133,252 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     expect(highChip?.className).toContain('bg-accent-primary/10')
     const mediumChip = screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'medium')
     expect(mediumChip?.className).not.toContain('bg-accent-primary/10')
+  })
+
+  it('[AUTOMATED] effort pick on a warm cache + Apply persists the effort as the model default', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn().mockResolvedValue(true)
+    const mockUpdateModelSettings = vi.fn().mockResolvedValue(true)
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+      updateModelSettings: mockUpdateModelSettings,
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: true },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+    await user.click(screen.getByText('Apply the reasoning effort (invalidates cache)'))
+
+    // The committed effort becomes the model's default for future sessions.
+    expect(mockUpdateModelSettings).toHaveBeenCalledWith('provider-1', 'gpt-4', {
+      thinkingLevel: 'low',
+      thinkingEnabled: true,
+    })
+  })
+
+  it('[AUTOMATED] effort pick on a cold cache persists the effort as the model default', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn().mockResolvedValue(true)
+    const mockUpdateModelSettings = vi.fn().mockResolvedValue(true)
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+      updateModelSettings: mockUpdateModelSettings,
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: false },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+
+    expect(screen.queryByText('Reasoning effort change')).toBeNull()
+    expect(mockUpdateModelSettings).toHaveBeenCalledWith('provider-1', 'gpt-4', {
+      thinkingLevel: 'low',
+      thinkingEnabled: true,
+    })
+  })
+
+  it('[AUTOMATED] effort pick gate: Keep does NOT change the model default', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    const mockUpdateModelSettings = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+      updateModelSettings: mockUpdateModelSettings,
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: true },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+    await user.click(screen.getByText('Keep current reasoning effort'))
+
+    // Keep declines the clicked effort entirely: the session keeps the current
+    // effort and the model default stays untouched.
+    expect(mockUpdateModelSettings).not.toHaveBeenCalled()
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'medium')
+  })
+
+  it('[AUTOMATED] a plain model click (no effort) does not touch the model default', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    const mockUpdateModelSettings = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            { id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true },
+            { id: 'gpt-4-mini', name: 'GPT-4 Mini', contextWindow: 128000, selected: true },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+      updateModelSettings: mockUpdateModelSettings,
+    })
+    await setSessionState({
+      currentSession: { id: 'session-1', providerId: 'provider-1', providerModel: 'gpt-4' },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByText('GPT-4 Mini'))
+
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-mini', null)
+    expect(mockUpdateModelSettings).not.toHaveBeenCalled()
+  })
+
+  it('[AUTOMATED] a failed session write does not persist the effort as the model default', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn().mockResolvedValue(null)
+    const mockUpdateModelSettings = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+      updateModelSettings: mockUpdateModelSettings,
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: false },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+    await vi.waitFor(() => expect(mockSetSessionProvider).toHaveBeenCalled())
+
+    // The pick was rejected, so the model default must stay untouched.
+    expect(mockUpdateModelSettings).not.toHaveBeenCalled()
   })
 })
