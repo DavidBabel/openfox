@@ -7,6 +7,7 @@ import {
   isPathWithinSandbox,
   extractAbsolutePathsFromCommand,
   extractSensitivePathsFromCommand,
+  resolveRelativeTraversals,
   addAllowedPath,
   addAllowedPaths,
   checkPathsAccess,
@@ -640,16 +641,6 @@ describe('path-security', () => {
         expect(paths).toContain('/etc')
       })
 
-      it('flags relative .. traversal tokens', () => {
-        expect(extractAbsolutePathsFromCommand('cat ../../.bashrc')).toContain('../../.bashrc')
-        expect(extractAbsolutePathsFromCommand('cat ../src/file.ts')).toContain('../src/file.ts')
-        expect(extractAbsolutePathsFromCommand('cat sub/../../secret')).toContain('sub/../../secret')
-      })
-
-      it('flags quoted relative .. traversal tokens', () => {
-        expect(extractAbsolutePathsFromCommand('cat "../../.bashrc"')).toContain('../../.bashrc')
-      })
-
       it('does not flag relative paths that stay inside the workdir', () => {
         expect(extractAbsolutePathsFromCommand('cat ./file.txt')).toEqual([])
         expect(extractAbsolutePathsFromCommand('cat src/main.ts')).toEqual([])
@@ -837,7 +828,7 @@ describe('path-security', () => {
 
       it('returns empty array for relative paths only', () => {
         const paths = extractAbsolutePathsFromCommand('cat ./file.txt ../other.txt')
-        expect(paths).toEqual(['../other.txt'])
+        expect(paths).toEqual([])
       })
 
       it('handles empty command', () => {
@@ -2208,5 +2199,127 @@ describe('extractAbsolutePathsFromCommand — Windows device names', () => {
   it('still treats /dev/null as safe on Unix', () => {
     mockPlatform(REAL_PLATFORM === 'win32' ? ('linux' as NodeJS.Platform) : REAL_PLATFORM)
     expect(extractAbsolutePathsFromCommand('cat /dev/null')).toEqual([])
+  })
+})
+
+// ===========================================================================
+// resolveRelativeTraversals()
+// ===========================================================================
+
+describe('resolveRelativeTraversals', () => {
+  // A workspace workdir whose parent is NOT an allowed root (/tmp), so a
+  // `..` resolved one level above the workdir is genuinely outside the sandbox.
+  const ws = join(homedir(), '.openfox-path-security-ws', 'openfox', 'feature-branch')
+
+  describe('cd-aware resolution', () => {
+    it('resolves ../dist against the cd target, staying inside the sandbox', () => {
+      const command = 'rm e2e/telemetry-smoke.test.ts && cd web && npx vite build --outDir ../dist/web 2>&1 | tail -12'
+      const paths = resolveRelativeTraversals(command, ws)
+      expect(paths).toEqual([join(ws, 'dist', 'web')])
+    })
+
+    it('does not trigger path confirmation for cd web && --outDir ../dist (workspace regression)', async () => {
+      const command = 'rm e2e/telemetry-smoke.test.ts && cd web && npx vite build --outDir ../dist/web 2>&1 | tail -12'
+      const pathsToCheck = [ws, ...resolveRelativeTraversals(command, ws)]
+      const result = await checkPathsAccess(pathsToCheck, ws)
+      expect(result.needsConfirmation).toBe(false)
+      expect(result.deniedPaths).toEqual([])
+    })
+
+    it('control: a .. resolved one level above the workspace is still denied', async () => {
+      const escapedPath = resolve(ws, '../dist/web')
+      const result = await checkPathsAccess([ws, escapedPath], ws)
+      expect(result.needsConfirmation).toBe(true)
+      expect(result.deniedPaths).toContain(escapedPath)
+    })
+  })
+
+  describe('position awareness', () => {
+    it('resolves against the workdir when no cd is present', () => {
+      const paths = resolveRelativeTraversals('cat ../../.bashrc', ws)
+      expect(paths).toEqual([resolve(ws, '../../.bashrc')])
+    })
+
+    it('resolves a traversal before a cd against the workdir', () => {
+      const paths = resolveRelativeTraversals('cat ../../.bashrc && cd web', ws)
+      expect(paths).toEqual([resolve(ws, '../../.bashrc')])
+    })
+
+    it('resolves a traversal after cd web against the cd target', () => {
+      const paths = resolveRelativeTraversals('cd web && cat ../../x', ws)
+      expect(paths).toEqual([resolve(join(ws, 'web'), '../../x')])
+    })
+
+    it('honors pushd like cd', () => {
+      const paths = resolveRelativeTraversals('pushd sub && cat ../x', ws)
+      expect(paths).toEqual([resolve(join(ws, 'sub'), '../x')])
+    })
+
+    it('chains multiple cd targets', () => {
+      const paths = resolveRelativeTraversals('cd a && cd b && cat ../x', ws)
+      expect(paths).toEqual([resolve(join(ws, 'a', 'b'), '../x')])
+    })
+  })
+
+  describe('cd target handling', () => {
+    it('still flags a traversal cd target', () => {
+      const paths = resolveRelativeTraversals('cd ../outside && cat x', ws)
+      expect(paths).toEqual([resolve(ws, '../outside')])
+    })
+
+    it('handles absolute cd targets', () => {
+      const paths = resolveRelativeTraversals('cd /opt/app && cat ../x', ws)
+      expect(paths).toEqual([resolve('/opt/app', '../x')])
+    })
+
+    it('handles tilde cd targets', () => {
+      const paths = resolveRelativeTraversals('cd ~/app && cat ../z', ws)
+      expect(paths).toEqual([resolve(join(homedir(), 'app'), '../z')])
+    })
+
+    it('does not treat a quoted cd as a keyword', () => {
+      const paths = resolveRelativeTraversals('echo "cd" && cat ../../x', ws)
+      expect(paths).toEqual([resolve(ws, '../../x')])
+    })
+
+    it('honors a quoted cd target even when it looks like a keyword', () => {
+      const paths = resolveRelativeTraversals('cd "echo" && cat ../x', ws)
+      expect(paths).toEqual([resolve(join(ws, 'echo'), '../x')])
+    })
+  })
+
+  describe('masking parity', () => {
+    it('resolves bare and embedded traversal tokens against the workdir', () => {
+      expect(resolveRelativeTraversals('cat ../src/file.ts', ws)).toEqual([resolve(ws, '../src/file.ts')])
+      expect(resolveRelativeTraversals('cat sub/../../secret', ws)).toEqual([resolve(ws, 'sub/../../secret')])
+    })
+
+    it('resolves quoted traversal tokens against the workdir', () => {
+      expect(resolveRelativeTraversals('cat "../../.bashrc"', ws)).toEqual([resolve(ws, '../../.bashrc')])
+    })
+
+    it('does not flag git revision ranges with ..', () => {
+      expect(resolveRelativeTraversals('git diff HEAD~1..HEAD', ws)).toEqual([])
+    })
+
+    it('does not flag dot-prefixed filenames or globs', () => {
+      expect(resolveRelativeTraversals('cat ..foo', ws)).toEqual([])
+      expect(resolveRelativeTraversals("find . -name '..*'", ws)).toEqual([])
+    })
+
+    it('does not extract .. from git commit messages', () => {
+      const paths = resolveRelativeTraversals('git commit -m "fix ../../paths"', ws)
+      expect(paths).toEqual([])
+    })
+
+    it('still resolves real traversals alongside masked regex addresses', () => {
+      const paths = resolveRelativeTraversals("sed -n '/foo/p' /etc/passwd && cat ../../x", ws)
+      expect(paths).toEqual([resolve(ws, '../../x')])
+    })
+
+    it('returns empty for commands with no traversals', () => {
+      expect(resolveRelativeTraversals('npx vite build --outDir dist/web', ws)).toEqual([])
+      expect(resolveRelativeTraversals('', ws)).toEqual([])
+    })
   })
 })

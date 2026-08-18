@@ -6,7 +6,11 @@ import { OUTPUT_LIMITS } from './types.js'
 import { createTool, requestUserConfirmation } from './tool-helpers.js'
 import { checkAborted, spawnShellProcess } from '../utils/shell.js'
 import { decodeUtf8, createUtf8StreamDecoder } from '../utils/utf8.js'
-import { extractAbsolutePathsFromCommand, extractSensitivePathsFromCommand } from './path-security.js'
+import {
+  extractAbsolutePathsFromCommand,
+  extractSensitivePathsFromCommand,
+  resolveRelativeTraversals,
+} from './path-security.js'
 import { terminateProcessTree } from '../utils/process-tree.js'
 import { stripTailPipe } from './shell-tail.js'
 import { getSetting, SETTINGS_KEYS } from '../db/settings.js'
@@ -135,9 +139,16 @@ export const runCommandTool = createTool<RunCommandArgs>(
 
     const commandPaths = extractAbsolutePathsFromCommand(args.command)
     for (const cmdPath of commandPaths) {
-      const resolved = isAbsolute(cmdPath) ? cmdPath : resolve(workingDir, cmdPath)
-      pathsToCheck.push(resolved)
+      if (isAbsolute(cmdPath)) {
+        pathsToCheck.push(cmdPath)
+      }
     }
+
+    // Relative `..` traversals resolve against the shell's effective cwd at
+    // each token's position (honoring `cd`/`pushd`), not the session workdir
+    // — so `cd web && npx vite build --outDir ../dist/web` stays inside the
+    // sandbox instead of resolving `..` a level above it.
+    pathsToCheck.push(...resolveRelativeTraversals(args.command, workingDir))
 
     const sensitivePaths = extractSensitivePathsFromCommand(args.command)
     for (const sensitivePath of sensitivePaths) {

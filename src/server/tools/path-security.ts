@@ -485,55 +485,130 @@ function extractUnquotedTildePaths(command: string, home: string): string[] {
 /** Matches a `..` path segment that can traverse up a directory tree. */
 const TRAVERSAL_SEGMENT_RE = /(?:^|\/)\.\.(?:\/|$)/
 
+/** Shell keywords that can follow `cd`/`pushd` without being a directory target. */
+const CD_NON_TARGET_KEYWORDS = new Set([
+  'cd',
+  'pushd',
+  'popd',
+  'echo',
+  'exit',
+  'export',
+  'source',
+  'set',
+  'true',
+  'false',
+])
+
+/** A cd target containing shell expansion cannot be resolved statically. */
+const DYNAMIC_CD_TARGET_RE = /[$`{}]/
+
 /**
- * Extract relative `..` traversal tokens from a shell command. These contain
- * no absolute path yet can still escape the workdir (cat ../../.bashrc), so
- * they are returned as-is for the caller to resolve against the working
- * directory. Collected from bare positions and quoted strings; shapes handled
- * elsewhere (absolute, tilde, windows drives) are skipped.
+ * Apply a `cd`/`pushd` target to the current directory the way the shell
+ * would: `~`/`~/x` expand to home, absolute targets are taken verbatim,
+ * flags (`-`) and dynamic targets leave the cwd unchanged, everything else
+ * is resolved relative to the current cwd.
  */
-function extractRelativeTraversals(command: string): string[] {
+function applyCdTarget(cwd: string, target: string): string {
+  if (target === '~') return normalize(homedir())
+  if (target.startsWith('~/')) return normalize(resolve(homedir(), target.slice(2)))
+  if (target.startsWith('/')) return normalize(target)
+  if (target.startsWith('-')) return cwd
+  if (DYNAMIC_CD_TARGET_RE.test(target)) return cwd
+  return normalize(resolve(cwd, target))
+}
+
+/**
+ * Resolve relative `..` traversal tokens in a shell command against the
+ * shell's effective working directory at each token's position. Tracks
+ * `cd`/`pushd` as the shell would, so `cd web && npx vite build --outDir
+ * ../dist` resolves `../dist` against `<workdir>/web` — still inside the
+ * sandbox — instead of `<workdir>` itself, where `..` would land a level
+ * above. Traversals appearing before a `cd` still resolve against the
+ * workdir, and traversal cd targets are flagged too.
+ *
+ * @param command - The shell command to parse
+ * @param workdir - The session's working directory
+ * @returns Absolute paths for each relative traversal, deduplicated
+ */
+export function resolveRelativeTraversals(command: string, workdir: string): string[] {
+  const masked = maskCommandForPathScan(command)
   const out: string[] = []
-  const isTraversal = (token: string) => TRAVERSAL_SEGMENT_RE.test(token)
+  let cwd = normalize(resolve(workdir))
+  let quote: "'" | '"' | '`' | null = null
+  let word = ''
+  let quoted = false
+  let expectCdTarget = false
+  const n = masked.length
 
-  const quotedPattern = /["']([^"']+)["']/g
-  let m
-  while ((m = quotedPattern.exec(command)) !== null) {
-    const content = m[1]!
-    if (!content || content.startsWith('/') || content.startsWith('~') || isWindowsAbsolutePath(content)) continue
-    if (isTraversal(content)) out.push(content)
+  const flush = (): void => {
+    if (word) {
+      const isTraversal = !word.startsWith('/') && !word.startsWith('~') && TRAVERSAL_SEGMENT_RE.test(word)
+      if (expectCdTarget) {
+        expectCdTarget = false
+        // A bare keyword after `cd` (e.g. `cd && echo hi`) is not a target;
+        // an explicitly quoted target is always a directory, even "echo".
+        if (!quoted && CD_NON_TARGET_KEYWORDS.has(word)) {
+          // not a target — leave cwd unchanged
+        } else {
+          if (isTraversal) out.push(normalize(resolve(cwd, word)))
+          cwd = applyCdTarget(cwd, word)
+        }
+      } else if (!quoted && (word === 'cd' || word === 'pushd')) {
+        expectCdTarget = true
+      } else if (isTraversal) {
+        out.push(normalize(resolve(cwd, word)))
+      }
+    }
+    word = ''
+    quoted = false
   }
 
-  const bare = command.replace(/["'][^"']*["']/g, ' ').split(/[\s|&;<>()]+/)
-  for (const token of bare) {
-    if (!token || token.startsWith('/') || token.startsWith('~')) continue
-    if (isTraversal(token)) out.push(token)
+  for (let i = 0; i < n; i++) {
+    const ch = masked[i]!
+    if (quote !== null) {
+      // Escapes only exist inside double quotes and backticks.
+      if (ch === '\\' && quote !== "'") {
+        word += masked[i + 1] ?? ''
+        i += 1
+        continue
+      }
+      if (ch === quote) {
+        quote = null
+        quoted = true
+        continue
+      }
+      word += ch
+      continue
+    }
+    if (ch === "'" || ch === '"' || ch === '`') {
+      quote = ch
+      continue
+    }
+    if (ch === '\\') {
+      word += masked[i + 1] ?? ''
+      i += 1
+      continue
+    }
+    if (/[\s&|;<>()]/.test(ch)) {
+      flush()
+      continue
+    }
+    word += ch
   }
+  flush()
 
   return [...new Set(out)]
 }
 
 /**
- * Extract absolute paths from a shell command (heuristic).
- * Handles: /absolute/paths, ~/tilde/paths, quoted paths.
- * Filters out safe paths (/dev/*) and URLs.
- *
- * @param command - The shell command to parse
- * @returns Array of absolute paths found (deduplicated)
+ * Mask non-path content in a shell command so path extraction ignores it:
+ * URL schemes, sed substitution patterns, sed/awk/perl/ruby regex addresses,
+ * and git commit -m/--message bodies (which may contain slashes that look
+ * like absolute paths).
  */
-export function extractAbsolutePathsFromCommand(command: string): string[] {
-  if (!command.trim()) {
-    return []
-  }
-
-  const paths: string[] = []
-  const home = homedir()
-  // Shell type can't change mid-command — compute once. usesPosixPaths() reads
-  // the active shell setting (a DB query), so avoid calling it per token.
-  const posixShell = usesPosixPaths()
-
+function maskCommandForPathScan(command: string): string {
   // Remove URL schemes to avoid false positives
-  // Replace http://, https://, ftp://, file:// with markers
+  // Replace http://, https://, ftp:// with markers
   let sanitized = command.replace(/https?:\/\/[^\s'"]+/g, ' __URL__ ').replace(/ftp:\/\/[^\s'"]+/g, ' __URL__ ')
 
   // Strip sed substitution patterns to avoid false positives from regex replacements
@@ -555,6 +630,30 @@ export function extractAbsolutePathsFromCommand(command: string): string[] {
     (match) => match.replace(/\/[^\s"'|&;<>`()]+/g, ' __COMMIT_MSG__ '),
   )
 
+  return sanitized
+}
+
+/**
+ * Extract absolute paths from a shell command (heuristic).
+ * Handles: /absolute/paths, ~/tilde/paths, quoted paths.
+ * Filters out safe paths (/dev/*) and URLs.
+ *
+ * @param command - The shell command to parse
+ * @returns Array of absolute paths found (deduplicated)
+ */
+export function extractAbsolutePathsFromCommand(command: string): string[] {
+  if (!command.trim()) {
+    return []
+  }
+
+  const paths: string[] = []
+  const home = homedir()
+  // Shell type can't change mid-command — compute once. usesPosixPaths() reads
+  // the active shell setting (a DB query), so avoid calling it per token.
+  const posixShell = usesPosixPaths()
+
+  const sanitized = maskCommandForPathScan(command)
+
   // Handle file:// URLs specially - extract the path
   const fileUrlMatches = command.matchAll(/file:\/\/([^\s'"]+)/g)
   for (const match of fileUrlMatches) {
@@ -563,19 +662,19 @@ export function extractAbsolutePathsFromCommand(command: string): string[] {
       paths.push(normalizeExtracted(filePath))
     }
   }
-  sanitized = sanitized.replace(/file:\/\/[^\s'"]+/g, ' __FILEURL__ ')
+  const scanCommand = sanitized.replace(/file:\/\/[^\s'"]+/g, ' __FILEURL__ ')
 
   // Pattern 1: Tilde paths ~/... or just ~
   // Expand only unquoted tildes at word start (bash semantics): inside quotes
   // a `~` is literal (awk '$1 ~ /x/', echo '~'). The perl/ruby `=~` operator
   // is neutralized earlier by maskRegexAddresses, so `=` stays a valid
   // predecessor and VAR=~/path assignments still expand.
-  paths.push(...extractUnquotedTildePaths(sanitized, home))
+  paths.push(...extractUnquotedTildePaths(scanCommand, home))
 
   // Pattern 2: Quoted strings (may contain paths with spaces)
   const quotedPattern = /["']([^"']+)["']/g
   let match
-  while ((match = quotedPattern.exec(sanitized)) !== null) {
+  while ((match = quotedPattern.exec(scanCommand)) !== null) {
     const content = match[1]!
 
     // Check if it looks like a regex pattern (starts and ends with /)
@@ -617,7 +716,7 @@ export function extractAbsolutePathsFromCommand(command: string): string[] {
     // looksLikeRegex is skipped: backslashes are separators here, and the
     // drive-letter prefix is diagnostic enough.
     const winAbsolutePattern = /(?:^|[\s=(])([A-Za-z]:[\\/][^\s"'|&;<>`()]+)/g
-    while ((match = winAbsolutePattern.exec(sanitized)) !== null) {
+    while ((match = winAbsolutePattern.exec(scanCommand)) !== null) {
       const candidate = match[1]!
       if (isPlaceholderToken(candidate)) continue
       const resolved = normalizeExtracted(candidate)
@@ -636,8 +735,8 @@ export function extractAbsolutePathsFromCommand(command: string): string[] {
     // right after the root (`find / 2>/dev/null`) is still a real root.
     const rootPattern = /(?:^|[\s=(])\/(?=$|[\s'"`|&;,<()])/g
     let isRoot = false
-    for (const match of sanitized.matchAll(rootPattern)) {
-      const rest = sanitized.slice(match.index! + match[0].length)
+    for (const match of scanCommand.matchAll(rootPattern)) {
+      const rest = scanCommand.slice(match.index! + match[0].length)
       if (/^\s+[0-9]/.test(rest) && !/^\s+[0-9]+[>]/.test(rest)) {
         continue // division expression, e.g. "length / 4"
       }
@@ -648,7 +747,7 @@ export function extractAbsolutePathsFromCommand(command: string): string[] {
       paths.push('/')
     }
 
-    while ((match = absolutePattern.exec(sanitized)) !== null) {
+    while ((match = absolutePattern.exec(scanCommand)) !== null) {
       const candidate = match[1]!
 
       // Skip placeholder markers left by sanitization
@@ -666,8 +765,8 @@ export function extractAbsolutePathsFromCommand(command: string): string[] {
     }
   }
 
-  // Relative `..` traversal tokens that can escape the workdir.
-  paths.push(...extractRelativeTraversals(sanitized))
+  // Relative `..` traversal tokens are resolved cd-aware by
+  // resolveRelativeTraversals (they need the effective cwd per token).
 
   // Deduplicate
   return [...new Set(paths)]
