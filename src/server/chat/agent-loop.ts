@@ -41,6 +41,7 @@ import {
   createChatLLMRetryFailedMessage,
 } from '../ws/protocol.js'
 import { executeTools, type ToolBatchContext } from './execute-tools.js'
+import { estimateToolResultTokens, isContextLengthError } from './token-budget.js'
 import { loadAllAgentsDefault, getSubAgents } from '../agents/registry.js'
 import { createRetryLimiter, type RetryLimiter } from './retry-limiter.js'
 import { drainQueue } from './drain-queue.js'
@@ -178,6 +179,7 @@ export interface TopLevelLoopConfig {
 // ============================================================================
 
 const MAX_TRUNCATION_RETRIES = 3
+const MAX_CONTEXT_LENGTH_RETRIES = 3
 const OUTPUT_RESERVE_TOKENS = 2048
 const CONTINUE_PROMPT = 'Continue your previous response. Do NOT repeat what you already wrote.'
 const CONTINUE_AFTER_STREAM_ERROR_PROMPT =
@@ -195,6 +197,8 @@ export async function runTopLevelAgentLoop(
 
   const retryLimiter: RetryLimiter = createRetryLimiter(config.maxRetriesPerTurn ?? 10)
   let truncationRetryCount = 0
+  let contextRetryCount = 0
+  let pendingToolResultTokens = 0
   let returnValueContent: string | undefined
   let returnValueResult: string | undefined
   let currentMaxTokensOverride: number | undefined
@@ -329,13 +333,15 @@ export async function runTopLevelAgentLoop(
       previousContextTokens = contextState.currentTokens
 
       const contextWindow = sessionManager.getCurrentModelContext(sessionId, config.mode)
-      const availableForOutput = Math.max(256, contextWindow - contextState.currentTokens - OUTPUT_RESERVE_TOKENS)
+      const availableForOutput = Math.max(
+        256,
+        contextWindow - contextState.currentTokens - pendingToolResultTokens - OUTPUT_RESERVE_TOKENS,
+      )
 
-      let modelSettings =
-        config.modelSettings ??
-        (currentMaxTokensOverride !== undefined
-          ? { ...sessionManager.getCurrentModelSettings(sessionId, config.mode), maxTokens: currentMaxTokensOverride }
-          : sessionManager.getCurrentModelSettings(sessionId, config.mode))
+      let modelSettings = config.modelSettings ?? sessionManager.getCurrentModelSettings(sessionId, config.mode)
+      if (modelSettings && currentMaxTokensOverride !== undefined) {
+        modelSettings = { ...modelSettings, maxTokens: currentMaxTokensOverride }
+      }
 
       if (modelSettings) {
         const requestedMaxTokens = modelSettings.maxTokens ?? 16384
@@ -390,6 +396,16 @@ export async function runTopLevelAgentLoop(
       }
 
       if (signal?.aborted) throw new Error('Aborted')
+
+      // Context overflow: the prompt (including tool results) plus the requested
+      // maxTokens exceeds the model's window. The error is deterministic, so
+      // retry immediately with a reduced maxTokens instead of waiting out backoff.
+      if (isContextLengthError(attemptResult.error) && contextRetryCount < MAX_CONTEXT_LENGTH_RETRIES) {
+        contextRetryCount += 1
+        const currentMax = modelSettings?.maxTokens ?? currentMaxTokensOverride ?? 16384
+        currentMaxTokensOverride = Math.max(256, Math.floor(currentMax / 2))
+        continue
+      }
 
       // Backoff decision — the shared LLMRetryPolicy (same defaults as workflows).
       requestFailures += 1
@@ -487,6 +503,8 @@ export async function runTopLevelAgentLoop(
       result.usage.completionTokens,
       config.subAgentMetadata?.subAgentId,
     )
+    pendingToolResultTokens = 0
+    currentMaxTokensOverride = undefined
 
     // Check compaction threshold with fresh promptTokens from LLM.
     // When exceeded, append compaction prompt and let the next iteration
@@ -612,6 +630,7 @@ ${COMPACTION_PROMPT}`,
         }
         batchContext.agentTimeout = getRuntimeConfig().agent.toolTimeout
         const batchResult = await executeTools(assistantMsgId, result.toolCalls, batchContext, append)
+        pendingToolResultTokens = estimateToolResultTokens(batchResult.toolMessages)
         if (batchResult.stepDoneCalled) {
           emitDoneAndBreak(
             assistantMsgId,

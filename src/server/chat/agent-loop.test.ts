@@ -1029,6 +1029,489 @@ describe('maxTokens clamping', () => {
     expect(getEnabledSkillMetadata).toHaveBeenCalledWith('/test/config', projectRoot)
     expect(getEnabledSkillMetadata).not.toHaveBeenCalledWith('/test/config', workspacePath)
   })
+
+  it('subtracts estimated tool-result tokens from the maxTokens clamp', async () => {
+    const toolRegistry = {
+      tools: [],
+      definitions: [],
+      execute: vi.fn().mockResolvedValue({
+        success: true,
+        output: 'x'.repeat(4000), // ~1000 tokens at 4 chars/token + 16 overhead
+        durationMs: 0,
+        truncated: false,
+      }),
+    } as any
+
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 5000,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 200000 }),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(1.0),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    // Iteration 1: tool batch returning a large result; iteration 2: terminates.
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.ts' } }],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'tool_calls',
+        modelParams: { maxTokens: 192952 },
+      })
+      .mockResolvedValue({
+        content: 'done',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+      })
+
+    await runTopLevelAgentLoop(makeConfig({ getToolRegistry: () => toolRegistry }), mockTurnMetrics).catch(() => {})
+
+    // First call: available = 200000 - 5000 - 2048 = 192952.
+    // Tool result (4000 chars) estimated at 16 + 1000 = 1016 tokens.
+    // Second call: available = 192952 - 1016 = 191936.
+    const secondCall = (streamLLMPure as any).mock.calls[1]?.[0]
+    expect(secondCall).toBeDefined()
+    expect(secondCall.modelSettings?.maxTokens).toBe(191936)
+  })
+
+  it('does not double-count tool-result tokens once they are reflected in promptTokens', async () => {
+    const toolRegistry = {
+      tools: [],
+      definitions: [],
+      execute: vi.fn().mockResolvedValue({
+        success: true,
+        output: 'x'.repeat(4000), // 16 + 1000 = 1016 tokens per batch
+        durationMs: 0,
+        truncated: false,
+      }),
+    } as any
+
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 5000,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 200000 }),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(1.0),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    // Iteration 1: tool batch; iteration 2: tool batch; iteration 3: terminates.
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.ts' } }],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'tool_calls',
+        modelParams: { maxTokens: 192952 },
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [{ id: 'call-2', name: 'read_file', arguments: { path: 'b.ts' } }],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'tool_calls',
+        modelParams: { maxTokens: 191936 },
+      })
+      .mockResolvedValue({
+        content: 'done',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+      })
+
+    await runTopLevelAgentLoop(makeConfig({ getToolRegistry: () => toolRegistry }), mockTurnMetrics).catch(() => {})
+
+    // Iteration 3 must subtract only iteration 2's estimate (1016), not 2032:
+    // iteration 1's results are already counted in iteration 2's promptTokens.
+    const thirdCall = (streamLLMPure as any).mock.calls[2]?.[0]
+    expect(thirdCall).toBeDefined()
+    expect(thirdCall.modelSettings?.maxTokens).toBe(191936)
+  })
+
+  it('retries immediately with halved maxTokens on a context-length error', async () => {
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(1.0),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 0, completionTokens: 0 },
+        timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+        error:
+          "HTTP 400: This model's maximum context length is 128000 tokens. However, you requested 130000 tokens (120000 in the messages, 10000 in the completion).",
+      })
+      .mockResolvedValue({
+        content: 'done',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+      })
+
+    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+
+    const calls = (streamLLMPure as any).mock.calls
+    expect(calls.length).toBe(2)
+    // First call requested 16384; the context-length retry halves it to 8192.
+    expect(calls[0]?.[0].modelSettings?.maxTokens).toBe(16384)
+    expect(calls[1]?.[0].modelSettings?.maxTokens).toBe(8192)
+  })
+
+  it('gives up after exhausting context-length retries and falls through to the failure path', async () => {
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(1.0),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    const contextError =
+      "HTTP 400: This model's maximum context length is 128000 tokens. However, you requested 130000 tokens."
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 0, completionTokens: 0 },
+        timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+        error: contextError,
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 0, completionTokens: 0 },
+        timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+        error: contextError,
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 0, completionTokens: 0 },
+        timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+        error: contextError,
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 0, completionTokens: 0 },
+        timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+        error: contextError,
+      })
+
+    await runTopLevelAgentLoop(
+      makeConfig({ llmRetryPolicy: { backoffMs: [0], minIntervalMs: 0, maxDurationMs: 60_000, maxAttempts: 1 } }),
+      mockTurnMetrics,
+    ).catch(() => {})
+
+    const calls = (streamLLMPure as any).mock.calls
+    // 1 initial + 3 halving retries; the 4th failure exhausts the budget and
+    // falls through to the normal failure path (maxAttempts 1 → give up).
+    expect(calls.length).toBe(4)
+    expect(calls[0]?.[0].modelSettings?.maxTokens).toBe(16384)
+    expect(calls[1]?.[0].modelSettings?.maxTokens).toBe(8192)
+    expect(calls[2]?.[0].modelSettings?.maxTokens).toBe(4096)
+    expect(calls[3]?.[0].modelSettings?.maxTokens).toBe(2048)
+  })
+
+  it('applies the context-length halving even when config.modelSettings is set', async () => {
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(1.0),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 0, completionTokens: 0 },
+        timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+        error:
+          "HTTP 400: This model's maximum context length is 128000 tokens. However, you requested 130000 tokens (120000 in the messages, 10000 in the completion).",
+      })
+      .mockResolvedValue({
+        content: 'done',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+      })
+
+    await runTopLevelAgentLoop(
+      makeConfig({ modelSettings: { temperature: 0.5, maxTokens: 16384 } }),
+      mockTurnMetrics,
+    ).catch(() => {})
+
+    const calls = (streamLLMPure as any).mock.calls
+    expect(calls.length).toBe(2)
+    // The halving override must win over config.modelSettings, otherwise the
+    // retry would re-request the same too-large maxTokens.
+    expect(calls[1]?.[0].modelSettings?.maxTokens).toBe(8192)
+    expect(calls[1]?.[0].modelSettings?.temperature).toBe(0.5)
+  })
+
+  it('resets the maxTokens override after a successful call', async () => {
+    const toolRegistry = {
+      tools: [],
+      definitions: [],
+      execute: vi.fn().mockResolvedValue({
+        success: true,
+        output: 'x'.repeat(4000),
+        durationMs: 0,
+        truncated: false,
+      }),
+    } as any
+
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 5000,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({ maxTokens: 16384 }),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(1.0),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    // Iteration 1: truncated (length) → the truncation retry grows the override to 24576.
+    // Iteration 2: tool batch using the override → success resets it.
+    // Iteration 3: terminates; must go back to the user's maxTokens.
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce({
+        content: 'partial',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'length',
+        modelParams: { maxTokens: 16384 },
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.ts' } }],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'tool_calls',
+        modelParams: { maxTokens: 24576 },
+      })
+      .mockResolvedValue({
+        content: 'done',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+      })
+
+    await runTopLevelAgentLoop(makeConfig({ getToolRegistry: () => toolRegistry }), mockTurnMetrics).catch(() => {})
+
+    const calls = (streamLLMPure as any).mock.calls
+    expect(calls.length).toBe(3)
+    expect(calls[1]?.[0].modelSettings?.maxTokens).toBe(24576)
+    // After iteration 2 succeeded, the override is reset → user maxTokens (clamped).
+    expect(calls[2]?.[0].modelSettings?.maxTokens).toBe(16384)
+  })
 })
 
 // ============================================================================
