@@ -14,7 +14,7 @@ import { focusChatTextarea } from '../../lib/focusChatTextarea'
 import { shouldAutofocus } from '../../lib/device'
 import { useModelSearch, ModelEntryRow, type ModelWithConfig } from './model-list'
 import { parseModelValue } from '../../lib/model-value'
-import { shouldGateEffortChange } from '../../lib/effort-gate'
+import { shouldGateEffortChange, resolveDisplayEffort } from '../../lib/effort-gate'
 import { useEffortChangeGate } from '../plan/EffortChangeGate'
 
 type ProviderLabelProps = {
@@ -191,18 +191,27 @@ export function ProviderSelector() {
     ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
     : 'No model'
 
-  // Fall back to the model's configured thinking level for display, so the label
+  // Fall back to the model's configured effort for display, so the label
   // reflects what will actually be sent even without an explicit session pick.
+  // The override (raw value, any string) takes precedence over thinkingLevel.
   const activeProvider = providers.find((p) => p.id === effectiveProviderId)
   const effectiveModelConfig = activeProvider?.models.find((m) => m.id === effectiveModel)
-  const modelDefaultEffort = effectiveModelConfig?.thinkingEnabled ? effectiveModelConfig?.thinkingLevel : undefined
-  const displayEffort = effectiveEffort ?? modelDefaultEffort
+  // Display the effort the server will actually send (explicit effort clamped to
+  // the model's preset list, else override verbatim, else thinkingLevel if
+  // advertised) — never a raw value that gets silently replaced at request time.
+  const displayEffort = resolveDisplayEffort({
+    explicitEffort: effectiveEffort,
+    reasoningEfforts: effectiveModelConfig?.reasoningEfforts,
+    thinkingLevel: effectiveModelConfig?.thinkingLevel,
+    thinkingEnabled: effectiveModelConfig?.thinkingEnabled,
+    override: effectiveModelConfig?.reasoningEffortOverride,
+  })
 
   // The effort that is currently active for a given model row (only meaningful for
   // the active model — other rows show no highlighted chip).
   const effortForModel = (providerId: string, modelId: string): string | undefined => {
     if (effectiveProviderId !== providerId || effectiveModel !== modelId) return undefined
-    return effectiveEffort ?? modelDefaultEffort
+    return displayEffort
   }
 
   const [settingDefault, setSettingDefault] = useState(false)
@@ -461,8 +470,53 @@ export function ProviderSelector() {
     setShowProviderModal(false)
   }
 
+  const commitSessionPick = async (
+    targetSessionId: string,
+    providerId: string,
+    newModel: string,
+    effort: string | null,
+  ) => {
+    const prevSession = currentSession
+    if (prevSession) {
+      // Optimistic update for responsiveness; rolled back if the server rejects.
+      useSessionStore.setState((state) => ({
+        ...state,
+        currentSession: {
+          ...prevSession,
+          providerId,
+          providerModel: newModel,
+          providerReasoningEffort: effort,
+          providerManual: true,
+          providerManualActive: true,
+        },
+      }))
+      const saved = await setSessionProvider(targetSessionId, providerId, newModel, effort)
+      if (!saved) {
+        // The write failed — restore the previous session and keep the dropdown
+        // open so the user can retry instead of being shown a silent no-op.
+        useSessionStore.setState((state) => ({ ...state, currentSession: prevSession }))
+        return
+      }
+    } else {
+      const saved = await setSessionProvider(targetSessionId, providerId, newModel, effort)
+      if (!saved) return
+    }
+    setExpandedProviderIds([])
+    setIsOpen(false)
+    focusChatTextarea()
+  }
+
   const handleModelClick = async (providerId: string, newModel: string, reasoningEffort?: string) => {
     if (currentSession && sessionId) {
+      // Re-clicking the already-active model is a no-op: it must not silently
+      // clear the session's reasoning effort.
+      if (!reasoningEffort && effectiveProviderId === providerId && effectiveModel === newModel) {
+        setExpandedProviderIds([])
+        setIsOpen(false)
+        focusChatTextarea()
+        return
+      }
+
       // Switching the reasoning effort on a warm cache invalidates the LLM prefix
       // cache — gate it behind an explicit choice. Apply commits the full pick;
       // Keep proceeds with the provider/model change but preserves the current
@@ -479,44 +533,12 @@ export function ProviderSelector() {
           if (choice === 'keep') {
             // Commit the provider/model pick at the current effort so the
             // transition proceeds without invalidating the cache.
-            useSessionStore.setState((state) => ({
-              ...state,
-              currentSession: state.currentSession
-                ? {
-                    ...state.currentSession,
-                    providerId,
-                    providerModel: newModel,
-                    providerReasoningEffort: displayEffort ?? null,
-                    providerManual: true,
-                    providerManualActive: true,
-                  }
-                : null,
-            }))
-            setSessionProvider(sessionId, providerId, newModel, displayEffort ?? null)
-            setExpandedProviderIds([])
-            setIsOpen(false)
-            focusChatTextarea()
+            await commitSessionPick(sessionId, providerId, newModel, displayEffort ?? null)
             return
           }
         }
       }
-      useSessionStore.setState((state) => ({
-        ...state,
-        currentSession: state.currentSession
-          ? {
-              ...state.currentSession,
-              providerId,
-              providerModel: newModel,
-              providerReasoningEffort: reasoningEffort ?? null,
-              providerManual: true,
-              providerManualActive: true,
-            }
-          : null,
-      }))
-      setSessionProvider(sessionId, providerId, newModel, reasoningEffort ?? null)
-      setExpandedProviderIds([])
-      setIsOpen(false)
-      focusChatTextarea()
+      await commitSessionPick(sessionId, providerId, newModel, reasoningEffort ?? null)
       return
     }
 

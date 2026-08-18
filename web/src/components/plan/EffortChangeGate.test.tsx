@@ -24,7 +24,7 @@ describe('EffortChangeGate', () => {
     document.body.innerHTML = ''
   })
 
-  it('shows the modal with the target effort, current effort, and cache warning', async () => {
+  it('shows the modal with the target effort, current effort, and a hedged cache warning', async () => {
     const user = userEvent.setup()
     render(
       <EffortChangeGateProvider>
@@ -37,7 +37,10 @@ describe('EffortChangeGate', () => {
     expect(document.body.textContent).toContain('Explorer')
     expect(document.body.textContent).toContain('max')
     expect(document.body.textContent).toContain('high')
-    expect(document.body.textContent).toContain('invalidate the LLM prefix cache')
+    // The cache impact is hedged ("may"): it is real for local backends that
+    // template reasoning_effort into the system prompt, not for every provider.
+    expect(document.body.textContent).toContain('may invalidate the LLM prefix cache')
+    expect(document.body.textContent).toContain('if it does, the next response will take longer')
   })
 
   it('resolves with "keep" when the keep button is clicked', async () => {

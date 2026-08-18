@@ -656,6 +656,10 @@ export interface ModelConfig {
   requestBody?: Record<string, unknown>
   /** Reasoning effort values advertised by the provider catalog. */
   reasoningEfforts?: string[]
+  /** Raw reasoning-effort override for this model (any string, sent verbatim).
+   *  Takes precedence over `thinkingLevel` as the model default and is never
+   *  clamped to the preset list — the escape hatch for provider-specific values. */
+  reasoningEffortOverride?: string
   contextWindow: number // Context window size in tokens
   source: 'backend' | 'user' | 'default' // Where the value came from
   selected?: boolean // User explicitly selected this model (for multi-model providers)

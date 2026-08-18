@@ -749,3 +749,215 @@ describe('ProviderModal - sampling param Send checkboxes', () => {
     expect(savedModel?.omitParams).toBeUndefined()
   })
 })
+
+describe('ProviderModal - effort presets and override editor', () => {
+  let container: HTMLElement
+  let root: ReturnType<typeof createRoot>
+  let onSaveMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    onSaveMock = vi.fn()
+  })
+
+  afterEach(() => {
+    root.unmount()
+    document.body.removeChild(container)
+  })
+
+  async function renderModal(models: Array<Record<string, unknown>>, editModelId?: string) {
+    await new Promise<void>((resolve) => {
+      root.render(
+        <ProviderModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={onSaveMock as (provider: ProviderFormData) => void}
+          initialStep={2}
+          editProvider={{
+            id: 'test-provider',
+            name: 'Test Provider',
+            url: 'http://localhost:8000/v1',
+            backend: 'vllm' as const,
+            models: models as never,
+          }}
+          editModelId={editModelId}
+        />,
+      )
+      setTimeout(resolve, 200)
+    })
+  }
+
+  function save() {
+    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    saveButton?.click()
+  }
+
+  /** Let React flush the discrete-event state update (no act() needed here). */
+  function flush() {
+    return new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+
+  function setSelectValue(select: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set
+    setter?.call(select, value)
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  it('adds and removes presets, sets an override, and saves the edited list', async () => {
+    await renderModal(
+      [
+        {
+          id: 'test-model',
+          contextWindow: 200000,
+          thinkingEnabled: true,
+          reasoningEfforts: ['low', 'medium', 'high'],
+        },
+      ],
+      'test-model',
+    )
+
+    // Remove 'high' from the presets.
+    const removeHigh = container.querySelector('button[aria-label="Remove preset high"]') as HTMLButtonElement | null
+    expect(removeHigh).toBeTruthy()
+    removeHigh?.click()
+    await flush()
+
+    // Add 'max' via the vocabulary selector.
+    const addSelect = container.querySelector('select[aria-label="Add effort preset"]') as HTMLSelectElement | null
+    expect(addSelect).toBeTruthy()
+    setSelectValue(addSelect!, 'max')
+    await flush()
+
+    // Set the raw override (native setter — React controlled inputs ignore direct assignment).
+    const overrideInput = container.querySelector(
+      'input[aria-label="Reasoning effort override"]',
+    ) as HTMLInputElement | null
+    expect(overrideInput).toBeTruthy()
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+    nativeInputValueSetter?.call(overrideInput, 'deep')
+    overrideInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    await flush()
+
+    save()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    const savedModel = savedData.models.find((m) => m.id === 'test-model')
+    expect(savedModel?.reasoningEfforts).toEqual(['low', 'medium', 'max'])
+    expect(savedModel?.reasoningEffortOverride).toBe('deep')
+  })
+
+  it('reset to defaults clears the custom list and falls back to the stored presets', async () => {
+    await renderModal(
+      [
+        {
+          id: 'test-model',
+          contextWindow: 200000,
+          thinkingEnabled: true,
+          reasoningEfforts: ['low', 'medium', 'high'],
+        },
+      ],
+      'test-model',
+    )
+
+    // Make a custom edit first, then reset.
+    const removeHigh = container.querySelector('button[aria-label="Remove preset high"]') as HTMLButtonElement | null
+    removeHigh?.click()
+    await flush()
+
+    const resetButton = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Reset to defaults'),
+    )
+    expect(resetButton).toBeTruthy()
+    resetButton?.click()
+    await flush()
+
+    save()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    const savedModel = savedData.models.find((m) => m.id === 'test-model')
+    // Falls back to the stored preset list (the catalog/model defaults).
+    expect(savedModel?.reasoningEfforts).toEqual(['low', 'medium', 'high'])
+  })
+
+  it('reorders presets with the up/down controls', async () => {
+    await renderModal(
+      [
+        {
+          id: 'test-model',
+          contextWindow: 200000,
+          thinkingEnabled: true,
+          reasoningEfforts: ['low', 'medium', 'high'],
+        },
+      ],
+      'test-model',
+    )
+
+    // Move 'low' down (becomes second).
+    const moveLowDown = container.querySelector('button[aria-label="Move preset low down"]') as HTMLButtonElement | null
+    expect(moveLowDown).toBeTruthy()
+    moveLowDown?.click()
+    await flush()
+
+    // Move 'high' up (becomes second).
+    const moveHighUp = container.querySelector('button[aria-label="Move preset high up"]') as HTMLButtonElement | null
+    expect(moveHighUp).toBeTruthy()
+    moveHighUp?.click()
+    await flush()
+
+    save()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    const savedModel = savedData.models.find((m) => m.id === 'test-model')
+    // ['low','medium','high'] → low down → ['medium','low','high'] → high up → ['medium','high','low']
+    expect(savedModel?.reasoningEfforts).toEqual(['medium', 'high', 'low'])
+  })
+
+  it('removing every preset persists an explicitly-empty list (no chips) instead of resetting to defaults', async () => {
+    await renderModal(
+      [
+        {
+          id: 'test-model',
+          contextWindow: 200000,
+          thinkingEnabled: true,
+          reasoningEfforts: ['low', 'medium'],
+        },
+      ],
+      'test-model',
+    )
+
+    // Remove both chips — the list becomes explicitly empty, NOT reset to defaults.
+    ;(container.querySelector('button[aria-label="Remove preset low"]') as HTMLElement | null)?.click()
+    await flush()
+    ;(container.querySelector('button[aria-label="Remove preset medium"]') as HTMLElement | null)?.click()
+    await flush()
+
+    save()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    const savedModel = savedData.models.find((m) => m.id === 'test-model')
+    expect(savedModel?.reasoningEfforts).toEqual([])
+  })
+
+  it('an existing override is prefilled in the editor and survives a save untouched', async () => {
+    await renderModal(
+      [
+        {
+          id: 'test-model',
+          contextWindow: 200000,
+          thinkingEnabled: true,
+          reasoningEfforts: ['low', 'medium', 'high'],
+          reasoningEffortOverride: 'deep',
+        },
+      ],
+      'test-model',
+    )
+
+    const overrideInput = container.querySelector(
+      'input[aria-label="Reasoning effort override"]',
+    ) as HTMLInputElement | null
+    expect(overrideInput?.value).toBe('deep')
+
+    save()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    const savedModel = savedData.models.find((m) => m.id === 'test-model')
+    expect(savedModel?.reasoningEffortOverride).toBe('deep')
+  })
+})

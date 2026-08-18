@@ -8,6 +8,7 @@ import { ChevronDownIcon, SettingsIcon } from './icons'
 import { QueryParamsInput } from './QueryParamsInput'
 import { formatTokens } from '../../lib/format-stats'
 import { shouldAutofocus } from '../../lib/device'
+import { REASONING_EFFORT_VALUES } from '../../lib/model-value'
 
 const COMMON_PORTS = [8080, 11434, 8000, 1234]
 
@@ -38,6 +39,7 @@ interface ModelConfig {
   thinkingEnabled?: boolean
   thinkingLevel?: string
   reasoningEfforts?: string[]
+  reasoningEffortOverride?: string
   nonThinkingEnabled?: boolean
   thinkingExtraKwargs?: string
   nonThinkingExtraKwargs?: string
@@ -129,6 +131,32 @@ function ModelConfigPanel({
     const isOmitted = current.includes(paramKey)
     const next = isOmitted ? current.filter((p) => p !== paramKey) : [...current, paramKey]
     onUpdateConfig(modelId, { omitParams: next.length > 0 ? next : undefined })
+  }
+
+  /** The preset list currently in effect for a model (edited, else the stored one). */
+  function presetEfforts(modelId: string): string[] {
+    return modelConfigs[modelId]?.reasoningEfforts ?? model.reasoningEfforts ?? []
+  }
+
+  /** Add/remove a vocabulary value from the model's preset list. Removing the
+   *  last chip persists an explicitly-EMPTY list (no chips) — distinct from
+   *  "Reset to defaults", which clears the custom list so catalog defaults
+   *  apply again. */
+  function togglePresetEffort(modelId: string, effort: string) {
+    const current = presetEfforts(modelId)
+    const next = current.includes(effort) ? current.filter((e) => e !== effort) : [...current, effort]
+    onUpdateConfig(modelId, { reasoningEfforts: next })
+  }
+
+  /** Swap a preset with its neighbour (direction -1 up / +1 down) to order the chips. */
+  function movePresetEffort(modelId: string, effort: string, direction: -1 | 1) {
+    const current = presetEfforts(modelId)
+    const index = current.indexOf(effort)
+    const target = index + direction
+    if (index === -1 || target < 0 || target >= current.length) return
+    const next = [...current]
+    ;[next[index]!, next[target]!] = [next[target]!, next[index]!]
+    onUpdateConfig(modelId, { reasoningEfforts: next })
   }
 
   return (
@@ -271,6 +299,87 @@ function ModelConfigPanel({
               />
             </div>
           )}
+
+          <div className="space-y-2">
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">
+                Effort presets (shown as chips in the model selector)
+              </label>
+              <div className="flex flex-wrap items-center gap-1">
+                {presetEfforts(model.id).map((effort, index) => (
+                  <span
+                    key={effort}
+                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-border text-text-muted"
+                  >
+                    {effort}
+                    <button
+                      type="button"
+                      aria-label={`Move preset ${effort} up`}
+                      onClick={() => movePresetEffort(model.id, effort, -1)}
+                      disabled={index === 0}
+                      className="text-text-muted hover:text-text-primary leading-none disabled:opacity-30"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move preset ${effort} down`}
+                      onClick={() => movePresetEffort(model.id, effort, 1)}
+                      disabled={index === presetEfforts(model.id).length - 1}
+                      className="text-text-muted hover:text-text-primary leading-none disabled:opacity-30"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove preset ${effort}`}
+                      onClick={() => togglePresetEffort(model.id, effort)}
+                      className="text-text-muted hover:text-accent-error leading-none"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <select
+                  aria-label="Add effort preset"
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) togglePresetEffort(model.id, e.target.value)
+                  }}
+                  className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-bg-tertiary text-text-muted"
+                >
+                  <option value="">Add preset…</option>
+                  {REASONING_EFFORT_VALUES.filter((v) => !presetEfforts(model.id).includes(v)).map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {modelConfigs[model.id]?.reasoningEfforts !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => onUpdateConfig(model.id, { reasoningEfforts: undefined })}
+                  className="mt-1 text-[10px] text-text-muted hover:text-text-primary hover:underline"
+                >
+                  Reset to defaults
+                </button>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">
+                Reasoning effort override (raw value, sent verbatim)
+              </label>
+              <input
+                type="text"
+                aria-label="Reasoning effort override"
+                value={modelConfigs[model.id]?.reasoningEffortOverride ?? model.reasoningEffortOverride ?? ''}
+                onChange={(e) => onUpdateConfig(model.id, { reasoningEffortOverride: e.target.value || undefined })}
+                placeholder="e.g. deep — bypasses the preset list"
+                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-xs text-text-primary"
+              />
+            </div>
+          </div>
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -1048,7 +1157,8 @@ export function ProviderModal({
         name: m.name,
         apiModelId: m.apiModelId,
         requestBody: m.requestBody,
-        reasoningEfforts: m.reasoningEfforts,
+        reasoningEfforts: modelConfigs[m.id]?.reasoningEfforts ?? m.reasoningEfforts,
+        reasoningEffortOverride: modelConfigs[m.id]?.reasoningEffortOverride ?? m.reasoningEffortOverride,
         contextWindow: modelConfigs[m.id]?.contextWindow ?? m.contextWindow,
         selected: selectedModelIds.has(m.id) || undefined,
         supportsVision: modelConfigs[m.id]?.supportsVision,

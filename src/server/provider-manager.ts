@@ -6,6 +6,7 @@ import { logger } from './utils/logger.js'
 import { parseLmStudioModels } from './providers/lmstudio.js'
 import { ensureVersionPrefix, stripVersionPrefix, buildModelsUrl } from './llm/url-utils.js'
 import { getCatalogEntry } from './providers/model-catalog.js'
+import { resolveEffortForModel } from '../shared/reasoning-effort.js'
 import './llm/proxy.js'
 
 function normalizeModelId(s: string): string {
@@ -63,7 +64,9 @@ function enrichWithCatalogDefaults(model: ModelConfig): ModelConfig {
   if (!entry) return model
   return {
     ...model,
-    ...(model.reasoningEfforts?.length ? {} : { reasoningEfforts: entry.reasoningEfforts }),
+    // Only fill a genuinely-unset list. An explicitly-empty list (user cleared
+    // all presets) is preserved so the model shows no chips.
+    ...(model.reasoningEfforts !== undefined ? {} : { reasoningEfforts: entry.reasoningEfforts }),
   }
 }
 
@@ -271,6 +274,8 @@ export interface ModelSettingsUpdate {
   supportsVision?: boolean
   thinkingEnabled?: boolean
   thinkingLevel?: string
+  reasoningEfforts?: string[]
+  reasoningEffortOverride?: string
   nonThinkingEnabled?: boolean
   thinkingExtraKwargs?: string
   nonThinkingExtraKwargs?: string
@@ -368,19 +373,27 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     providerStatus.set(p.id, 'unknown')
   }
 
-  function resolveModelThinkingConfig(provider: Provider, modelId: string): { reasoningEffort?: string } {
+  function resolveModelThinkingConfig(
+    provider: Provider,
+    modelId: string,
+    explicitEffort?: string,
+  ): { reasoningEffort?: string } {
     const modelConfig = provider.models.find((m) => m.id === modelId)
     if (!modelConfig) return {}
-    if (modelConfig.thinkingEnabled && modelConfig.thinkingLevel) {
-      return { reasoningEffort: modelConfig.thinkingLevel }
-    }
-    return {}
+    const effort = resolveEffortForModel({
+      ...(modelConfig.reasoningEfforts?.length ? { reasoningEfforts: modelConfig.reasoningEfforts } : {}),
+      ...(explicitEffort ? { candidate: explicitEffort } : {}),
+      ...(modelConfig.thinkingEnabled && modelConfig.thinkingLevel ? { defaultEffort: modelConfig.thinkingLevel } : {}),
+      ...(modelConfig.reasoningEffortOverride ? { override: modelConfig.reasoningEffortOverride } : {}),
+    })
+    return effort ? { reasoningEffort: effort } : {}
   }
 
   function createConfigForProvider(provider: Provider, model: string, reasoningEffort?: string): Config {
-    // An explicit effort (session pick or agent override) wins over the model's
-    // configured thinkingLevel; otherwise fall back to the model default.
-    const modelThinking = reasoningEffort ? { reasoningEffort } : resolveModelThinkingConfig(provider, model)
+    // An explicit effort (session pick, pin, or agent override) wins over the
+    // model's configured default, clamped to the model's advertised preset
+    // list; otherwise the model default applies (override, else thinkingLevel).
+    const modelThinking = resolveModelThinkingConfig(provider, model, reasoningEffort)
     return {
       ...config,
       llm: {
@@ -798,6 +811,16 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
           ? { thinkingLevel: settings.thinkingLevel }
           : existingModel?.thinkingLevel !== undefined
             ? { thinkingLevel: existingModel.thinkingLevel }
+            : {}),
+        ...(settings.reasoningEfforts !== undefined
+          ? { reasoningEfforts: settings.reasoningEfforts }
+          : existingModel?.reasoningEfforts !== undefined
+            ? { reasoningEfforts: existingModel.reasoningEfforts }
+            : {}),
+        ...(settings.reasoningEffortOverride !== undefined
+          ? { reasoningEffortOverride: settings.reasoningEffortOverride }
+          : existingModel?.reasoningEffortOverride !== undefined
+            ? { reasoningEffortOverride: existingModel.reasoningEffortOverride }
             : {}),
         ...(settings.nonThinkingEnabled !== undefined
           ? { nonThinkingEnabled: settings.nonThinkingEnabled }

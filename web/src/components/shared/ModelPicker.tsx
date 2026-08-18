@@ -6,6 +6,7 @@ import { useModelSearch, ModelEntryRow } from '../settings/model-list'
 import type { Provider } from '../../stores/config'
 import { shouldAutofocus } from '../../lib/device'
 import { formatModelValue, parseModelValue } from '../../lib/model-value'
+import { resolveDisplayEffort } from '../../lib/effort-gate'
 
 export interface ModelPickerProps {
   providers: Provider[]
@@ -26,6 +27,19 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
   const shortModelName = selectedModelId
     ? (selectedModelId.split('/').pop()?.replace(/-/g, ' ') ?? selectedModelId)
     : undefined
+
+  // Display the effort the server will actually send: the explicit effort from
+  // the value clamped to the model's preset list, else the override verbatim,
+  // else the thinkingLevel default if advertised — mirrors the stats-bar label.
+  const selectedProvider = parsedValue ? providers.find((p) => p.id === parsedValue.providerId) : undefined
+  const selectedModelConfig = selectedProvider?.models.find((m) => m.id === selectedModelId)
+  const displayEffort = resolveDisplayEffort({
+    explicitEffort: selectedEffort,
+    reasoningEfforts: selectedModelConfig?.reasoningEfforts,
+    thinkingLevel: selectedModelConfig?.thinkingLevel,
+    thinkingEnabled: selectedModelConfig?.thinkingEnabled,
+    override: selectedModelConfig?.reasoningEffortOverride,
+  })
 
   const {
     searchQuery,
@@ -113,7 +127,7 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
       >
         <span className={shortModelName ? 'text-text-primary' : 'text-text-muted'}>
           {shortModelName ?? defaultLabel}
-          {shortModelName && selectedEffort && <span className="text-text-muted">:{selectedEffort}</span>}
+          {shortModelName && displayEffort && <span className="text-text-muted">:{displayEffort}</span>}
         </span>
         <ChevronDownIcon className={`w-3 h-3 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -179,11 +193,20 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
                             isActive={isActive}
                             highlighted={isHighlighted}
                             onModelClick={(providerId, modelId) => {
-                              onChange(formatModelValue(providerId, modelId))
+                              // Re-clicking the same model keeps its effort; a
+                              // cross-model pick resets it.
+                              const sameModel = parsedValue?.providerId === providerId && parsedValue.model === modelId
+                              onChange(
+                                formatModelValue(
+                                  providerId,
+                                  modelId,
+                                  sameModel ? parsedValue?.reasoningEffort : undefined,
+                                ),
+                              )
                               setIsOpen(false)
                             }}
                             reasoningEfforts={modelConfig.reasoningEfforts}
-                            selectedEffort={isActive ? selectedEffort : undefined}
+                            selectedEffort={isActive ? displayEffort : undefined}
                             onSelectEffort={(providerId, modelId, effort) => {
                               onChange(formatModelValue(providerId, modelId, effort))
                               setIsOpen(false)

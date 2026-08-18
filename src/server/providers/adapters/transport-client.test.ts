@@ -341,4 +341,85 @@ describe('createTransportLLMClient', () => {
     const client = createTransportLLMClient(provider, 'gpt-5', transport)
     expect(client.getReasoningEffort?.()).toBe('medium')
   })
+
+  it('uses the reasoningEffortOverride as the model default (never clamped)', () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [
+        {
+          id: 'gpt-5',
+          contextWindow: 1_050_000,
+          source: 'backend',
+          thinkingEnabled: true,
+          thinkingLevel: 'medium',
+          reasoningEffortOverride: 'deep',
+          reasoningEfforts: ['low', 'medium', 'high'],
+        },
+      ],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const client = createTransportLLMClient(provider, 'gpt-5', transport)
+    // The override is the escape hatch — sent verbatim even though it is not in
+    // the model's advertised preset list.
+    expect(client.getReasoningEffort?.()).toBe('deep')
+  })
+
+  it('passes an in-list client effort through unchanged', () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [
+        { id: 'gpt-5', contextWindow: 1_050_000, source: 'backend', reasoningEfforts: ['low', 'medium', 'high'] },
+      ],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const client = createTransportLLMClient(provider, 'gpt-5', transport, 'high')
+    expect(client.getReasoningEffort?.()).toBe('high')
+  })
+
+  it('clamps an out-of-list client effort to the model default', () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [
+        {
+          id: 'gpt-5',
+          contextWindow: 1_050_000,
+          source: 'backend',
+          thinkingEnabled: true,
+          thinkingLevel: 'medium',
+          reasoningEfforts: ['low', 'medium', 'high'],
+        },
+      ],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const client = createTransportLLMClient(provider, 'gpt-5', transport, 'max')
+    expect(client.getReasoningEffort?.()).toBe('medium')
+  })
+
+  it('sends no effort for a model with a preset list but no default and no explicit effort', () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [
+        { id: 'gpt-5', contextWindow: 1_050_000, source: 'backend', reasoningEfforts: ['low', 'medium', 'high'] },
+      ],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const client = createTransportLLMClient(provider, 'gpt-5', transport)
+    expect(client.getReasoningEffort?.()).toBeUndefined()
+  })
 })

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveEffectiveEffort, shouldGateEffortChange, resolveWorkflowFirstAgentId } from './effort-gate'
+import {
+  resolveEffectiveEffort,
+  shouldGateEffortChange,
+  resolveWorkflowFirstAgentId,
+  resolveDisplayEffort,
+} from './effort-gate'
 
 describe('resolveEffectiveEffort', () => {
   it('an active manual pick wins', () => {
@@ -68,6 +73,30 @@ describe('resolveEffectiveEffort', () => {
   it('returns undefined when nothing is set at all', () => {
     expect(resolveEffectiveEffort({ session: null })).toBeUndefined()
   })
+
+  it('ignores a non-vocabulary model default (custom thinkingLevel) — nothing storable to keep', () => {
+    expect(resolveEffectiveEffort({ session: null, modelDefaultEffort: 'turbo' })).toBeUndefined()
+  })
+
+  it('an active manual pick with a non-vocabulary model default resolves to undefined', () => {
+    expect(
+      resolveEffectiveEffort({
+        session: {
+          providerReasoningEffort: null,
+          providerPinnedEffort: 'high',
+          providerManual: true,
+          providerManualActive: true,
+        },
+        modelDefaultEffort: 'turbo',
+      }),
+    ).toBeUndefined()
+  })
+
+  it('a non-vocabulary override falls through to nothing even when nothing explicit is set', () => {
+    expect(resolveEffectiveEffort({ session: { providerReasoningEffort: null }, modelDefaultEffort: 'custom' })).toBe(
+      undefined,
+    )
+  })
 })
 
 describe('shouldGateEffortChange', () => {
@@ -91,6 +120,68 @@ describe('shouldGateEffortChange', () => {
   it('does not gate when there is no current effort to preserve (Keep would be a no-op)', () => {
     expect(shouldGateEffortChange({ warmCache: true, proposedEffort: 'max' })).toBe(false)
     expect(shouldGateEffortChange({ warmCache: true, currentEffort: undefined, proposedEffort: 'max' })).toBe(false)
+  })
+
+  it('does not gate when the current effort is not a storable vocabulary value (custom thinkingLevel/override)', () => {
+    expect(shouldGateEffortChange({ warmCache: true, currentEffort: 'turbo', proposedEffort: 'high' })).toBe(false)
+  })
+
+  it('gates vocabulary efforts normally even when a model override exists', () => {
+    expect(shouldGateEffortChange({ warmCache: true, currentEffort: 'medium', proposedEffort: 'high' })).toBe(true)
+  })
+})
+
+describe('resolveDisplayEffort', () => {
+  it('shows the explicit effort when it is in the model preset list', () => {
+    expect(
+      resolveDisplayEffort({
+        explicitEffort: 'high',
+        reasoningEfforts: ['low', 'medium', 'high'],
+        thinkingEnabled: true,
+        thinkingLevel: 'medium',
+      }),
+    ).toBe('high')
+  })
+
+  it('clamps an out-of-list explicit effort to the sent value (first advertised)', () => {
+    expect(resolveDisplayEffort({ explicitEffort: 'max', reasoningEfforts: ['low', 'medium', 'high'] })).toBe('low')
+  })
+
+  it('clamps an out-of-list explicit effort to the advertised default', () => {
+    expect(
+      resolveDisplayEffort({
+        explicitEffort: 'max',
+        reasoningEfforts: ['low', 'medium', 'high'],
+        thinkingEnabled: true,
+        thinkingLevel: 'high',
+      }),
+    ).toBe('high')
+  })
+
+  it('shows the override verbatim when no explicit effort is set', () => {
+    expect(resolveDisplayEffort({ reasoningEfforts: ['low', 'medium', 'high'], override: 'deep' })).toBe('deep')
+  })
+
+  it('does not show a thinkingLevel default the model does not advertise (it would be dropped)', () => {
+    expect(
+      resolveDisplayEffort({ reasoningEfforts: ['low', 'high'], thinkingEnabled: true, thinkingLevel: 'turbo' }),
+    ).toBeUndefined()
+  })
+
+  it('shows the thinkingLevel default when advertised', () => {
+    expect(
+      resolveDisplayEffort({
+        reasoningEfforts: ['low', 'medium', 'high'],
+        thinkingEnabled: true,
+        thinkingLevel: 'medium',
+      }),
+    ).toBe('medium')
+  })
+
+  it('without a preset list the explicit effort or override passes through', () => {
+    expect(resolveDisplayEffort({ explicitEffort: 'max' })).toBe('max')
+    expect(resolveDisplayEffort({ override: 'deep' })).toBe('deep')
+    expect(resolveDisplayEffort({})).toBeUndefined()
   })
 })
 

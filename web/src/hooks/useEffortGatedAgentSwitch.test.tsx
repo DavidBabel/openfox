@@ -17,15 +17,17 @@ vi.mock('../stores/session', () => ({
     }),
 }))
 
-let mockSessionMode = 'builder'
 let mockWarmCache = true
 let mockOverrides: Record<string, string> = {}
+let mockSession: Record<string, unknown> = { id: 'session-1', mode: 'builder', providerReasoningEffort: 'high' }
+let mockProviders: Array<Record<string, unknown>> = []
+let mockDefaultModelSelection: string | null = null
 
 vi.mock('../stores/session/session-scope', () => ({
   useSessionScope: () => 'session-1',
   useScopedPaneState: (_id: string, _pick: unknown, flatPick: (s: unknown) => unknown) =>
     flatPick({
-      currentSession: { id: 'session-1', mode: mockSessionMode, providerReasoningEffort: 'high' },
+      currentSession: mockSession,
       contextState: { warmCache: mockWarmCache },
     }),
 }))
@@ -35,7 +37,8 @@ vi.mock('../stores/agents', () => ({
 }))
 
 vi.mock('../stores/config', () => ({
-  useConfigStore: (selector: (s: unknown) => unknown) => selector({ providers: [], defaultModelSelection: null }),
+  useConfigStore: (selector: (s: unknown) => unknown) =>
+    selector({ providers: mockProviders, defaultModelSelection: mockDefaultModelSelection }),
 }))
 
 import { useEffortGatedAgentSwitch } from './useEffortGateContext'
@@ -48,8 +51,10 @@ describe('useEffortGatedAgentSwitch (criterion 4 — all agent-selection entry p
   beforeEach(() => {
     vi.clearAllMocks()
     mockOverrides = {}
-    mockSessionMode = 'builder'
     mockWarmCache = true
+    mockSession = { id: 'session-1', mode: 'builder', providerReasoningEffort: 'high' }
+    mockProviders = []
+    mockDefaultModelSelection = null
   })
 
   it('switches directly when the target agent has no effort override', async () => {
@@ -108,5 +113,39 @@ describe('useEffortGatedAgentSwitch (criterion 4 — all agent-selection entry p
     expect(mockPinEffort).toHaveBeenCalledWith('session-1', 'high')
     expect(mockClearPin).not.toHaveBeenCalled()
     expect(mockSwitchMode).toHaveBeenCalledWith('session-1', 'explorer')
+  })
+
+  it('does not gate when the current effort is a non-vocabulary model default (nothing to keep)', async () => {
+    // The session's effective effort comes from the model's custom thinkingLevel,
+    // which is not a storable vocabulary value — Keep could never pin it, so the
+    // transition applies directly without the gate.
+    mockSession = { id: 'session-1', mode: 'builder' }
+    mockProviders = [
+      {
+        id: 'provider-1',
+        name: 'P',
+        url: 'http://localhost:8000/v1',
+        backend: 'vllm',
+        isLocal: true,
+        models: [
+          {
+            id: 'model',
+            contextWindow: 100000,
+            source: 'backend',
+            thinkingEnabled: true,
+            thinkingLevel: 'turbo',
+          },
+        ],
+      },
+    ]
+    mockDefaultModelSelection = 'provider-1/model'
+    mockOverrides = { explorer: 'provider-1/model:max' }
+    mockWarmCache = true
+
+    const { result } = renderHook(() => useEffortGatedAgentSwitch(), { wrapper })
+    await result.current('explorer', 'Explorer')
+    expect(mockSwitchMode).toHaveBeenCalledWith('session-1', 'explorer')
+    expect(mockPinEffort).not.toHaveBeenCalled()
+    expect(mockClearPin).not.toHaveBeenCalled()
   })
 })

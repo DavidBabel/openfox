@@ -180,4 +180,84 @@ describe('ModelPicker', () => {
     })
     expect(onChangeMock).toHaveBeenCalledWith('provider-1/qwen3-coder:high')
   })
+
+  it('preserves the effort when re-clicking the same model (does not silently drop it)', () => {
+    render('provider-1/qwen3-coder:high')
+    const btn = container.querySelector('button')!
+    act(() => {
+      btn.click()
+    })
+    const rowBtn = Array.from(document.body.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'qwen3 coder',
+    )
+    expect(rowBtn).toBeTruthy()
+    act(() => {
+      rowBtn?.click()
+    })
+    expect(onChangeMock).toHaveBeenCalledWith('provider-1/qwen3-coder:high')
+  })
+
+  it('resets the effort when clicking a different model', () => {
+    render('provider-1/qwen3-coder:high')
+    const btn = container.querySelector('button')!
+    act(() => {
+      btn.click()
+    })
+    const otherRow = Array.from(document.body.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'deepseek coder',
+    )
+    act(() => {
+      otherRow?.click()
+    })
+    expect(onChangeMock).toHaveBeenCalledWith('provider-1/deepseek-coder')
+  })
+
+  it('shows the model reasoningEffortOverride as the fallback effort in the label', () => {
+    const providerWithOverride: Provider = {
+      ...mockProviders[0]!,
+      models: [
+        {
+          id: 'qwen3-coder',
+          contextWindow: 32000,
+          source: 'backend',
+          reasoningEfforts: ['low', 'medium', 'high'],
+          thinkingEnabled: true,
+          thinkingLevel: 'medium',
+          reasoningEffortOverride: 'deep',
+        },
+      ],
+    }
+    act(() => {
+      root.render(
+        <ModelPicker providers={[providerWithOverride]} value={'provider-1/qwen3-coder'} onChange={onChangeMock} />,
+      )
+    })
+    // No explicit effort in the value — the override is shown as the effective default.
+    expect(container.innerHTML).toContain(':deep')
+  })
+
+  it('an explicit effort in the value wins over the override in the label', () => {
+    const providerWithOverride: Provider = {
+      ...mockProviders[0]!,
+      models: [
+        {
+          id: 'qwen3-coder',
+          contextWindow: 32000,
+          source: 'backend',
+          reasoningEffortOverride: 'deep',
+        },
+      ],
+    }
+    act(() => {
+      root.render(
+        <ModelPicker
+          providers={[providerWithOverride]}
+          value={'provider-1/qwen3-coder:high'}
+          onChange={onChangeMock}
+        />,
+      )
+    })
+    expect(container.innerHTML).toContain(':high')
+    expect(container.innerHTML).not.toContain(':deep')
+  })
 })

@@ -14,6 +14,7 @@ export interface ModelWithConfig {
   contextWindow: number
   source: 'backend' | 'user' | 'default'
   reasoningEfforts?: string[]
+  reasoningEffortOverride?: string
   thinkingLevel?: string
   thinkingEnabled?: boolean
 }
@@ -35,6 +36,7 @@ export function getVisibleModels(provider: Provider): ModelWithConfig[] {
     contextWindow: m.contextWindow,
     source: m.source ?? 'default',
     ...(m.reasoningEfforts?.length ? { reasoningEfforts: m.reasoningEfforts } : {}),
+    ...(m.reasoningEffortOverride ? { reasoningEffortOverride: m.reasoningEffortOverride } : {}),
     ...(m.thinkingLevel ? { thinkingLevel: m.thinkingLevel } : {}),
     ...(m.thinkingEnabled !== undefined ? { thinkingEnabled: m.thinkingEnabled } : {}),
   }))

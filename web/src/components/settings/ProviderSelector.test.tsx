@@ -14,12 +14,14 @@ function mockStore(initial: Record<string, any>): MockStore {
   const fn = vi.fn((selector?: (s: typeof state) => any) => {
     return selector ? selector(state) : state
   }) as unknown as MockStore
-  fn.setState = (partial: Record<string, any>) => {
-    state = { ...state, ...partial }
+  fn.setState = (partial: Record<string, any> | ((s: Record<string, any>) => Record<string, any>)) => {
+    state =
+      typeof partial === 'function'
+        ? { ...state, ...(partial as (s: Record<string, any>) => Record<string, any>)(state) }
+        : { ...state, ...partial }
   }
   return fn
 }
-
 const mockNavigate = vi.fn()
 
 vi.mock('wouter', () => ({
@@ -571,7 +573,10 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
           url: 'https://api.openai.com/v1',
           backend: 'openai',
           isLocal: false,
-          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          models: [
+            { id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true },
+            { id: 'gpt-4-mini', name: 'GPT-4 Mini', contextWindow: 128000, selected: true },
+          ],
           isActive: true,
         },
       ],
@@ -586,12 +591,12 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
 
     await user.click(screen.getByRole('button'))
 
-    const modelBtn = screen.getByText('GPT-4')
+    const modelBtn = screen.getByText('GPT-4 Mini')
     expect(modelBtn).toBeTruthy()
 
     await user.click(modelBtn)
 
-    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', null)
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-mini', null)
   })
 
   it('[AUTOMATED] AC-3 selecting a model without session calls activateProvider', async () => {
@@ -1700,5 +1705,389 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
 
     expect(screen.queryByText('Reasoning effort change')).toBeNull()
     expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'low')
+  })
+
+  it('[AUTOMATED] effort pick does not gate when the current effort is a non-vocabulary model default', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'turbo',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: true },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+
+    // The current effort is a custom thinkingLevel — not storable, so "Keep"
+    // could never pin it. The transition applies directly without the gate.
+    expect(screen.queryByText('Reasoning effort change')).toBeNull()
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'low')
+  })
+
+  it('[AUTOMATED] a failed provider write rolls back the optimistic session update', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn().mockResolvedValue(null)
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerReasoningEffort: 'high',
+      },
+      contextState: { warmCache: false },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    const { useSessionStore } = await import('../../stores/session')
+
+    await user.click(screen.getByRole('button'))
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+    await vi.waitFor(() => expect(mockSetSessionProvider).toHaveBeenCalled())
+
+    // The optimistic pick was rolled back once the server rejected the write:
+    // the session keeps its original provider/model and effort.
+    const current = (useSessionStore as unknown as MockStore)((s: any) => s.currentSession)
+    expect(current?.providerReasoningEffort).toBe('high')
+    expect(current?.providerModel).toBe('gpt-4')
+  })
+
+  it('[AUTOMATED] the dropdown stays open when the provider write fails (no silent success)', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn().mockResolvedValue(null)
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerReasoningEffort: 'high',
+      },
+      contextState: { warmCache: false },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+    await vi.waitFor(() => expect(mockSetSessionProvider).toHaveBeenCalled())
+
+    // The write failed: the dropdown is still open (search input present) so the
+    // user can retry instead of being shown a silent no-op.
+    expect(screen.queryByPlaceholderText('Search models...')).toBeTruthy()
+  })
+
+  it('[AUTOMATED] the label shows the sent (clamped) effort, not the raw agent override', async () => {
+    // The agent override carries ':max', but the model's preset list only
+    // advertises low/medium/high — the server clamps 'max' to 'low', so the
+    // label must show ':low' (the value actually sent), not ':max'.
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({ modelOverrides: { planner: 'provider-1/gpt-4:max' } })
+    renderProviderSelector()
+
+    expect(screen.getByRole('button').textContent).toContain(':low')
+    expect(screen.getByRole('button').textContent).not.toContain(':max')
+  })
+
+  it('[AUTOMATED] clicking the already-active model row is a no-op and does not clear the effort', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerReasoningEffort: 'high',
+      },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const activeRow = screen.getByText('GPT-4')
+    await user.click(activeRow)
+
+    // No write at all: re-clicking the active model must not silently clear the
+    // session effort (it is a no-op pick).
+    expect(mockSetSessionProvider).not.toHaveBeenCalled()
+  })
+
+  it('[AUTOMATED] a non-vocabulary reasoningEffortOverride is shown in the label as the fallback effort', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+              reasoningEffortOverride: 'deep',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    renderProviderSelector()
+
+    // The override (raw value) is the model default shown in the selector.
+    expect(screen.getByRole('button').textContent).toContain(':deep')
+  })
+
+  it('[AUTOMATED] a non-vocabulary override does not gate an effort pick (nothing storable to keep)', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+              reasoningEffortOverride: 'deep',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: true },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+
+    expect(screen.queryByText('Reasoning effort change')).toBeNull()
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'low')
+  })
+
+  it('[AUTOMATED] a vocabulary reasoningEffortOverride highlights its preset chip', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+              reasoningEffortOverride: 'high',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    // The override (a vocabulary value) is the effective default → the 'high'
+    // preset chip is highlighted as the active effort.
+    const highChip = screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'high')
+    expect(highChip?.className).toContain('bg-accent-primary/10')
+    const mediumChip = screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'medium')
+    expect(mediumChip?.className).not.toContain('bg-accent-primary/10')
   })
 })

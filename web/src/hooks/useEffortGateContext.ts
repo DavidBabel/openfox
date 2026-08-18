@@ -59,7 +59,9 @@ export function useEffortGateContext(explicitSessionId?: string | null | undefin
   const effectiveModelConfig = effectiveProviderId
     ? providers.find((p) => p.id === effectiveProviderId)?.models.find((m) => m.id === effectiveModel)
     : undefined
-  const modelDefaultEffort = effectiveModelConfig?.thinkingEnabled ? effectiveModelConfig.thinkingLevel : undefined
+  const modelDefaultEffort =
+    effectiveModelConfig?.reasoningEffortOverride ??
+    (effectiveModelConfig?.thinkingEnabled ? effectiveModelConfig.thinkingLevel : undefined)
 
   const currentEffort = resolveEffectiveEffort({
     session: currentSession,

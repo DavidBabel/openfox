@@ -7,6 +7,9 @@
  * choice when a warm cache exists.
  */
 
+import { isReasoningEffortValue } from './model-value'
+import { resolveEffortForModel } from '@shared/reasoning-effort.js'
+
 export interface EffortGateSession {
   providerReasoningEffort?: string | null
   providerPinnedEffort?: string | null
@@ -18,7 +21,7 @@ export interface ResolveEffectiveEffortOptions {
   session?: EffortGateSession | null
   /** Effort from the current agent's model override. */
   agentOverrideEffort?: string | undefined
-  /** Model's configured default effort (thinkingLevel). */
+  /** Model's configured default effort (thinkingLevel or reasoningEffortOverride). */
   modelDefaultEffort?: string | undefined
 }
 
@@ -30,6 +33,12 @@ export interface ResolveEffectiveEffortOptions {
  * An ACTIVE manual pick is authoritative: the server returns only its stored
  * effort (empty → the model's default effort applies), never the pin or an
  * agent override.
+ *
+ * The result is always a STORABLE effort: only shared-vocabulary values can be
+ * pinned or written to the session, so a custom model default (free-text
+ * `thinkingLevel` or a non-vocabulary override) resolves to undefined — there
+ * is nothing for "Keep" to preserve, and the gates treat it as "no current
+ * effort" (no modal, no pin).
  */
 export function resolveEffectiveEffort({
   session,
@@ -37,16 +46,19 @@ export function resolveEffectiveEffort({
   modelDefaultEffort,
 }: ResolveEffectiveEffortOptions): string | undefined {
   const isManual = !!session?.providerManual && !!session?.providerManualActive
-  if (isManual) return session?.providerReasoningEffort ?? modelDefaultEffort
-  const explicit = session?.providerPinnedEffort ?? agentOverrideEffort ?? session?.providerReasoningEffort ?? undefined
-  return explicit ?? modelDefaultEffort
+  const resolved = isManual
+    ? (session?.providerReasoningEffort ?? modelDefaultEffort)
+    : (session?.providerPinnedEffort ?? agentOverrideEffort ?? session?.providerReasoningEffort ?? modelDefaultEffort)
+  return resolved && isReasoningEffortValue(resolved) ? resolved : undefined
 }
 
 /**
  * Whether switching to `proposedEffort` should be gated: only when there is a
- * warm prefix cache AND a concrete current effort to preserve AND the proposed
- * effort genuinely differs from it. Fresh sessions, no-op picks, and cases with
- * no current effort (nothing for "Keep" to pin) apply immediately.
+ * warm prefix cache AND a concrete STORABLE current effort to preserve AND the
+ * proposed effort genuinely differs from it. Fresh sessions, no-op picks, and
+ * cases with no current effort (nothing for "Keep" to pin) apply immediately.
+ * A non-vocabulary current effort (custom thinkingLevel / override) is not
+ * storable, so it never gates — there is nothing "Keep" could pin.
  */
 export function shouldGateEffortChange(opts: {
   warmCache?: boolean
@@ -54,7 +66,42 @@ export function shouldGateEffortChange(opts: {
   proposedEffort?: string
 }): boolean {
   const { warmCache, currentEffort, proposedEffort } = opts
-  return !!warmCache && !!proposedEffort && !!currentEffort && proposedEffort !== currentEffort
+  const storableCurrent = currentEffort && isReasoningEffortValue(currentEffort) ? currentEffort : undefined
+  return !!warmCache && !!proposedEffort && !!storableCurrent && proposedEffort !== storableCurrent
+}
+
+export interface ResolveDisplayEffortOptions {
+  /** Explicit effort (session pick, pin, or agent override). */
+  explicitEffort?: string
+  /** The model's advertised preset list (UI chips). */
+  reasoningEfforts?: string[]
+  /** The model's configured thinkingLevel default. */
+  thinkingLevel?: string
+  thinkingEnabled?: boolean
+  /** The model's raw reasoning-effort override (sent verbatim). */
+  override?: string
+}
+
+/**
+ * The reasoning effort the server will actually SEND for the model: the
+ * explicit effort clamped to the preset list, else the override verbatim,
+ * else the thinkingLevel default if advertised, else nothing. Mirrors the
+ * server's resolveEffortForModel so labels and chip highlights never show a
+ * value that gets silently clamped or dropped at request time.
+ */
+export function resolveDisplayEffort({
+  explicitEffort,
+  reasoningEfforts,
+  thinkingLevel,
+  thinkingEnabled,
+  override,
+}: ResolveDisplayEffortOptions): string | undefined {
+  return resolveEffortForModel({
+    ...(reasoningEfforts?.length ? { reasoningEfforts } : {}),
+    ...(explicitEffort ? { candidate: explicitEffort } : {}),
+    ...(thinkingEnabled && thinkingLevel ? { defaultEffort: thinkingLevel } : {}),
+    ...(override ? { override } : {}),
+  })
 }
 
 export interface WorkflowStepLike {

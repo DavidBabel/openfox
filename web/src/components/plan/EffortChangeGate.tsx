@@ -61,14 +61,14 @@ export function EffortChangeGateProvider({ children }: { children: ReactNode }) 
                 {currentEffortClause(pending.info)}.
               </>
             )}{' '}
-            This will invalidate the LLM prefix cache — the next response will take longer while the context is
-            reprocessed.
+            This may invalidate the LLM prefix cache — if it does, the next response will take longer while the context
+            is reprocessed.
           </p>
           <div className="flex justify-end gap-2 mt-4">
             <ModalButton onClick={() => choose('keep')} variant="secondary">
               Keep current reasoning effort
             </ModalButton>
-            <ModalButton onClick={() => choose('apply')} variant="primary">
+            <ModalButton onClick={() => choose('apply')} variant="danger">
               Apply the reasoning effort (invalidates cache)
             </ModalButton>
           </div>
@@ -84,13 +84,15 @@ function ModalButton({
   children,
 }: {
   onClick: () => void
-  variant: 'primary' | 'secondary'
+  variant: 'primary' | 'secondary' | 'danger'
   children: ReactNode
 }) {
   const className =
     variant === 'primary'
       ? 'px-3 py-1.5 text-sm rounded bg-accent-primary text-white hover:opacity-90 transition-colors'
-      : 'px-3 py-1.5 text-sm rounded bg-bg-tertiary text-text-primary hover:bg-border transition-colors'
+      : variant === 'danger'
+        ? 'px-3 py-1.5 text-sm rounded bg-accent-error text-white hover:opacity-90 transition-colors'
+        : 'px-3 py-1.5 text-sm rounded bg-bg-tertiary text-text-primary hover:bg-border transition-colors'
   return (
     <button type="button" onClick={onClick} className={className}>
       {children}

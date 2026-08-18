@@ -4,6 +4,7 @@ import { getModelProfile } from '../../llm/profiles.js'
 import type { LLMClientWithModel } from '../../llm/client.js'
 import type { ProviderTransportAdapter } from '../../../provider/index.js'
 import { resolveAttachmentsInMessages } from '../../llm/client-pure.js'
+import { resolveEffortForModel } from '../../../shared/reasoning-effort.js'
 
 export function createTransportLLMClient(
   provider: Provider,
@@ -42,18 +43,22 @@ export function createTransportLLMClient(
 
   // Resolve the effort for a request: an explicit request-level effort wins,
   // then the client's (session/override) effort, then the model's configured
-  // thinkingLevel — mirroring createLLMClient.
+  // default — mirroring createLLMClient. The model's advertised preset list is
+  // honored: in-list efforts pass through, out-of-list explicit efforts clamp
+  // to the model default, and the raw reasoningEffortOverride is never clamped.
   const resolveEffort = (request: {
     reasoningEffort?: string
     skipClientReasoningEffort?: boolean
   }): import('../../llm/types.js').ReasoningEffort | undefined => {
     if (request.skipClientReasoningEffort) return undefined
-    if (request.reasoningEffort) return request.reasoningEffort as import('../../llm/types.js').ReasoningEffort
-    if (effort) return effort as import('../../llm/types.js').ReasoningEffort
     const configured = provider.models.find((item) => item.id === model)
-    return configured?.thinkingEnabled
-      ? (configured?.thinkingLevel as import('../../llm/types.js').ReasoningEffort | undefined)
-      : undefined
+    const candidate = request.reasoningEffort ?? effort
+    return resolveEffortForModel({
+      ...(configured?.reasoningEfforts?.length ? { reasoningEfforts: configured.reasoningEfforts } : {}),
+      ...(candidate ? { candidate } : {}),
+      ...(configured?.thinkingEnabled && configured.thinkingLevel ? { defaultEffort: configured.thinkingLevel } : {}),
+      ...(configured?.reasoningEffortOverride ? { override: configured.reasoningEffortOverride } : {}),
+    }) as import('../../llm/types.js').ReasoningEffort | undefined
   }
 
   // Resolve the request as delivered to the transport: attachments inlined and

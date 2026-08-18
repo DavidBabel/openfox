@@ -830,6 +830,30 @@ describe('ProviderManager - Model Selection', () => {
       expect(manager.getProviders()[0]!.models[0]!.reasoningEfforts).toEqual(['low', 'high'])
     })
 
+    it('preserves an explicitly-empty reasoningEfforts list (user cleared all presets)', () => {
+      const manager = buildManager([
+        {
+          id: 'p',
+          name: 'Local',
+          url: 'http://localhost:8000/v1',
+          backend: 'vllm',
+          models: [
+            {
+              id: 'deepseek-v4-flash',
+              contextWindow: 1_000_000,
+              source: 'default' as const,
+              reasoningEfforts: [],
+            },
+          ],
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+      ])
+
+      // An explicit empty list means "no chips" — the catalog must not refill it.
+      expect(manager.getProviders()[0]!.models[0]!.reasoningEfforts).toEqual([])
+    })
+
     it('leaves unknown models untouched', () => {
       const manager = buildManager([
         {
@@ -844,6 +868,147 @@ describe('ProviderManager - Model Selection', () => {
       ])
 
       expect(manager.getProviders()[0]!.models[0]!.reasoningEfforts).toBeUndefined()
+    })
+  })
+
+  describe('reasoning effort resolution (model presets + override)', () => {
+    function buildManager(providers: Provider[]) {
+      return createProviderManager({
+        providers,
+        defaultModelSelection: 'p/model-a',
+        server: { port: 10369, host: '127.0.0.1', openBrowser: true },
+        logging: { level: 'info' as const },
+        database: { path: '' },
+        llm: {
+          baseUrl: 'http://localhost:8000/v1',
+          model: 'model-a',
+          timeout: 120000,
+          idleTimeout: 30000,
+          backend: 'vllm',
+        },
+        context: { maxTokens: 4096, compactionThreshold: 10000, compactionTarget: 8000 },
+        agent: { maxIterations: 100, maxConsecutiveFailures: 5, toolTimeout: 30000 },
+        workdir: process.cwd(),
+      })
+    }
+
+    function providerWith(models: Provider['models']): Provider {
+      return {
+        id: 'p',
+        name: 'Local',
+        url: 'http://localhost:8000/v1',
+        backend: 'vllm',
+        models,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      }
+    }
+
+    it('passes an in-list session effort through', () => {
+      const manager = buildManager([
+        providerWith([
+          { id: 'model-a', contextWindow: 100000, source: 'default' as const, reasoningEfforts: ['low', 'high'] },
+        ]),
+      ])
+      manager.createClient('p', 'model-a', 'low')
+      const config = createLLMClientMock.mock.calls.at(-1)![0]!
+      expect(config.llm.reasoningEffort).toBe('low')
+    })
+
+    it('clamps an out-of-list session effort to the model default', () => {
+      const manager = buildManager([
+        providerWith([
+          {
+            id: 'model-a',
+            contextWindow: 100000,
+            source: 'default' as const,
+            reasoningEfforts: ['low', 'high'],
+            thinkingEnabled: true,
+            thinkingLevel: 'high',
+          },
+        ]),
+      ])
+      manager.createClient('p', 'model-a', 'medium')
+      const config = createLLMClientMock.mock.calls.at(-1)![0]!
+      expect(config.llm.reasoningEffort).toBe('high')
+    })
+
+    it('uses the reasoningEffortOverride as the default and never clamps it', () => {
+      const manager = buildManager([
+        providerWith([
+          {
+            id: 'model-a',
+            contextWindow: 100000,
+            source: 'default' as const,
+            reasoningEfforts: ['low', 'high'],
+            reasoningEffortOverride: 'deep',
+          },
+        ]),
+      ])
+      manager.createClient('p', 'model-a')
+      const config = createLLMClientMock.mock.calls.at(-1)![0]!
+      expect(config.llm.reasoningEffort).toBe('deep')
+    })
+
+    it('sends no effort for a preset list with no default and no explicit effort', () => {
+      const manager = buildManager([
+        providerWith([
+          { id: 'model-a', contextWindow: 100000, source: 'default' as const, reasoningEfforts: ['low', 'high'] },
+        ]),
+      ])
+      manager.createClient('p', 'model-a')
+      const config = createLLMClientMock.mock.calls.at(-1)![0]!
+      expect(config.llm.reasoningEffort).toBeUndefined()
+    })
+
+    it('keeps the model default when no preset list is advertised', () => {
+      const manager = buildManager([
+        providerWith([
+          {
+            id: 'model-a',
+            contextWindow: 100000,
+            source: 'default' as const,
+            thinkingEnabled: true,
+            thinkingLevel: 'medium',
+          },
+        ]),
+      ])
+      manager.createClient('p', 'model-a')
+      const config = createLLMClientMock.mock.calls.at(-1)![0]!
+      expect(config.llm.reasoningEffort).toBe('medium')
+    })
+
+    it('persists reasoningEfforts and reasoningEffortOverride via updateModelSettings', async () => {
+      const manager = buildManager([
+        providerWith([{ id: 'model-a', contextWindow: 100000, source: 'default' as const }]),
+      ])
+      const result = await manager.updateModelSettings('p', 'model-a', {
+        reasoningEfforts: ['low', 'medium'],
+        reasoningEffortOverride: 'deep',
+      })
+      expect(result.success).toBe(true)
+      expect(result.model?.reasoningEfforts).toEqual(['low', 'medium'])
+      expect(result.model?.reasoningEffortOverride).toBe('deep')
+      const stored = manager.getProviders()[0]!.models.find((m) => m.id === 'model-a')!
+      expect(stored.reasoningEfforts).toEqual(['low', 'medium'])
+      expect(stored.reasoningEffortOverride).toBe('deep')
+    })
+
+    it('catalog enrichment never overrides a stored preset list or override', () => {
+      const manager = buildManager([
+        providerWith([
+          {
+            id: 'deepseek-v4-flash',
+            contextWindow: 1_000_000,
+            source: 'default' as const,
+            reasoningEfforts: ['low'],
+            reasoningEffortOverride: 'deep',
+          },
+        ]),
+      ])
+      const model = manager.getProviders()[0]!.models[0]!
+      expect(model.reasoningEfforts).toEqual(['low'])
+      expect(model.reasoningEffortOverride).toBe('deep')
     })
   })
 })
