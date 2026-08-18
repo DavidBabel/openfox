@@ -40,6 +40,9 @@ const VALID_ACTIONS: TaskAction[] = ['list', 'create', 'edit', 'move', 'set_gate
 
 const LIST_STATUSES = ['todo', 'in_progress', 'done', 'all'] as const
 
+const LIST_DEFAULT_LIMIT = 10
+const LIST_MAX_LIMIT = 25
+
 interface ProjectTasksArgs {
   action: TaskAction
   taskId?: string
@@ -53,6 +56,8 @@ interface ProjectTasksArgs {
   gateId?: string
   value?: string
   status?: 'todo' | 'in_progress' | 'done' | 'all'
+  limit?: number
+  offset?: number
   expectedVersion?: number
 }
 
@@ -73,7 +78,7 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
         '- Stale writes fail with CONFLICT — re-list and retry.\n\n' +
         'Actions:\n' +
         '- list: tasks (status, gate values, queue position, bound session, audit trail); defaults to open tasks, ' +
-        'filter via status (todo | in_progress | done | all)\n' +
+        'filter via status (todo | in_progress | done | all); paginated — limit 10 max 25, page with offset\n' +
         '- create: add a task to To Do (prompt required)\n' +
         '- edit: update prompt/attachments/agent/model (taskId + fields)\n' +
         '- move: change column (to: todo | in_progress | done; optional reason)\n' +
@@ -97,6 +102,15 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
             type: 'string',
             enum: ['todo', 'in_progress', 'done', 'all'],
             description: 'Column filter for action=list (default: open tasks)',
+          },
+          limit: {
+            type: 'number',
+            description: 'Max tasks to return for action=list (default: 10, max: 25)',
+          },
+          offset: {
+            type: 'number',
+            description:
+              'Number of tasks to skip for action=list pagination (default: 0). Pages are snapshots — re-list after mutations.',
           },
           expectedVersion: {
             type: 'number',
@@ -127,13 +141,29 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
               `Invalid "status" filter for action=list: "${String(status)}". Expected one of: todo, in_progress, done, all.`,
             )
           }
+          const page = parseListPage(args.limit, args.offset)
+          if (!page.ok) return helpers.error(page.error)
           const tasks = svc.list(projectId)
           const filtered =
             status === 'all'
               ? tasks
               : tasks.filter((t) => (status === undefined ? t.status !== 'done' : t.status === status))
+          const pageTasks = filtered.slice(page.offset, page.offset + page.limit)
           const gates = getGateConfig(projectId)
-          return helpers.success(JSON.stringify({ gates, tasks: filtered.map((t) => taskForAgent(t)) }, null, 2))
+          return helpers.success(
+            JSON.stringify(
+              {
+                gates,
+                tasks: pageTasks.map((t) => taskForAgent(t)),
+                total: filtered.length,
+                limit: page.limit,
+                offset: page.offset,
+                hasMore: page.offset + page.limit < filtered.length,
+              },
+              null,
+              2,
+            ),
+          )
         }
 
         case 'create': {
@@ -241,6 +271,20 @@ export const PROJECT_TASKS_ACTIONS = VALID_ACTIONS
 // ============================================================================
 // Helpers
 // ============================================================================
+
+type ListPage = { ok: true; limit: number; offset: number } | { ok: false; error: string }
+
+function parseListPage(limit: number | undefined, offset: number | undefined): ListPage {
+  const pageSize = limit ?? LIST_DEFAULT_LIMIT
+  const skip = offset ?? 0
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > LIST_MAX_LIMIT) {
+    return { ok: false, error: `Invalid "limit" for action=list: must be an integer between 1 and ${LIST_MAX_LIMIT}.` }
+  }
+  if (!Number.isInteger(skip) || skip < 0) {
+    return { ok: false, error: 'Invalid "offset" for action=list: must be a non-negative integer.' }
+  }
+  return { ok: true, limit: pageSize, offset: skip }
+}
 
 function taskForAgent(task: import('../../shared/types.js').ProjectTask) {
   return {

@@ -212,7 +212,9 @@ Behavioral contract:
 
 ### 10.1 What the agent sees
 
-The tool surfaces, per task: title, description/prompt, attachments, current state, queue position, bound session, model, gate values and status, and the audit trail. It reads the world exactly as the modal renders it.
+The tool surfaces, per task: title, description/prompt, attachments, current state, queue position, bound session, model, gate values and status, and the audit trail. It reads the same facts the modal renders, one page at a time.
+
+The `list` action is paginated to keep agent context lean: it returns at most 10 tasks by default (max 25 via `limit`, `offset` for paging) plus a `total` and `hasMore` flag, so the agent pages through large boards instead of loading everything at once. Pages are snapshots of the board at call time — re-list after any mutation for a fresh, consistent view.
 
 ## 11. Situational Reminders
 

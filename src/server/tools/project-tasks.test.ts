@@ -106,6 +106,85 @@ describe('project_tasks tool', () => {
     expect(allParsed.tasks).toHaveLength(1)
   })
 
+  it('list paginates by default with limit 10, total, and hasMore', async () => {
+    for (let i = 0; i < 12; i++) {
+      service.create(projectId, { prompt: `Task ${i}` }, { actor: 'human' })
+    }
+    const result = await execute('list', {}, projectId)
+    expect(result.success).toBe(true)
+    const parsed = JSON.parse(result.output!) as {
+      tasks: unknown[]
+      total: number
+      limit: number
+      offset: number
+      hasMore: boolean
+    }
+    expect(parsed.tasks).toHaveLength(10)
+    expect(parsed.total).toBe(12)
+    expect(parsed.limit).toBe(10)
+    expect(parsed.offset).toBe(0)
+    expect(parsed.hasMore).toBe(true)
+  })
+
+  it('list supports offset paging to the remaining tasks', async () => {
+    for (let i = 0; i < 12; i++) {
+      service.create(projectId, { prompt: `Task ${i}` }, { actor: 'human' })
+    }
+    const result = await execute('list', { offset: 10 }, projectId)
+    expect(result.success).toBe(true)
+    const parsed = JSON.parse(result.output!) as { tasks: unknown[]; total: number; hasMore: boolean }
+    expect(parsed.tasks).toHaveLength(2)
+    expect(parsed.total).toBe(12)
+    expect(parsed.hasMore).toBe(false)
+  })
+
+  it('list honors an explicit limit and rejects one above the cap', async () => {
+    for (let i = 0; i < 5; i++) {
+      service.create(projectId, { prompt: `Task ${i}` }, { actor: 'human' })
+    }
+    const limited = await execute('list', { limit: 3 }, projectId)
+    expect(limited.success).toBe(true)
+    const parsed = JSON.parse(limited.output!) as { tasks: unknown[]; limit: number }
+    expect(parsed.tasks).toHaveLength(3)
+    expect(parsed.limit).toBe(3)
+
+    const over = await execute('list', { limit: 26 }, projectId)
+    expect(over.success).toBe(false)
+    expect(over.error).toContain('limit')
+  })
+
+  it('list applies the status filter before pagination', async () => {
+    for (let i = 0; i < 12; i++) {
+      service.create(projectId, { prompt: `Task ${i}` }, { actor: 'human' })
+    }
+    const listed = await execute('list', {}, projectId)
+    const tasks = (JSON.parse(listed.output!) as { tasks: { id: string }[] }).tasks
+    await execute('move', { taskId: tasks[0]!.id, to: 'in_progress' }, projectId)
+    await execute('move', { taskId: tasks[0]!.id, to: 'done' }, projectId)
+
+    const all = await execute('list', { status: 'all', limit: 5 }, projectId)
+    const allParsed = JSON.parse(all.output!) as { tasks: unknown[]; total: number; hasMore: boolean }
+    expect(allParsed.total).toBe(12)
+    expect(allParsed.tasks).toHaveLength(5)
+    expect(allParsed.hasMore).toBe(true)
+
+    const done = await execute('list', { status: 'done' }, projectId)
+    const doneParsed = JSON.parse(done.output!) as { tasks: unknown[]; total: number }
+    expect(doneParsed.tasks).toHaveLength(1)
+    expect(doneParsed.total).toBe(1)
+  })
+
+  it('rejects invalid limit and offset values with a clear error', async () => {
+    for (const bad of [{ limit: 0 }, { limit: -1 }, { limit: 1.5 }]) {
+      const result = await execute('list', bad, projectId)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('limit')
+    }
+    const badOffset = await execute('list', { offset: -1 }, projectId)
+    expect(badOffset.success).toBe(false)
+    expect(badOffset.error).toContain('offset')
+  })
+
   it('list with a single status column returns only that column', async () => {
     const created = await execute('create', { prompt: 'Two states' }, projectId)
     const task = JSON.parse(created.output!) as { id: string }
