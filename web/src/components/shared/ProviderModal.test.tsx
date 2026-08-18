@@ -790,7 +790,7 @@ describe('ProviderModal - effort presets and override editor', () => {
   }
 
   function save() {
-    const saveButton = container.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
     saveButton?.click()
   }
 
@@ -819,19 +819,21 @@ describe('ProviderModal - effort presets and override editor', () => {
     )
 
     // Remove 'high' from the presets.
-    const removeHigh = container.querySelector('button[aria-label="Remove preset high"]') as HTMLButtonElement | null
+    const removeHigh = document.body.querySelector(
+      'button[aria-label="Remove preset high"]',
+    ) as HTMLButtonElement | null
     expect(removeHigh).toBeTruthy()
     removeHigh?.click()
     await flush()
 
     // Add 'max' via the vocabulary selector.
-    const addSelect = container.querySelector('select[aria-label="Add effort preset"]') as HTMLSelectElement | null
+    const addSelect = document.body.querySelector('select[aria-label="Add effort preset"]') as HTMLSelectElement | null
     expect(addSelect).toBeTruthy()
     setSelectValue(addSelect!, 'max')
     await flush()
 
     // Set the raw override (native setter — React controlled inputs ignore direct assignment).
-    const overrideInput = container.querySelector(
+    const overrideInput = document.body.querySelector(
       'input[aria-label="Reasoning effort override"]',
     ) as HTMLInputElement | null
     expect(overrideInput).toBeTruthy()
@@ -861,7 +863,9 @@ describe('ProviderModal - effort presets and override editor', () => {
     )
 
     // Make a custom edit first, then reset.
-    const removeHigh = container.querySelector('button[aria-label="Remove preset high"]') as HTMLButtonElement | null
+    const removeHigh = document.body.querySelector(
+      'button[aria-label="Remove preset high"]',
+    ) as HTMLButtonElement | null
     removeHigh?.click()
     await flush()
 
@@ -893,13 +897,17 @@ describe('ProviderModal - effort presets and override editor', () => {
     )
 
     // Move 'low' down (becomes second).
-    const moveLowDown = container.querySelector('button[aria-label="Move preset low down"]') as HTMLButtonElement | null
+    const moveLowDown = document.body.querySelector(
+      'button[aria-label="Move preset low down"]',
+    ) as HTMLButtonElement | null
     expect(moveLowDown).toBeTruthy()
     moveLowDown?.click()
     await flush()
 
     // Move 'high' up (becomes second).
-    const moveHighUp = container.querySelector('button[aria-label="Move preset high up"]') as HTMLButtonElement | null
+    const moveHighUp = document.body.querySelector(
+      'button[aria-label="Move preset high up"]',
+    ) as HTMLButtonElement | null
     expect(moveHighUp).toBeTruthy()
     moveHighUp?.click()
     await flush()
@@ -925,9 +933,9 @@ describe('ProviderModal - effort presets and override editor', () => {
     )
 
     // Remove both chips — the list becomes explicitly empty, NOT reset to defaults.
-    ;(container.querySelector('button[aria-label="Remove preset low"]') as HTMLElement | null)?.click()
+    ;(document.body.querySelector('button[aria-label="Remove preset low"]') as HTMLElement | null)?.click()
     await flush()
-    ;(container.querySelector('button[aria-label="Remove preset medium"]') as HTMLElement | null)?.click()
+    ;(document.body.querySelector('button[aria-label="Remove preset medium"]') as HTMLElement | null)?.click()
     await flush()
 
     save()
@@ -950,7 +958,7 @@ describe('ProviderModal - effort presets and override editor', () => {
       'test-model',
     )
 
-    const overrideInput = container.querySelector(
+    const overrideInput = document.body.querySelector(
       'input[aria-label="Reasoning effort override"]',
     ) as HTMLInputElement | null
     expect(overrideInput?.value).toBe('deep')

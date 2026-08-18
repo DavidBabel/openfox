@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.123 - 2026-08-18
+
+### Features
+
+- **Reasoning effort is now a first-class citizen** — switch it per model from the model selector, with curated presets you can customize or override raw; pin it in agent overrides; see it as model:effort in message headers, turn stats and the selector; and have your picks stick as the model's default for future sessions
+- **Switching reasoning effort mid-run may invalidate your cache!** — the model selector asks first, so you can keep the current effort or apply the new one
+
+### Enhancements
+
+- **Task prompt auto-resizes** — save with Ctrl/Cmd+Enter, newlines via Enter/Shift+Enter, spellcheck off
+
 ## 2.0.122 - 2026-08-16
 
 ### Features
