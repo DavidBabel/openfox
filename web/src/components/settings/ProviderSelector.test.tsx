@@ -2,6 +2,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { EffortChangeGateProvider } from '../plan/EffortChangeGate'
 
 interface MockStore {
   (selector?: (state: any) => any): any
@@ -89,6 +90,7 @@ vi.mock('../shared/icons', () => ({
   StarIcon: ({ className }: any) => `<svg class="${className}">☆</svg>`,
   StarFilledIcon: ({ className }: any) => `<svg class="${className}">★</svg>`,
   SearchIcon: ({ className }: any) => `<svg class="${className}">🔍</svg>`,
+  PinIcon: ({ className }: any) => `<svg class="${className}">📍</svg>`,
 }))
 
 vi.mock('../shared/ProviderModal', () => ({
@@ -150,6 +152,14 @@ async function setAgentsState(partial: Record<string, any>) {
   ;(useAgentsStore as unknown as MockStore).setState(partial)
 }
 
+function renderProviderSelector(): ReturnType<typeof render> {
+  return render(
+    <EffortChangeGateProvider>
+      <ProviderSelector />
+    </EffortChangeGateProvider>,
+  )
+}
+
 describe('ProviderSelector', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -180,7 +190,7 @@ describe('ProviderSelector', () => {
       activeProviderId: null,
       defaultModelSelection: null,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     const button = screen.getByRole('button')
     expect(button).toBeTruthy()
     expect(button.textContent).toContain('No model')
@@ -203,7 +213,7 @@ describe('ProviderSelector', () => {
       activeProviderId: 'provider-1',
       defaultModelSelection: 'provider-1/gpt-4',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     const button = screen.getByRole('button')
     expect(button.textContent).toContain('OpenAI')
     expect(button.textContent).toContain('gpt 4')
@@ -226,7 +236,7 @@ describe('ProviderSelector', () => {
       activeProviderId: 'nonexistent-id',
       defaultModelSelection: 'nonexistent-id/gpt-4',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     const button = screen.getByRole('button')
     expect(button.textContent).not.toContain('•')
     expect(button.textContent).toContain('gpt 4')
@@ -248,7 +258,7 @@ describe('ProviderSelector', () => {
       activeProviderId: 'provider-1',
       defaultModelSelection: 'provider-1/llama3',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     expect(document.body.textContent).toMatch(/local|api/)
   })
 
@@ -258,7 +268,7 @@ describe('ProviderSelector', () => {
       activeProviderId: null,
       defaultModelSelection: null,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     expect(document.body.textContent).toMatch(/local|api/)
   })
 
@@ -286,7 +296,7 @@ describe('ProviderSelector', () => {
       },
       setSessionProvider: vi.fn(),
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     const button = screen.getByRole('button')
     expect(button.textContent).toContain('Anthropic')
     expect(button.textContent).toContain('claude opus 4')
@@ -321,7 +331,7 @@ describe('ProviderSelector', () => {
     await setAgentsState({
       modelOverrides: { planner: 'provider-1/gpt-4' },
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     // Colored dot should be rendered (indicates override is active)
     const dot = document.querySelector('.w-2\\.5')
     expect(dot).toBeTruthy()
@@ -355,7 +365,7 @@ describe('ProviderSelector', () => {
     await setAgentsState({
       modelOverrides: {},
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
     const dot = document.querySelector('.w-2\\.5')
     expect(dot).toBeFalsy()
   })
@@ -388,8 +398,7 @@ describe('ProviderSelector', () => {
     await setAgentsState({
       modelOverrides: {},
     })
-    const { rerender } = render(<ProviderSelector />)
-
+    const { rerender } = renderProviderSelector()
     // Initially no dot
     let dot = document.querySelector('.w-2\\.5')
     expect(dot).toBeFalsy()
@@ -398,7 +407,11 @@ describe('ProviderSelector', () => {
     await setAgentsState({
       modelOverrides: { planner: 'provider-1/gpt-4' },
     })
-    rerender(<ProviderSelector />)
+    rerender(
+      <EffortChangeGateProvider>
+        <ProviderSelector />
+      </EffortChangeGateProvider>,
+    )
 
     // Dot should appear
     dot = document.querySelector('.w-2\\.5')
@@ -409,6 +422,7 @@ describe('ProviderSelector', () => {
 describe('ProviderSelector search mode (AC 0-5)', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    await setAgentsState({ modelOverrides: {} })
     await setConfigState({
       providers: [],
       activeProviderId: null,
@@ -447,7 +461,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       activeProviderId: 'provider-1',
       defaultModelSelection: 'provider-1/gpt-4',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     const button = screen.getByRole('button')
     expect(button).toBeTruthy()
@@ -481,7 +495,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       activeProviderId: 'provider-1',
       defaultModelSelection: 'provider-1/gpt-4',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -529,7 +543,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       activeProviderId: 'provider-1',
       defaultModelSelection: 'provider-1/gpt-4',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -568,7 +582,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       currentSession: { id: 'session-1', providerId: 'provider-1', providerModel: 'gpt-4' },
       setSessionProvider: mockSetSessionProvider,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -577,7 +591,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
 
     await user.click(modelBtn)
 
-    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4')
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', null)
   })
 
   it('[AUTOMATED] AC-3 selecting a model without session calls activateProvider', async () => {
@@ -599,7 +613,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       defaultModelSelection: null,
       activateProvider: mockActivateProvider,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -630,7 +644,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       defaultModelSelection: 'provider-1/gpt-4',
       activateProvider: mockActivateProvider,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -661,7 +675,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       defaultModelSelection: 'provider-1/gpt-4',
       activateProvider: mockActivateProvider,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -699,7 +713,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       currentSession: { id: 'session-1', providerId: 'provider-1', providerModel: 'gpt-4' },
       setSessionProvider: mockSetSessionProvider,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -709,7 +723,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
 
     await user.keyboard('{Enter}')
 
-    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo')
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo', null)
   })
 
   it('[AUTOMATED] AC-6 Ctrl+M shortcut is wired to toggle dropdown', async () => {
@@ -729,7 +743,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       activeProviderId: 'provider-1',
       defaultModelSelection: 'provider-1/gpt-4',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     expect(useBinding).toHaveBeenCalled()
     const bindingArg = (useBinding as ReturnType<typeof vi.fn>).mock.calls.find(
@@ -755,7 +769,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       activeProviderId: 'provider-1',
       defaultModelSelection: 'provider-1/gpt-4',
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     // Click the trigger button to open
     const triggerBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('OpenAI'))
@@ -793,7 +807,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       currentSession: { id: 'session-1', providerId: 'provider-1', providerModel: 'gpt-4' },
       setSessionProvider: spy,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -805,7 +819,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    expect(spy).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo')
+    expect(spy).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo', null)
   })
 
   it('[AUTOMATED] AC-7 ArrowUp wraps past manage providers to last model, Enter selects it', async () => {
@@ -833,7 +847,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       currentSession: { id: 'session-1', providerId: 'provider-1', providerModel: 'gpt-4' },
       setSessionProvider: mockSetSessionProvider,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -846,7 +860,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     fireEvent.keyDown(input, { key: 'ArrowUp' })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo')
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo', null)
   })
 
   it('[AUTOMATED] highlights the effective override model as active, not the session preference', async () => {
@@ -882,7 +896,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     await setAgentsState({
       modelOverrides: { planner: 'provider-2/claude-3' },
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -925,7 +939,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     await setAgentsState({
       modelOverrides: {},
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -969,7 +983,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       setSessionProvider: mockSetSessionProvider,
     })
     await setAgentsState({ modelOverrides: { planner: 'provider-2/claude-3' } })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -1023,7 +1037,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     await setAgentsState({
       modelOverrides: { planner: 'provider-2/claude-3' },
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -1076,7 +1090,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     await setAgentsState({
       modelOverrides: { planner: 'provider-2/claude-3' },
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -1116,7 +1130,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       setSessionProvider: vi.fn(),
       resetSessionProvider: mockReset,
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -1166,7 +1180,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       setSessionProvider: vi.fn(),
       resetSessionProvider: vi.fn(),
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
@@ -1201,10 +1215,490 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
       setSessionProvider: vi.fn(),
       resetSessionProvider: vi.fn(),
     })
-    render(<ProviderSelector />)
+    renderProviderSelector()
 
     await user.click(screen.getByRole('button'))
 
     expect(screen.queryByText('Reset to default')).toBeNull()
+  })
+
+  it('[AUTOMATED] shows model:effort in the stats-bar label for a session effort pick', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerReasoningEffort: 'high',
+        providerManual: true,
+        providerManualActive: true,
+      },
+      setSessionProvider: vi.fn(),
+    })
+    renderProviderSelector()
+    const button = screen.getByRole('button')
+    expect(button.textContent).toContain('gpt 4')
+    expect(button.textContent).toContain(':high')
+  })
+
+  it('[AUTOMATED] falls back to the model thinkingLevel for the stats-bar label when no explicit effort', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              thinkingEnabled: true,
+              thinkingLevel: 'high',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    renderProviderSelector()
+    const button = screen.getByRole('button')
+    expect(button.textContent).toContain(':high')
+  })
+
+  it('[AUTOMATED] renders effort chips in the dropdown and switching effort calls setSessionProvider', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    // Effort chips are rendered for the model
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    expect(chips.length).toBe(3)
+
+    // Clicking an effort chip picks the model at that effort (manual session pick)
+    await user.click(chips[0]!)
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'low')
+  })
+
+  it('[AUTOMATED] agent override effort appears in the stats-bar label', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high', 'max'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({ modelOverrides: { planner: 'provider-1/gpt-4:max' } })
+    renderProviderSelector()
+    const button = screen.getByRole('button')
+    expect(button.textContent).toContain(':max')
+  })
+
+  it('[AUTOMATED] a pinned effort (Keep current) wins over the agent override in the stats-bar label', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high', 'max'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerPinnedEffort: 'medium',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({ modelOverrides: { planner: 'provider-1/gpt-4:max' } })
+    renderProviderSelector()
+    const button = screen.getByRole('button')
+    // The pin ("Keep current reasoning effort") wins over the agent's max.
+    expect(button.textContent).toContain(':medium')
+    expect(button.textContent).not.toContain(':max')
+    // A pin indicator is shown so the label distinguishes a pinned effort from
+    // an agent override or a plain session pick.
+    expect(button.textContent).toContain('📍')
+  })
+
+  it('[AUTOMATED] no pin indicator when the effort is not pinned', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    await setAgentsState({ modelOverrides: { planner: 'provider-1/gpt-4:max' } })
+    renderProviderSelector()
+    expect(screen.getByRole('button').textContent).not.toContain('📍')
+  })
+
+  it('[AUTOMATED] unpin affordance clears the pinned effort from the dropdown', async () => {
+    const user = userEvent.setup()
+    const mockClearPin = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high', 'max'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerPinnedEffort: 'medium',
+      },
+      setSessionProvider: vi.fn(),
+      clearSessionEffortPin: mockClearPin,
+    })
+    await setAgentsState({ modelOverrides: { planner: 'provider-1/gpt-4:max' } })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const unpin = screen.getByText('Unpin reasoning effort')
+    expect(unpin).toBeTruthy()
+    await user.click(unpin)
+    expect(mockClearPin).toHaveBeenCalledWith('session-1')
+  })
+
+  it('[AUTOMATED] no unpin affordance when nothing is pinned', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+      clearSessionEffortPin: vi.fn(),
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    expect(screen.queryByText('Unpin reasoning effort')).toBeNull()
+  })
+
+  it('[AUTOMATED] effort pick on a warm cache shows the gate; Apply commits the pick', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: true },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    // Click an effort chip that differs from the current (thinkingLevel medium).
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+
+    // The gate modal appears; Apply commits the manual pick.
+    expect(screen.getByText('Reasoning effort change')).toBeTruthy()
+    await user.click(screen.getByText('Apply the reasoning effort (invalidates cache)'))
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'low')
+  })
+
+  it('[AUTOMATED] effort pick gate: Keep proceeds with the model pick but preserves the current effort', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: true },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+
+    expect(screen.getByText('Reasoning effort change')).toBeTruthy()
+    await user.click(screen.getByText('Keep current reasoning effort'))
+    // Keep does NOT discard the pick: it commits the model at the current
+    // effort (thinkingLevel medium) so the pick continues cache-safely.
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'medium')
+  })
+
+  it('[AUTOMATED] effort pick on a cold cache applies immediately without the gate', async () => {
+    const user = userEvent.setup()
+    const mockSetSessionProvider = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      contextState: { warmCache: false },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const chips = screen.getAllByRole('button').filter((b) => ['low', 'medium', 'high'].includes(b.textContent ?? ''))
+    await user.click(chips[0]!)
+
+    expect(screen.queryByText('Reasoning effort change')).toBeNull()
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4', 'low')
   })
 })

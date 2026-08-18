@@ -172,6 +172,7 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
         providerName: provider?.name ?? resolved.override.providerId,
         backend: provider?.backend ?? resolved.client.getBackend(),
         model: resolved.override.model,
+        ...(resolved.override.reasoningEffort ? { reasoningEffort: resolved.override.reasoningEffort } : {}),
       }
       // Use model settings from the override provider/model, not the session model
       overrideModelSettings = providerManager.getModelSettings(resolved.override.providerId, resolved.override.model)
@@ -208,7 +209,11 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
       // may be running a top-level override that must not leak into sub-agents.
       const effective = sessionManager.resolveEffectiveProviderModel(sessionId, subAgentType)
       if (effective.providerId && effective.model) {
-        const effectiveClient = providerManager.createClient(effective.providerId, effective.model)
+        const effectiveClient = providerManager.createClient(
+          effective.providerId,
+          effective.model,
+          effective.reasoningEffort,
+        )
         if (effectiveClient) {
           llmClient = effectiveClient
           const provider = providerManager.getProviders().find((p) => p.id === effective.providerId)
@@ -217,6 +222,7 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
             providerName: provider?.name ?? effective.providerId,
             backend: provider?.backend ?? effectiveClient.getBackend(),
             model: effective.model,
+            ...(effective.reasoningEffort ? { reasoningEffort: effective.reasoningEffort } : {}),
           }
         }
       }

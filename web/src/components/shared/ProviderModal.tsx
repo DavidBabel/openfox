@@ -37,6 +37,7 @@ interface ModelConfig {
   supportsVision?: boolean
   thinkingEnabled?: boolean
   thinkingLevel?: string
+  reasoningEfforts?: string[]
   nonThinkingEnabled?: boolean
   thinkingExtraKwargs?: string
   nonThinkingExtraKwargs?: string
@@ -906,6 +907,8 @@ export function ProviderModal({
           nonThinkingConfig: Record<string, unknown> | null
           sendReasoningInMessages?: boolean
           rejectedParams?: string[]
+          reasoningEfforts?: string[]
+          defaultReasoningEffort?: string
         }>
       }
       for (const m of data.models) {
@@ -918,6 +921,11 @@ export function ProviderModal({
         if (m.thinkingConfig) {
           config.thinkingEnabled = true
           config.thinkingQueryParams = JSON.stringify(m.thinkingConfig)
+          const current = modelConfigs[m.id]
+          // Discovered reasoning efforts imply thinking support. Default the
+          // thinking level (prefer the probe/catalog default) so it isn't inert.
+          config.thinkingLevel =
+            current?.thinkingLevel ?? m.defaultReasoningEffort ?? defaultReasoningEffort(m.reasoningEfforts)
         }
         if (m.nonThinkingConfig) {
           config.nonThinkingEnabled = true
@@ -928,6 +936,11 @@ export function ProviderModal({
         }
         if (m.rejectedParams && m.rejectedParams.length > 0) {
           config.omitParams = m.rejectedParams
+        }
+        if (m.reasoningEfforts && m.reasoningEfforts.length > 0) {
+          // Keep the advertised effort list even without a detected thinking
+          // combo, so the UI can still offer effort chips for the model.
+          config.reasoningEfforts = m.reasoningEfforts
         }
         updateModelConfig(m.id, config)
         setAutoConfigState((prev) => ({

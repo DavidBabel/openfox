@@ -264,6 +264,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               const stats = element.stats
               if (!stats || 'error' in stats) return null
               const shortModel = stats.model.split('/').pop() ?? stats.model
+              const modelLabel = stats.reasoningEffort ? `${shortModel}:${stats.reasoningEffort}` : shortModel
               const modeColor = getAgentColor(agents, stats.mode)
               const agentInfo = agents.find((a) => a.id === stats.mode)
               const modeName = agentInfo?.name ?? stats.mode
@@ -286,7 +287,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               return (
                 <div key={i} className="flex items-center justify-center gap-1.5 text-[10px] text-text-muted">
                   <span className="flex-1 h-px bg-border" />
-                  <span className="text-text-secondary">{shortModel}</span>
+                  <span className="text-text-secondary">{modelLabel}</span>
                   <span className="text-text-muted">·</span>
                   <span style={{ color: modeColor }}>{modeName}</span>
                   <span className="text-text-muted">·</span>

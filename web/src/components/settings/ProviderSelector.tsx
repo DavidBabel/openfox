@@ -8,26 +8,34 @@ import { useAgentsStore, getAgentColor } from '../../stores/agents'
 import { ProviderModal, providerFormPayload, type ProviderFormData } from '../shared/ProviderModal'
 import { Modal } from '../shared/Modal'
 import { authFetch } from '../../lib/api'
-import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon } from '../shared/icons'
+import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon, PinIcon } from '../shared/icons'
 import { useKeybindings, useBinding } from '../../hooks/useKeybindings'
 import { focusChatTextarea } from '../../lib/focusChatTextarea'
 import { shouldAutofocus } from '../../lib/device'
 import { useModelSearch, ModelEntryRow, type ModelWithConfig } from './model-list'
+import { parseModelValue } from '../../lib/model-value'
+import { shouldGateEffortChange } from '../../lib/effort-gate'
+import { useEffortChangeGate } from '../plan/EffortChangeGate'
 
 type ProviderLabelProps = {
   activeProvider: { name: string; isLocal?: boolean } | undefined
   shortModelName: string
+  effort?: string
   agentOverrideActive?: boolean
   agentColor?: string
   agentName?: string
+  /** The displayed effort comes from a session pin ("Keep current reasoning effort"). */
+  pinned?: boolean
 }
 
 function ProviderLabel({
   activeProvider,
   shortModelName,
+  effort,
   agentOverrideActive,
   agentColor,
   agentName,
+  pinned,
 }: ProviderLabelProps) {
   return (
     <>
@@ -43,9 +51,21 @@ function ProviderLabel({
           <>
             <span className="hidden @sm:inline">{activeProvider.name} • </span>
             {shortModelName}
+            {effort && <span className="text-text-muted">:{effort}</span>}
           </>
         ) : (
-          shortModelName
+          <>
+            {shortModelName}
+            {effort && <span className="text-text-muted">:{effort}</span>}
+          </>
+        )}
+        {pinned && (
+          <span
+            className="flex-shrink-0 text-text-muted"
+            title={`Reasoning effort pinned for this session (chosen via "Keep current reasoning effort").`}
+          >
+            <PinIcon className="w-3 h-3" />
+          </span>
         )}
       </span>
       <span
@@ -70,8 +90,16 @@ export function ProviderSelector() {
     (state) => state.currentSession,
     null,
   )
+  const contextState = useScopedPaneState(
+    sessionId,
+    (pane) => pane.contextState ?? null,
+    (state) => state.contextState,
+    null,
+  )
+  const gate = useEffortChangeGate()
   const setSessionProvider = useSessionStore((state) => state.setSessionProvider)
   const resetSessionProvider = useSessionStore((state) => state.resetSessionProvider)
+  const clearSessionEffortPin = useSessionStore((state) => state.clearSessionEffortPin)
   const [isOpen, setIsOpen] = useState(false)
   const [expandedProviderIds, setExpandedProviderIds] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState<string | null>(null)
@@ -111,6 +139,8 @@ export function ProviderSelector() {
   // Agent override takes precedence, then session, then global default
   const sessionProviderId = currentSession?.providerId ?? null
   const sessionModel = currentSession?.providerModel ?? null
+  const sessionReasoningEffort = currentSession?.providerReasoningEffort ?? null
+  const sessionPinnedEffort = currentSession?.providerPinnedEffort ?? null
   const defaultProviderId = defaultModelSelection?.split('/')[0] ?? null
   const defaultModel = defaultModelSelection?.split('/').slice(1).join('/') ?? null
 
@@ -123,8 +153,10 @@ export function ProviderSelector() {
     ? (agentDefaults.find((a) => a.id === currentAgentId) ?? agentUserItems.find((a) => a.id === currentAgentId))
     : undefined
   const agentOverride = currentAgentId ? (modelOverrides[currentAgentId] ?? undefined) : undefined
-  const agentOverrideProviderId = agentOverride ? (agentOverride.split('/')[0] ?? null) : null
-  const agentOverrideModel = agentOverride ? (agentOverride.split('/').slice(1).join('/') ?? null) : null
+  const agentOverrideParsed = agentOverride ? parseModelValue(agentOverride) : undefined
+  const agentOverrideProviderId = agentOverrideParsed?.providerId ?? null
+  const agentOverrideModel = agentOverrideParsed?.model ?? null
+  const agentOverrideEffort = agentOverrideParsed?.reasoningEffort
   const agentColor = currentAgentId ? getAgentColor([...agentDefaults, ...agentUserItems], currentAgentId) : undefined
 
   const isSessionManual = !!currentSession?.providerManual && !!currentSession?.providerManualActive
@@ -145,9 +177,33 @@ export function ProviderSelector() {
     ? sessionProviderId
     : (agentOverrideProviderId ?? sessionProviderId ?? defaultProviderId)
   const effectiveModel = isSessionManual ? sessionModel : (agentOverrideModel ?? sessionModel ?? defaultModel)
+  // The effective effort follows the same source as the model selection. A
+  // session-pinned effort ("Keep current reasoning effort") overrides agent
+  // override efforts without replacing the provider/model.
+  const effectiveEffort = isSessionManual
+    ? (sessionReasoningEffort ?? undefined)
+    : (sessionPinnedEffort ?? agentOverrideEffort ?? sessionReasoningEffort ?? undefined)
+  // A session pin ("Keep current reasoning effort") is active when a pin exists
+  // and no manual pick is currently winning — it applies regardless of agent
+  // override or session-stored effort.
+  const isEffortPinned = !!sessionPinnedEffort && !isSessionManual
   const shortModelName = effectiveModel
     ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
     : 'No model'
+
+  // Fall back to the model's configured thinking level for display, so the label
+  // reflects what will actually be sent even without an explicit session pick.
+  const activeProvider = providers.find((p) => p.id === effectiveProviderId)
+  const effectiveModelConfig = activeProvider?.models.find((m) => m.id === effectiveModel)
+  const modelDefaultEffort = effectiveModelConfig?.thinkingEnabled ? effectiveModelConfig?.thinkingLevel : undefined
+  const displayEffort = effectiveEffort ?? modelDefaultEffort
+
+  // The effort that is currently active for a given model row (only meaningful for
+  // the active model — other rows show no highlighted chip).
+  const effortForModel = (providerId: string, modelId: string): string | undefined => {
+    if (effectiveProviderId !== providerId || effectiveModel !== modelId) return undefined
+    return effectiveEffort ?? modelDefaultEffort
+  }
 
   const [settingDefault, setSettingDefault] = useState(false)
 
@@ -229,7 +285,6 @@ export function ProviderSelector() {
     }
   }, [deviceChallenge])
 
-  const activeProvider = providers.find((p) => p.id === effectiveProviderId)
   const isLlmOffline = activeProvider?.status === 'disconnected'
 
   const isSessionActive = (providerId: string, modelId: string): boolean => {
@@ -290,6 +345,14 @@ export function ProviderSelector() {
   const handleResetProvider = async () => {
     if (currentSession && sessionId) {
       resetSessionProvider(sessionId)
+      setIsOpen(false)
+      setExpandedProviderIds([])
+    }
+  }
+
+  const handleUnpinEffort = async () => {
+    if (currentSession && sessionId) {
+      clearSessionEffortPin(sessionId)
       setIsOpen(false)
       setExpandedProviderIds([])
     }
@@ -398,8 +461,45 @@ export function ProviderSelector() {
     setShowProviderModal(false)
   }
 
-  const handleModelClick = async (providerId: string, newModel: string) => {
+  const handleModelClick = async (providerId: string, newModel: string, reasoningEffort?: string) => {
     if (currentSession && sessionId) {
+      // Switching the reasoning effort on a warm cache invalidates the LLM prefix
+      // cache — gate it behind an explicit choice. Apply commits the full pick;
+      // Keep proceeds with the provider/model change but preserves the current
+      // effort (mirroring the agent-switch and workflow gates).
+      if (reasoningEffort) {
+        if (
+          shouldGateEffortChange({
+            warmCache: contextState?.warmCache,
+            currentEffort: displayEffort,
+            proposedEffort: reasoningEffort,
+          })
+        ) {
+          const choice = await gate.requestEffortSwitch({ fromEffort: displayEffort, toEffort: reasoningEffort })
+          if (choice === 'keep') {
+            // Commit the provider/model pick at the current effort so the
+            // transition proceeds without invalidating the cache.
+            useSessionStore.setState((state) => ({
+              ...state,
+              currentSession: state.currentSession
+                ? {
+                    ...state.currentSession,
+                    providerId,
+                    providerModel: newModel,
+                    providerReasoningEffort: displayEffort ?? null,
+                    providerManual: true,
+                    providerManualActive: true,
+                  }
+                : null,
+            }))
+            setSessionProvider(sessionId, providerId, newModel, displayEffort ?? null)
+            setExpandedProviderIds([])
+            setIsOpen(false)
+            focusChatTextarea()
+            return
+          }
+        }
+      }
       useSessionStore.setState((state) => ({
         ...state,
         currentSession: state.currentSession
@@ -407,12 +507,13 @@ export function ProviderSelector() {
               ...state.currentSession,
               providerId,
               providerModel: newModel,
+              providerReasoningEffort: reasoningEffort ?? null,
               providerManual: true,
               providerManualActive: true,
             }
           : null,
       }))
-      setSessionProvider(sessionId, providerId, newModel)
+      setSessionProvider(sessionId, providerId, newModel, reasoningEffort ?? null)
       setExpandedProviderIds([])
       setIsOpen(false)
       focusChatTextarea()
@@ -482,9 +583,11 @@ export function ProviderSelector() {
           <ProviderLabel
             activeProvider={activeProvider}
             shortModelName={shortModelName}
+            effort={displayEffort}
             agentOverrideActive={isAgentOverrideActive}
             agentColor={agentColor}
             agentName={currentAgent?.name}
+            pinned={isEffortPinned}
           />
         )}
         <span className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">↻</span>
@@ -506,9 +609,11 @@ export function ProviderSelector() {
           <ProviderLabel
             activeProvider={activeProvider}
             shortModelName={shortModelName}
+            effort={displayEffort}
             agentOverrideActive={isAgentOverrideActive}
             agentColor={agentColor}
             agentName={currentAgent?.name}
+            pinned={isEffortPinned}
           />
         )}
         <ChevronDownIcon className={`w-3 h-3 text-text-muted transition-transform`} rotate={isOpen ? 180 : 0} />
@@ -652,6 +757,9 @@ export function ProviderSelector() {
                                   onModelClick={handleModelClick}
                                   onSetDefault={handleSetDefault}
                                   onEditModel={handleEditModel}
+                                  reasoningEfforts={modelConfig.reasoningEfforts}
+                                  selectedEffort={effortForModel(group.provider.id, modelConfig.id)}
+                                  onSelectEffort={handleModelClick}
                                 />
                               </div>
                             )
@@ -674,6 +782,16 @@ export function ProviderSelector() {
               isManageHighlighted ? 'bg-bg-tertiary' : ''
             } flex-shrink-0`}
           >
+            {isEffortPinned && (
+              <button
+                type="button"
+                onClick={handleUnpinEffort}
+                className="text-xs text-text-muted hover:text-text-primary hover:underline"
+                title="Stop pinning the reasoning effort so agent overrides and session picks apply again"
+              >
+                Unpin reasoning effort
+              </button>
+            )}
             {hasSessionPreference && (
               <button
                 type="button"

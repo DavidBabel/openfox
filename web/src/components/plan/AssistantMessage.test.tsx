@@ -110,6 +110,68 @@ describe('AssistantMessage', () => {
     expect(html).not.toContain('>deepseek-v4<')
   })
 
+  it('shows the reasoning effort suffix in the stats bar when present', () => {
+    const html = renderToStaticMarkup(
+      <AssistantMessage
+        message={{
+          id: 'assistant-effort',
+          role: 'assistant',
+          content: '',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          tokenCount: 0,
+          isStreaming: false,
+          stats: {
+            providerId: 'openai',
+            providerName: 'OpenAI',
+            backend: 'openai',
+            model: 'deepseek-v4-flash',
+            reasoningEffort: 'high',
+            mode: 'planner',
+            totalTime: 3.2,
+            toolTime: 0.5,
+            prefillTokens: 8600,
+            prefillSpeed: 11500,
+            generationTokens: 124,
+            generationSpeed: 50.2,
+          },
+        }}
+      />,
+    )
+
+    expect(html).toContain('deepseek-v4-flash:high')
+  })
+
+  it('omits the effort suffix from the stats bar when none is set', () => {
+    const html = renderToStaticMarkup(
+      <AssistantMessage
+        message={{
+          id: 'assistant-no-effort',
+          role: 'assistant',
+          content: '',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          tokenCount: 0,
+          isStreaming: false,
+          stats: {
+            providerId: 'openai',
+            providerName: 'OpenAI',
+            backend: 'openai',
+            model: 'deepseek-v4-flash',
+            mode: 'planner',
+            totalTime: 3.2,
+            toolTime: 0.5,
+            prefillTokens: 8600,
+            prefillSpeed: 11500,
+            generationTokens: 124,
+            generationSpeed: 50.2,
+          },
+        }}
+      />,
+    )
+
+    expect(html).toContain('deepseek-v4-flash')
+    expect(html).not.toContain('deepseek-v4-flash:')
+  })
+
   it('renders persisted messages with null usage stats', () => {
     const message = {
       id: 'assistant-null-stats',

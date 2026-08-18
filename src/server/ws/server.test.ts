@@ -1788,8 +1788,14 @@ describe('createWebSocketServer', () => {
     expect(await harness.nextMessage((message) => message.id === 'runner-launch')).toMatchObject({ type: 'ack' })
 
     expect(resolveModelMock).toHaveBeenCalledWith('deepseek-provider', 'auto')
-    expect(createClientMock).toHaveBeenCalledWith('deepseek-provider', 'deepseek-chat')
-    expect(setSessionProvider).toHaveBeenCalledWith('session-apikey-test', 'deepseek-provider', 'deepseek-chat')
+    expect(createClientMock).toHaveBeenCalledWith('deepseek-provider', 'deepseek-chat', undefined)
+    expect(setSessionProvider).toHaveBeenCalledWith(
+      'session-apikey-test',
+      'deepseek-provider',
+      'deepseek-chat',
+      undefined,
+      undefined,
+    )
     expect(runOrchestratorMock).toHaveBeenCalledWith(
       expect.objectContaining({
         llmClient: mockSessionClient,
@@ -1883,7 +1889,7 @@ describe('createWebSocketServer', () => {
     harness.send({ id: 'runner-launch', type: 'runner.launch', payload: {} })
     expect(await harness.nextMessage((message) => message.id === 'runner-launch')).toMatchObject({ type: 'ack' })
 
-    expect(createClientMock).toHaveBeenCalledWith('deepseek-provider', 'override-model')
+    expect(createClientMock).toHaveBeenCalledWith('deepseek-provider', 'override-model', undefined)
     // The override-derived model must never overwrite the sticky manual preference.
     expect(setSessionProvider).not.toHaveBeenCalled()
 

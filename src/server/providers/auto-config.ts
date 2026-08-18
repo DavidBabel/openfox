@@ -6,6 +6,14 @@
 import { logger } from '../utils/logger.js'
 import { findLmStudioModel } from './lmstudio.js'
 import { ensureVersionPrefix } from '../llm/url-utils.js'
+import { getCatalogEntry } from './model-catalog.js'
+
+/** Build the standard JSON headers with optional bearer auth. */
+function buildAuthHeaders(apiKey: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+  return headers
+}
 
 // ============================================================================
 // Types
@@ -22,6 +30,10 @@ export interface ModelProbeResult {
   sendReasoningInMessages?: boolean
   /** Top-level request body params rejected by the model (to be stripped at request time). */
   rejectedParams?: string[]
+  /** Reasoning effort values the endpoint actually accepts (probed or catalog). */
+  reasoningEfforts?: string[]
+  /** Sensible default effort for the model (from the catalog). */
+  defaultReasoningEffort?: string
 }
 
 export interface AutoConfigInput {
@@ -109,10 +121,10 @@ async function detectModelInfo(
 }
 
 async function detectVllmInfo(baseUrl: string, apiKey: string | undefined, modelId: string): Promise<ModelInfo> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
-  const response = await fetch(`${ensureVersionPrefix(baseUrl)}/models`, { headers, signal: AbortSignal.timeout(5000) })
+  const response = await fetch(`${ensureVersionPrefix(baseUrl)}/models`, {
+    headers: buildAuthHeaders(apiKey),
+    signal: AbortSignal.timeout(5000),
+  })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
   const data = (await response.json()) as { data?: Array<{ id: string; max_model_len?: number }> }
@@ -199,9 +211,6 @@ async function probeCombo(
   combo: Record<string, unknown>,
   signal: AbortSignal,
 ): Promise<ProbeResult> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
   const body: Record<string, unknown> = {
     model,
     messages: [{ role: 'user', content: 'say hi in one word' }],
@@ -213,7 +222,7 @@ async function probeCombo(
   try {
     const response = await fetch(`${ensureVersionPrefix(baseUrl)}/chat/completions`, {
       method: 'POST',
-      headers,
+      headers: buildAuthHeaders(apiKey),
       body: JSON.stringify(body),
       signal,
     })
@@ -277,13 +286,10 @@ async function probeReasoningInMessages(
   apiKey: string | undefined,
   model: string,
 ): Promise<boolean | undefined> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
   try {
     const response = await fetch(`${ensureVersionPrefix(baseUrl)}/chat/completions`, {
       method: 'POST',
-      headers,
+      headers: buildAuthHeaders(apiKey),
       body: JSON.stringify({
         model,
         messages: [
@@ -302,6 +308,119 @@ async function probeReasoningInMessages(
     // based on an unavailable endpoint.
     return undefined
   }
+}
+
+// ============================================================================
+// Reasoning-effort probing
+// ============================================================================
+
+/** Candidate reasoning effort values to probe (skip 'none' — that's the non-thinking path). */
+const REASONING_EFFORT_CANDIDATES = ['low', 'medium', 'high', 'xhigh', 'max']
+
+interface EffortProbe {
+  effort: string
+  ok: boolean
+  promptTokens: number
+}
+
+/**
+ * Probe a single reasoning effort with `max_tokens: 0` and read the usage's
+ * prompt_tokens. A distinct system prompt (different effort level) shows up as
+ * a distinct prompt token count — which is how we tell which values actually
+ * have an impact without needing ground truth.
+ */
+async function probeReasoningEffort(
+  baseUrl: string,
+  apiKey: string | undefined,
+  model: string,
+  effort: string | undefined,
+  signal: AbortSignal,
+): Promise<EffortProbe> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: [{ role: 'user', content: 'say hi in one word' }],
+    max_tokens: 0,
+    ...(effort ? { reasoning_effort: effort } : {}),
+  }
+
+  try {
+    const response = await fetch(`${ensureVersionPrefix(baseUrl)}/chat/completions`, {
+      method: 'POST',
+      headers: buildAuthHeaders(apiKey),
+      body: JSON.stringify(body),
+      signal,
+    })
+    if (!response.ok) {
+      return { effort: effort ?? 'baseline', ok: false, promptTokens: 0 }
+    }
+    const data = (await response.json()) as { usage?: { prompt_tokens?: number } }
+    return {
+      effort: effort ?? 'baseline',
+      ok: true,
+      promptTokens: data.usage?.prompt_tokens ?? 0,
+    }
+  } catch {
+    return { effort: effort ?? 'baseline', ok: false, promptTokens: 0 }
+  }
+}
+
+/**
+ * Discover which reasoning effort values a model endpoint actually supports.
+ *
+ * Sends a baseline request plus one request per candidate effort (max_tokens: 0)
+ * and measures `usage.prompt_tokens`. Accepted values with a distinct prompt
+ * size represent genuinely different effort levels; values that map to an
+ * existing level (e.g. medium → high) collapse into the same token count and
+ * are deduped. Returns undefined when the endpoint rejects the probes entirely.
+ */
+async function probeReasoningEfforts(
+  baseUrl: string,
+  apiKey: string | undefined,
+  model: string,
+): Promise<string[] | undefined> {
+  const timeout = AbortSignal.timeout(15000)
+
+  const baseline = await probeReasoningEffort(baseUrl, apiKey, model, undefined, timeout)
+  if (!baseline.ok) {
+    // The endpoint rejects even a plain max_tokens:0 request — can't probe.
+    return undefined
+  }
+
+  const results = await Promise.all(
+    REASONING_EFFORT_CANDIDATES.map((effort) =>
+      probeReasoningEffort(baseUrl, apiKey, model, effort, timeout).then((r) => ({ ...r, effort })),
+    ),
+  )
+
+  const accepted = results.filter((r) => r.ok)
+  if (accepted.length === 0) {
+    return undefined
+  }
+
+  // Drop candidates whose prompt size matches the baseline when at least one
+  // candidate had a measurable impact — an accepted-but-ignored effort (same
+  // system prompt as the baseline) is not a real level. When nothing differs
+  // from the baseline we can't tell, so keep the accepted values.
+  const impactful = accepted.filter((r) => r.promptTokens !== baseline.promptTokens)
+  const pool = impactful.length > 0 ? impactful : accepted
+
+  // If every remaining value shares the same prompt size we can't differentiate
+  // levels — show all of them rather than hiding support entirely.
+  const distinctTokens = new Set(pool.map((r) => r.promptTokens))
+  if (distinctTokens.size <= 1) {
+    return pool.map((r) => r.effort)
+  }
+
+  // Keep the first value per distinct prompt size (candidate order),
+  // so mapped values (same prompt → same level) collapse into one entry.
+  const seen = new Set<number>()
+  const distinct: string[] = []
+  for (const r of pool) {
+    if (seen.has(r.promptTokens)) continue
+    seen.add(r.promptTokens)
+    distinct.push(r.effort)
+  }
+  return distinct
 }
 
 // ============================================================================
@@ -353,7 +472,7 @@ const DUMMY_TOOL = {
  *  the agentic loop's tool payload. Returns status + error text for parsing. */
 async function probeChatCompletions(
   baseUrl: string,
-  headers: Record<string, string>,
+  apiKey: string | undefined,
   model: string,
   samplingParams: string[],
 ): Promise<{ ok: boolean; status: number; errorText: string }> {
@@ -369,7 +488,7 @@ async function probeChatCompletions(
   try {
     const response = await fetch(`${ensureVersionPrefix(baseUrl)}/chat/completions`, {
       method: 'POST',
-      headers,
+      headers: buildAuthHeaders(apiKey),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),
     })
@@ -392,9 +511,6 @@ async function probeRejectedParams(
   model: string,
   backend: string,
 ): Promise<string[]> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
   // Start from all standard params; drop top_k for backends that don't support it.
   const candidates = [...STANDARD_PARAMS]
   if (['openai', 'anthropic', 'ollama'].includes(backend)) {
@@ -406,7 +522,7 @@ async function probeRejectedParams(
   // If the backend rejects even that (e.g. no function-tool support), 400s
   // cannot be attributed to specific params — bail out instead of letting
   // substring matches strip healthy params off unrelated errors.
-  const control = await probeChatCompletions(baseUrl, headers, model, [])
+  const control = await probeChatCompletions(baseUrl, apiKey, model, [])
   if (!control.ok) {
     logger.debug('Auto-config: rejection-probe control failed, skipping param detection', {
       model,
@@ -419,7 +535,7 @@ async function probeRejectedParams(
   const remaining = [...candidates]
 
   while (remaining.length > 0) {
-    const probe = await probeChatCompletions(baseUrl, headers, model, remaining)
+    const probe = await probeChatCompletions(baseUrl, apiKey, model, remaining)
     if (probe.ok) break
     if (probe.status === 400) {
       const rejectedParam = extractRejectedParam(probe.errorText)
@@ -461,15 +577,25 @@ export async function autoConfig(input: AutoConfigInput): Promise<AutoConfigOutp
       supportsVision,
     } = await detectModelInfo(baseUrl, apiKey, backend, model.id)
 
-    const [thinkingConfig, nonThinkingConfig, rejectedParams] = await Promise.all([
+    const catalog = getCatalogEntry(model.id)
+    // Cloud APIs with catalog coverage trust the curated values (authoritative
+    // for the official model) and skip probing — saves up to 6 requests per
+    // model. Local backends always probe so self-hosted variants are honored.
+    const shouldProbeEfforts = backend !== 'unknown' || !catalog
+
+    const [thinkingConfig, nonThinkingConfig, rejectedParams, reasoningEfforts] = await Promise.all([
       probeCombos(baseUrl, apiKey, model.id, THINKING_COMBOS),
       probeCombos(baseUrl, apiKey, model.id, NON_THINKING_COMBOS),
       probeRejectedParams(baseUrl, apiKey, model.id, backend),
+      shouldProbeEfforts ? probeReasoningEfforts(baseUrl, apiKey, model.id) : Promise.resolve(undefined),
     ])
 
     const sendReasoningInMessages = thinkingConfig
       ? await probeReasoningInMessages(baseUrl, apiKey, model.id)
       : undefined
+
+    // Known models fall back to the curated catalog when probing is skipped or inconclusive.
+    const effectiveReasoningEfforts = reasoningEfforts ?? catalog?.reasoningEfforts
 
     results.push({
       id: model.id,
@@ -480,6 +606,8 @@ export async function autoConfig(input: AutoConfigInput): Promise<AutoConfigOutp
       nonThinkingConfig,
       ...(sendReasoningInMessages !== undefined ? { sendReasoningInMessages } : {}),
       ...(rejectedParams.length > 0 ? { rejectedParams } : {}),
+      ...(effectiveReasoningEfforts ? { reasoningEfforts: effectiveReasoningEfforts } : {}),
+      ...(catalog?.defaultReasoningEffort ? { defaultReasoningEffort: catalog.defaultReasoningEffort } : {}),
     })
   }
 

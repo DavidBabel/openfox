@@ -17,6 +17,7 @@ import { buildModelsUrl } from './llm/url-utils.js'
 
 import { createMockLLMClient } from './llm/mock.js'
 import { createProviderManager, parseDefaultModelSelection } from './provider-manager.js'
+import { isReasoningEffortValue } from './providers/model-catalog.js'
 import { createToolRegistry, setMcpTools, getBuiltInToolNames } from './tools/index.js'
 import { ALWAYS_ALLOWED, ALWAYS_ALLOWED_FOR_SUBAGENTS, TOP_LEVEL_ONLY_TOOLS } from './tools/tool-policy.js'
 import { McpManager, createMcpTools } from './mcp/index.js'
@@ -141,8 +142,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   // For mock mode, we bypass the provider manager
   const getMockClient = useMock ? createMockLLMClient : null
   const getLLMClient = () => (getMockClient ? getMockClient() : providerManager.getLLMClient())
-  const getLLMClientForProvider = (providerId: string, model: string) =>
-    getMockClient ? getMockClient() : providerManager.createClient(providerId, model)
+  const getLLMClientForProvider = (providerId: string, model: string, reasoningEffort?: string) =>
+    getMockClient ? getMockClient() : providerManager.createClient(providerId, model, reasoningEffort)
 
   if (useMock) {
     logger.info('Using MOCK LLM client - deterministic responses for testing')
@@ -1016,9 +1017,16 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    const { providerId, model } = req.body
+    const { providerId, model, reasoningEffort } = req.body as {
+      providerId?: string
+      model?: string
+      reasoningEffort?: string | null
+    }
     if (!providerId) {
       return res.status(400).json({ error: 'providerId is required' })
+    }
+    if (reasoningEffort !== undefined && reasoningEffort !== null && !isReasoningEffortValue(reasoningEffort)) {
+      return res.status(400).json({ error: `Unsupported reasoningEffort: ${reasoningEffort}` })
     }
 
     // Resolve model: use provided model, or first model from provider, or fallback
@@ -1028,7 +1036,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     // Set provider for session only — does NOT touch global defaultModelSelection.
     // This is an explicit user pick: mark it manual AND active so it suppresses
     // any agent override for this session (agent config is never mutated).
-    sessionManager.setSessionProvider(sessionId, providerId, resolvedModel, true)
+    sessionManager.setSessionProvider(sessionId, providerId, resolvedModel, true, reasoningEffort)
     sessionManager.setSessionProviderActive(sessionId, true)
 
     // Get updated context state
@@ -1058,7 +1066,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    sessionManager.setSessionProvider(sessionId, null, null, false)
+    sessionManager.setSessionProvider(sessionId, null, null, false, null)
     sessionManager.setSessionProviderActive(sessionId, true)
 
     const eventStore = getEventStore()
@@ -1069,6 +1077,37 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const updatedSession = sessionManager.getSession(sessionId)
 
     res.json({ session: toClientSession(updatedSession!), messages, hiddenCount })
+  })
+
+  // Pin a reasoning effort for the session ("Keep current reasoning effort" on an
+  // agent/workflow switch). Overrides agent override efforts without replacing the
+  // provider/model, so the prefix cache stays valid.
+  app.post('/api/sessions/:id/pin-effort', async (req, res) => {
+    const sessionId = req.params.id
+    const session = sessionManager.getSession(sessionId)
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    const { effort } = req.body as { effort?: string }
+    if (!effort || !isReasoningEffortValue(effort)) {
+      return res.status(400).json({ error: `Unsupported reasoningEffort: ${effort}` })
+    }
+
+    const updated = sessionManager.setSessionPinnedEffort(sessionId, effort)
+    res.json({ session: toClientSession(updated) })
+  })
+
+  // Clear the session's pinned reasoning effort (e.g. "Apply the reasoning effort").
+  app.delete('/api/sessions/:id/pin-effort', async (req, res) => {
+    const sessionId = req.params.id
+    const session = sessionManager.getSession(sessionId)
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    const updated = sessionManager.setSessionPinnedEffort(sessionId, null)
+    res.json({ session: toClientSession(updated) })
   })
 
   // Set global default model (persisted to config, used for new sessions)
@@ -1970,6 +2009,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     try {
       const { fetchModelsWithContext } = await import('./provider-manager.js')
       const { getModelProfile } = await import('./llm/profiles.js')
+      const { getCatalogEntry } = await import('./providers/model-catalog.js')
       const models = await fetchModelsWithContext(
         url,
         apiKey,
@@ -1981,6 +2021,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       res.json({
         models: models.map((m) => {
           const profile = getModelProfile(m.id)
+          const catalog = getCatalogEntry(m.id)
           return {
             id: m.id,
             contextWindow: m.contextWindow,
@@ -1988,6 +2029,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
             defaultTopP: profile.topP,
             defaultTopK: profile.topK,
             defaultMaxTokens: profile.defaultMaxTokens,
+            ...(catalog ? { reasoningEfforts: catalog.reasoningEfforts } : {}),
           }
         }),
         url,
@@ -3271,10 +3313,13 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     let llmClient = getLLMClient()
     if (effective.providerId && effective.model) {
       const resolvedModel = providerManager.resolveModel(effective.providerId, effective.model)
-      llmClient = getLLMClientForProvider(effective.providerId, resolvedModel ?? effective.model) ?? getLLMClient()
+      llmClient =
+        getLLMClientForProvider(effective.providerId, resolvedModel ?? effective.model, effective.reasoningEffort) ??
+        getLLMClient()
     }
     const provider = providerManager.getActiveProvider()
     const controller = new AbortController()
+    const statsEffort = llmClient.getReasoningEffort?.()
     launchWorkflowRun(
       {
         sessionManager,
@@ -3286,6 +3331,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
           providerName: provider?.name ?? 'Unknown Provider',
           backend: provider?.backend ?? llmClient.getBackend(),
           model: llmClient.getModel(),
+          ...(statsEffort ? { reasoningEffort: statsEffort } : {}),
         },
         broadcastForSession: wssExports.broadcastForSession,
       },

@@ -413,6 +413,17 @@ describe('SessionManager', () => {
     expect(manager.getContextState(session.id).dynamicContextChanged).toBe(false)
   })
 
+  it('getContextState exposes warmCache only while a cached system prompt exists', () => {
+    const session = manager.createSession(projectId)
+
+    // No cached prompt yet → cold cache (warmCache absent/undefined)
+    expect(manager.getContextState(session.id).warmCache).toBeUndefined()
+
+    // Simulate an LLM call having cached the system prompt
+    manager.setCachedPrompt(session.id, 'cached system prompt', [], 'hash-1')
+    expect(manager.getContextState(session.id).warmCache).toBe(true)
+  })
+
   it('preserves subAgentId and subAgentType when adding messages', () => {
     const session = manager.createSession(projectId)
     const subAgentId = 'verifier-test-123'
@@ -832,7 +843,7 @@ describe('SessionManager', () => {
       setAgentModelOverride('planner', { providerId: 'test-provider', model: 'dedicated-model' })
       const client = manager.createClientForAgent('planner')
       expect(client).toBe(mockDedicatedClient)
-      expect(mockProviderManager.createClient).toHaveBeenCalledWith('test-provider', 'dedicated-model')
+      expect(mockProviderManager.createClient).toHaveBeenCalledWith('test-provider', 'dedicated-model', undefined)
     })
 
     it('falls back to global client when provider not found', () => {
@@ -853,7 +864,13 @@ describe('SessionManager', () => {
     it('creates client with correct provider and model', () => {
       setAgentModelOverride('verifier', { providerId: 'my-provider', model: 'my-model' })
       manager.createClientForAgent('verifier')
-      expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model')
+      expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model', undefined)
+    })
+
+    it('passes the override reasoningEffort through to createClient', () => {
+      setAgentModelOverride('verifier', { providerId: 'my-provider', model: 'my-model', reasoningEffort: 'high' })
+      manager.createClientForAgent('verifier')
+      expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model', 'high')
     })
   })
 
@@ -982,6 +999,87 @@ describe('SessionManager', () => {
       })
     })
 
+    it('resolveEffectiveProviderModel returns the session effort for a manual pick', () => {
+      const session = manager.createSession(projectId, 'Test Session')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'high')
+
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'session-provider',
+        model: 'session-model',
+        reasoningEffort: 'high',
+      })
+    })
+
+    it('resolveEffectiveProviderModel returns the agent override effort above a session preference', () => {
+      setAgentModelOverride('planner', {
+        providerId: 'override-provider',
+        model: 'override-model',
+        reasoningEffort: 'xhigh',
+      })
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'medium')
+      manager.setSessionProviderActive(session.id, true)
+
+      // Manual pick wins over the override (both effort and model come from the pick).
+      expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+        providerId: 'session-provider',
+        model: 'session-model',
+        reasoningEffort: 'medium',
+      })
+    })
+
+    it('resolveEffectiveProviderModel returns the agent override effort when the manual pick is inactive', () => {
+      setAgentModelOverride('planner', {
+        providerId: 'override-provider',
+        model: 'override-model',
+        reasoningEffort: 'max',
+      })
+      const session = manager.createSession(projectId, 'Test Session')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'low')
+      manager.setSessionProviderActive(session.id, false)
+
+      expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+        providerId: 'override-provider',
+        model: 'override-model',
+        reasoningEffort: 'max',
+      })
+    })
+
+    it('resolveEffectiveProviderModel omits effort when no session or override effort is set', () => {
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true)
+
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'session-provider',
+        model: 'session-model',
+      })
+    })
+
+    it('resetting the session provider clears the stored effort', () => {
+      const session = manager.createSession(projectId, 'Test Session')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'high')
+      manager.setSessionProvider(session.id, null, null, false, null)
+
+      expect(manager.getSession(session.id)?.providerReasoningEffort ?? null).toBeNull()
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'default-provider',
+        model: 'default-model',
+      })
+    })
+
+    it('picking a model without an effort clears a previously stored effort', () => {
+      const session = manager.createSession(projectId, 'Test Session')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'high')
+      // A fresh model pick (no effort) resets to the model default.
+      manager.setSessionProvider(session.id, 'session-provider', 'other-model', true, null)
+
+      expect(manager.getSession(session.id)?.providerReasoningEffort ?? null).toBeNull()
+      expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+        providerId: 'session-provider',
+        model: 'other-model',
+      })
+    })
+
     it('getCurrentModelSettings returns the override model settings for an override agent', () => {
       setAgentModelOverride('planner', { providerId: 'override-provider', model: 'override-model' })
       const session = manager.createSession(projectId, 'Test Session')
@@ -1023,6 +1121,93 @@ describe('SessionManager', () => {
 
       // 'verifier' has no override → session preference applies, not the top-level override.
       expect(manager.getCurrentModelContext(session.id, 'verifier')).toBe(262144)
+    })
+
+    describe('pinned reasoning effort', () => {
+      it('pinned effort overrides the agent override effort without replacing the model', () => {
+        setAgentModelOverride('planner', {
+          providerId: 'override-provider',
+          model: 'override-model',
+          reasoningEffort: 'max',
+        })
+        const session = manager.createSession(projectId, 'Test Session')
+        manager.setSessionPinnedEffort(session.id, 'high')
+
+        expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+          providerId: 'override-provider',
+          model: 'override-model',
+          reasoningEffort: 'high',
+        })
+      })
+
+      it('pinned effort overrides a session-stored effort', () => {
+        const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+        manager.setSessionProvider(session.id, 'session-provider', 'session-model', false, 'low')
+        manager.setSessionPinnedEffort(session.id, 'high')
+
+        expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+          providerId: 'session-provider',
+          model: 'session-model',
+          reasoningEffort: 'high',
+        })
+      })
+
+      it('pinned effort applies even without any override or session pick', () => {
+        const session = manager.createSession(projectId, 'Test Session')
+        manager.setSessionPinnedEffort(session.id, 'low')
+
+        expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+          providerId: 'default-provider',
+          model: 'default-model',
+          reasoningEffort: 'low',
+        })
+      })
+
+      it('an active manual pick beats the pin', () => {
+        const session = manager.createSession(projectId, 'Test Session')
+        manager.setSessionPinnedEffort(session.id, 'high')
+        manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'none')
+        manager.setSessionProviderActive(session.id, true)
+
+        expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
+          providerId: 'session-provider',
+          model: 'session-model',
+          reasoningEffort: 'none',
+        })
+      })
+
+      it('a manual pick clears the pinned effort', () => {
+        const session = manager.createSession(projectId, 'Test Session')
+        manager.setSessionPinnedEffort(session.id, 'high')
+        manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'none')
+
+        expect(manager.getSession(session.id)?.providerPinnedEffort ?? null).toBeNull()
+      })
+
+      it('resetting the provider clears the pinned effort', () => {
+        const session = manager.createSession(projectId, 'Test Session')
+        manager.setSessionPinnedEffort(session.id, 'high')
+        manager.setSessionProvider(session.id, null, null, false, null)
+
+        expect(manager.getSession(session.id)?.providerPinnedEffort ?? null).toBeNull()
+      })
+
+      it('clearing the pin restores the override effort', () => {
+        setAgentModelOverride('planner', {
+          providerId: 'override-provider',
+          model: 'override-model',
+          reasoningEffort: 'max',
+        })
+        const session = manager.createSession(projectId, 'Test Session')
+        manager.setSessionPinnedEffort(session.id, 'high')
+        manager.setSessionPinnedEffort(session.id, null)
+
+        expect(manager.resolveEffectiveProviderModel(session.id, 'planner')).toEqual({
+          providerId: 'override-provider',
+          model: 'override-model',
+          reasoningEffort: 'max',
+        })
+      })
     })
   })
 })

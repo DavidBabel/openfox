@@ -49,6 +49,8 @@ export interface LLMClientWithModel extends LLMClient {
   getProfile(): ModelProfile
   getBackend(): Backend
   setBackend(backend: Backend): void
+  /** The reasoning effort this client was created with (if any). */
+  getReasoningEffort?(): string | undefined
 }
 
 export function createLLMClient(config: Config, initialBackend: Backend = 'unknown'): LLMClientWithModel {
@@ -106,6 +108,8 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
       model = newModel
       profile = newProfile
     },
+
+    getReasoningEffort: () => reasoningEffort,
 
     async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
       logger.debug('LLM complete request', {

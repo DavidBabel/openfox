@@ -1,5 +1,7 @@
 export interface TurnStats {
   model: string
+  /** Reasoning effort applied for this turn (e.g. "high"). */
+  reasoningEffort?: string
   mode: string
   totalTime: number
   prefillTokens: number

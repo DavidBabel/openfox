@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react'
-import { useSessionStore } from '../../stores/session'
 import { ChevronDownIcon, CheckIcon } from '../shared/icons'
 import { useAgentsStore, getAgentColor } from '../../stores/agents'
 import { AgentsModal } from '../settings/AgentsModal'
@@ -7,6 +6,7 @@ import { useKeybindings } from '../../hooks/useKeybindings'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { formatKeybinding } from '../../lib/keybindings'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
+import { useEffortGatedAgentSwitch } from '../../hooks/useEffortGateContext'
 export function AgentSelector() {
   const sessionId = useSessionScope()
   const currentMode = useScopedPaneState(
@@ -21,11 +21,11 @@ export function AgentSelector() {
     (state) => state.currentSession?.workdir,
     undefined,
   )
-  const switchMode = useSessionStore((state) => state.switchMode)
   const defaults = useAgentsStore((state) => state.defaults)
   const userItems = useAgentsStore((state) => state.userItems)
   const projectItems = useAgentsStore((state) => state.projectItems)
   const fetchAgents = useAgentsStore((state) => state.fetchAgents)
+  const gatedAgentSwitch = useEffortGatedAgentSwitch()
   const agents = [...defaults, ...userItems, ...projectItems]
   const [isOpen, setIsOpen] = useState(false)
   const [showManager, setShowManager] = useState(false)
@@ -47,6 +47,15 @@ export function AgentSelector() {
   const currentAgent = topLevelAgents.find((a) => a.id === currentMode)
   const displayName = currentAgent?.name ?? currentMode
   const currentColor = getAgentColor(agents, currentMode)
+
+  // Switching to an agent whose model override carries a reasoning effort may
+  // invalidate the LLM prefix cache on a warm session. Gate it behind an
+  // explicit choice: Apply clears any pin (the override effort takes effect),
+  // Keep pins the current effort so the transition proceeds cache-safely.
+  const handleAgentClick = async (agent: (typeof topLevelAgents)[number]) => {
+    if (agent.id === currentMode || !sessionId) return
+    await gatedAgentSwitch(agent.id, agent.name)
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -79,7 +88,7 @@ export function AgentSelector() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!isActive && sessionId) switchMode(sessionId, agent.id)
+                    void handleAgentClick(agent)
                     setIsOpen(false)
                   }}
                   className="flex-1 text-left flex items-center gap-2 min-w-0"

@@ -241,7 +241,11 @@ export interface GenerateSessionNameForSessionDeps {
    *  it's used instead of creating a new client via dynamic import. This ensures the
    *  mock LLM client is used in e2e tests (OPENFOX_MOCK_LLM=true). */
   getLLMClient?: () => LLMClientWithModel
-  getLLMClientForProvider?: (providerId: string, model: string) => LLMClientWithModel | undefined
+  getLLMClientForProvider?: (
+    providerId: string,
+    model: string,
+    reasoningEffort?: string,
+  ) => LLMClientWithModel | undefined
 }
 
 /**

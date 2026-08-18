@@ -7,6 +7,7 @@ import { CRUDListHeader, useConfirmDialog, DestinationSelector, ModalActions } f
 import { AgentGroup } from './agents/AgentListItem'
 import { AgentForm } from './agents/AgentForm'
 import { ModelPicker } from '../shared/ModelPicker'
+import { parseModelValue } from '../../lib/model-value'
 
 interface AgentsModalProps {
   isOpen: boolean
@@ -76,7 +77,8 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
       .then((r) => r.json())
       .then((data) => {
         if (data.providerId && data.model) {
-          setFormModel(`${data.providerId}/${data.model}`)
+          const effort = data.reasoningEffort ? `:${data.reasoningEffort}` : ''
+          setFormModel(`${data.providerId}/${data.model}${effort}`)
         } else {
           setFormModel(undefined)
         }
@@ -417,20 +419,26 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
   )
 }
 
-function parseModelOverride(value: string): { providerId: string; model: string } {
-  const slashIndex = value.indexOf('/')
-  return slashIndex > 0
-    ? { providerId: value.substring(0, slashIndex), model: value.substring(slashIndex + 1) }
-    : { providerId: value, model: value }
+function parseModelOverride(value: string): { providerId: string; model: string; reasoningEffort?: string } {
+  return (
+    parseModelValue(value) ?? {
+      providerId: value,
+      model: '',
+    }
+  )
 }
 
 async function saveAgentModelOverride(agentId: string, modelOverride: string | undefined): Promise<void> {
   if (modelOverride) {
-    const { providerId, model } = parseModelOverride(modelOverride)
+    const { providerId, model, reasoningEffort } = parseModelOverride(modelOverride)
     await authFetch(`/api/agents/${agentId}/model`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providerId, model }),
+      body: JSON.stringify({
+        providerId,
+        model,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+      }),
     })
   } else {
     await authFetch(`/api/agents/${agentId}/model`, { method: 'DELETE' })
@@ -464,7 +472,8 @@ function BuiltInModelModal({
     authFetch(`/api/agents/${agentId}/model`)
       .then((r) => r.json())
       .then((data) => {
-        setValue(data.providerId && data.model ? `${data.providerId}/${data.model}` : undefined)
+        const effort = data.reasoningEffort ? `:${data.reasoningEffort}` : ''
+        setValue(data.providerId && data.model ? `${data.providerId}/${data.model}${effort}` : undefined)
       })
       .catch(() => setValue(undefined))
       .finally(() => setLoading(false))

@@ -140,4 +140,44 @@ describe('ModelPicker', () => {
     expect(dropdownHtml()).toContain('32K')
     expect(dropdownHtml()).toContain('128K')
   })
+
+  it('shows the effort suffix in the selected label when value includes one', () => {
+    render('provider-1/qwen3-coder:high')
+    expect(container.innerHTML).toContain('qwen3')
+    expect(container.innerHTML).toContain(':high')
+  })
+
+  it('keeps a colon in the model id when the suffix is not an effort', () => {
+    render('provider-1/deepseek-r1:70b')
+    expect(container.innerHTML).toContain('deepseek r1:70b')
+  })
+
+  it('renders effort chips and clicking one calls onChange with provider/model:effort', () => {
+    const providerWithEfforts: Provider = {
+      ...mockProviders[0]!,
+      models: [
+        {
+          id: 'qwen3-coder',
+          contextWindow: 32000,
+          source: 'backend',
+          reasoningEfforts: ['low', 'medium', 'high'],
+          thinkingEnabled: true,
+          thinkingLevel: 'medium',
+        },
+      ],
+    }
+    act(() => {
+      root.render(<ModelPicker providers={[providerWithEfforts]} value={undefined} onChange={onChangeMock} />)
+    })
+    const btn = container.querySelector('button')!
+    act(() => {
+      btn.click()
+    })
+    const chip = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'high')
+    expect(chip).toBeTruthy()
+    act(() => {
+      chip?.click()
+    })
+    expect(onChangeMock).toHaveBeenCalledWith('provider-1/qwen3-coder:high')
+  })
 })

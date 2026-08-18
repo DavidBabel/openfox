@@ -55,6 +55,20 @@ vi.mock('../../hooks/useScrolledSend', () => ({
   useScrolledSend: () => ({ sendMessage: vi.fn(), launchWorkflow: vi.fn() }),
 }))
 
+vi.mock('../../hooks/useEffortGateContext', () => ({
+  useEffortGateContext: () => ({
+    sessionId: 's1',
+    currentEffort: undefined,
+    warmCache: false,
+    gate: { requestEffortSwitch: vi.fn() },
+  }),
+  useEffortGatedAgentSwitch: () => vi.fn(),
+}))
+
+vi.mock('../../components/plan/EffortChangeGate', () => ({
+  EffortChangeGateProvider: (props: { children?: unknown }) => <>{props.children}</>,
+  useEffortChangeGate: () => ({ requestEffortSwitch: vi.fn() }),
+}))
 vi.mock('../../stores/settings', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {

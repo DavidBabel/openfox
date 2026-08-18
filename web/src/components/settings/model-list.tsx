@@ -13,6 +13,9 @@ export interface ModelWithConfig {
   name?: string
   contextWindow: number
   source: 'backend' | 'user' | 'default'
+  reasoningEfforts?: string[]
+  thinkingLevel?: string
+  thinkingEnabled?: boolean
 }
 
 export function modelMatchesQuery(model: { name?: string; id: string }, query: string): boolean {
@@ -25,7 +28,16 @@ export function modelMatchesQuery(model: { name?: string; id: string }, query: s
 
 export function getVisibleModels(provider: Provider): ModelWithConfig[] {
   const hasSelected = provider.models.some((m) => m.selected)
-  return hasSelected ? provider.models.filter((m) => m.selected) : provider.models
+  const source = hasSelected ? provider.models.filter((m) => m.selected) : provider.models
+  return source.map((m) => ({
+    id: m.id,
+    ...(m.name !== undefined ? { name: m.name } : {}),
+    contextWindow: m.contextWindow,
+    source: m.source ?? 'default',
+    ...(m.reasoningEfforts?.length ? { reasoningEfforts: m.reasoningEfforts } : {}),
+    ...(m.thinkingLevel ? { thinkingLevel: m.thinkingLevel } : {}),
+    ...(m.thinkingEnabled !== undefined ? { thinkingEnabled: m.thinkingEnabled } : {}),
+  }))
 }
 
 // ============================================================================
@@ -44,6 +56,11 @@ export interface ModelEntryRowProps {
   settingDefault?: boolean
   onSetDefault?: (e: React.MouseEvent, providerId: string, modelId: string) => void
   onEditModel?: (providerId: string, model: ModelWithConfig) => void
+  /** Available reasoning efforts for this model (shown as compact chips). */
+  reasoningEfforts?: string[]
+  /** Currently effective effort for this model (override/session/default). */
+  selectedEffort?: string
+  onSelectEffort?: (providerId: string, modelId: string, effort: string) => void
 }
 
 export function ModelEntryRow({
@@ -58,57 +75,90 @@ export function ModelEntryRow({
   onModelClick,
   onSetDefault,
   onEditModel,
+  reasoningEfforts,
+  selectedEffort,
+  onSelectEffort,
 }: ModelEntryRowProps) {
+  const showEfforts = (reasoningEfforts?.length ?? 0) > 0 && !!onSelectEffort
   return (
     <div
-      className={`flex items-center px-4 py-1.5 text-sm transition-colors group ${
-        highlighted ? 'bg-bg-tertiary' : 'hover:bg-bg-tertiary'
-      } ${disabled ? 'opacity-50 cursor-wait' : ''} ${isActive ? 'text-accent-primary' : 'text-text-secondary'}`}
+      className={`${highlighted ? 'bg-bg-tertiary' : 'hover:bg-bg-tertiary'} ${disabled ? 'opacity-50 cursor-wait' : ''}`}
     >
-      <button
-        type="button"
-        onClick={() => onModelClick(providerId, modelConfig.id)}
-        disabled={disabled}
-        className="flex-1 truncate text-left"
+      <div
+        className={`flex items-center px-4 py-1.5 text-sm transition-colors group ${
+          isActive ? 'text-accent-primary' : 'text-text-secondary'
+        }`}
       >
-        {modelConfig.name ?? modelConfig.id.split('/').pop()?.replace(/-/g, ' ') ?? modelConfig.id}
-      </button>
-      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-        <span className="text-xs text-text-muted">{formatContextWindow(modelConfig.contextWindow)}</span>
-        {hasSession && onSetDefault && (
-          <button
-            type="button"
-            onClick={(e) => onSetDefault(e, providerId, modelConfig.id)}
-            disabled={settingDefault}
-            className="p-0.5 hover:bg-bg-tertiary rounded transition-colors disabled:opacity-40"
-            title={isDef ? 'Default model' : 'Set as default model'}
-          >
-            {isDef ? (
-              <StarFilledIcon className="w-3.5 h-3.5 text-accent-warning" />
-            ) : (
-              <StarIcon className="w-3.5 h-3.5 text-text-muted hover:text-accent-warning" />
-            )}
-          </button>
-        )}
-        {onEditModel && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onEditModel(providerId, modelConfig)
-            }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-bg-tertiary rounded transition-opacity"
-            title="Edit model context"
-          >
-            <EditSmallIcon className="w-3 h-3 text-text-muted" />
-          </button>
-        )}
-        {isActive && (
-          <span className="text-accent-success flex-shrink-0" title="Session model">
-            <CheckIcon className="w-3.5 h-3.5" />
-          </span>
-        )}
+        <button
+          type="button"
+          onClick={() => onModelClick(providerId, modelConfig.id)}
+          disabled={disabled}
+          className="flex-1 truncate text-left"
+        >
+          {modelConfig.name ?? modelConfig.id.split('/').pop()?.replace(/-/g, ' ') ?? modelConfig.id}
+        </button>
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+          <span className="text-xs text-text-muted">{formatContextWindow(modelConfig.contextWindow)}</span>
+          {hasSession && onSetDefault && (
+            <button
+              type="button"
+              onClick={(e) => onSetDefault(e, providerId, modelConfig.id)}
+              disabled={settingDefault}
+              className="p-0.5 hover:bg-bg-tertiary rounded transition-colors disabled:opacity-40"
+              title={isDef ? 'Default model' : 'Set as default model'}
+            >
+              {isDef ? (
+                <StarFilledIcon className="w-3.5 h-3.5 text-accent-warning" />
+              ) : (
+                <StarIcon className="w-3.5 h-3.5 text-text-muted hover:text-accent-warning" />
+              )}
+            </button>
+          )}
+          {onEditModel && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onEditModel(providerId, modelConfig)
+              }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-bg-tertiary rounded transition-opacity"
+              title="Edit model context"
+            >
+              <EditSmallIcon className="w-3 h-3 text-text-muted" />
+            </button>
+          )}
+          {isActive && (
+            <span className="text-accent-success flex-shrink-0" title="Session model">
+              <CheckIcon className="w-3.5 h-3.5" />
+            </span>
+          )}
+        </div>
       </div>
+      {showEfforts && (
+        <div
+          className="flex flex-wrap items-center gap-1 px-4 pb-1.5"
+          aria-label={`Reasoning efforts for ${modelConfig.id}`}
+        >
+          {reasoningEfforts!.map((effort) => {
+            const isEffortActive = isActive && selectedEffort === effort
+            return (
+              <button
+                key={effort}
+                type="button"
+                onClick={() => onSelectEffort!(providerId, modelConfig.id, effort)}
+                disabled={disabled}
+                className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+                  isEffortActive
+                    ? 'text-accent-primary border-accent-primary/50 bg-accent-primary/10'
+                    : 'text-text-muted border-border hover:text-text-primary hover:border-text-muted'
+                }`}
+              >
+                {effort}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

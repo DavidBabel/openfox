@@ -47,6 +47,7 @@ describe('QueueProcessor', () => {
     metadata?: any
     providerId?: string
     providerModel?: string
+    providerReasoningEffort?: string
     mode?: string
   }
   let queueItems: Array<{ queueId: string; mode: string; content: string; queuedAt: string; attachments?: any[] }>
@@ -70,6 +71,7 @@ describe('QueueProcessor', () => {
       resolveEffectiveProviderModel: vi.fn(() => ({
         providerId: sessionState.providerId ?? null,
         model: sessionState.providerModel ?? null,
+        ...(sessionState.providerReasoningEffort ? { reasoningEffort: sessionState.providerReasoningEffort } : {}),
       })),
       getContextState: vi.fn(() => ({
         currentTokens: 100,
@@ -217,7 +219,13 @@ describe('QueueProcessor', () => {
 
       const sessionClient = { getModel: () => 'session-model', getBackend: () => 'vllm' }
       const switchedClient = { getModel: () => 'switched-model', getBackend: () => 'vllm' }
-      const getLLMClientForProviderMock = vi.fn().mockReturnValueOnce(sessionClient).mockReturnValueOnce(switchedClient)
+      // runTurn resolves the primary session client first (eager), then the test
+      // re-resolves once before and once after the simulated provider switch.
+      const getLLMClientForProviderMock = vi
+        .fn()
+        .mockReturnValueOnce(sessionClient)
+        .mockReturnValueOnce(sessionClient)
+        .mockReturnValueOnce(switchedClient)
 
       sessionState = {
         id: 'sess-1',
@@ -252,6 +260,54 @@ describe('QueueProcessor', () => {
       // Simulate the user switching providers mid-turn: resolution picks it up
       sessionState = { ...sessionState, providerId: 'provider-switched', providerModel: 'new-model' }
       expect(params.getSessionLLMClient()).toBe(switchedClient)
+      qp.stop()
+    })
+
+    it('passes the session reasoning effort to the client factory and the turn stats', async () => {
+      const runChatTurnMock = vi.fn().mockResolvedValue(undefined)
+      vi.doMock('../chat/orchestrator.js', () => ({ runChatTurn: runChatTurnMock }))
+
+      mockProviderManager.getActiveProviderId = vi.fn(() => 'provider-2')
+      mockProviderManager.activateProvider = vi.fn().mockResolvedValue({ success: true })
+
+      const effortClient = {
+        getModel: () => 'deepseek-v4-flash',
+        getBackend: () => 'vllm',
+        getReasoningEffort: () => 'none',
+      }
+      const getLLMClientForProviderMock = vi.fn().mockReturnValue(effortClient)
+
+      sessionState = {
+        id: 'sess-1',
+        isRunning: false,
+        metadata: { title: undefined },
+        providerId: 'provider-2',
+        providerModel: 'deepseek-v4-flash',
+        providerReasoningEffort: 'none',
+      }
+      queueItems = [{ queueId: 'q-1', mode: 'asap', content: 'hello', queuedAt: '2024-01-01' }]
+
+      const qp = new QueueProcessor({
+        sessionManager: mockSessionManager as any,
+        providerManager: mockProviderManager as any,
+        getLLMClient: mockGetLLMClient,
+        getLLMClientForProvider: getLLMClientForProviderMock,
+        getActiveProvider: mockGetActiveProvider,
+        broadcastForSession: mockBroadcastForSession,
+      })
+      qp.start()
+
+      const callback = mockSessionManager.subscribe.mock.calls[0][0]
+      callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-1', mode: 'asap', content: 'hello' })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      // The session effort flows into the client factory...
+      expect(getLLMClientForProviderMock).toHaveBeenCalledWith('provider-2', 'deepseek-v4-flash', 'none')
+
+      // ...and the turn runs on that client with the effort in its stats identity.
+      const params = runChatTurnMock.mock.calls[0]![0]!
+      expect(params.llmClient).toBe(effortClient)
+      expect(params.statsIdentity.reasoningEffort).toBe('none')
       qp.stop()
     })
 

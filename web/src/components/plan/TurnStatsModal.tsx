@@ -14,13 +14,14 @@ export function TurnStatsModal({ stats: s, onClose }: TurnStatsModalProps) {
   const agents = [...defaults, ...userItems]
   const agentInfo = agents.find((a) => a.id === s.mode)
   const modeName = agentInfo?.name ?? s.mode
+  const modelLabel = s.reasoningEffort ? `${s.model}:${s.reasoningEffort}` : s.model
 
   return (
     <Modal isOpen={true} onClose={onClose} title="Turn Stats" size="md">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <p className="text-xs text-text-muted">
-            {s.model} · {modeName}
+            {modelLabel} · {modeName}
           </p>
         </div>
 

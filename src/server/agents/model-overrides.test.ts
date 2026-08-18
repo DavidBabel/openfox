@@ -61,6 +61,16 @@ describe('parseAgentModelOverrides', () => {
       verifier: { providerId: 'p2', model: 'm2' },
     })
   })
+
+  it('preserves an optional reasoningEffort on overrides', () => {
+    const raw = JSON.stringify({
+      explorer: { providerId: 'p1', model: 'm1', reasoningEffort: 'high' },
+      verifier: { providerId: 'p2', model: 'm2', reasoningEffort: '' },
+    })
+    expect(parseAgentModelOverrides(raw)).toEqual({
+      explorer: { providerId: 'p1', model: 'm1', reasoningEffort: 'high' },
+    })
+  })
 })
 
 describe('getAgentModelOverride', () => {
@@ -99,7 +109,19 @@ describe('resolveLLMClientForAgent', () => {
     expect(result.usedOverride).toBe(true)
     expect(result.override).toEqual({ providerId: 'p1', model: 'm1' })
     expect(result.warning).toBeUndefined()
-    expect(pm.createClient).toHaveBeenCalledWith('p1', 'm1')
+    expect(pm.createClient).toHaveBeenCalledWith('p1', 'm1', undefined)
+  })
+
+  it('passes the override reasoningEffort to createClient', () => {
+    getSettingMock.mockReturnValue(
+      JSON.stringify({ explorer: { providerId: 'p1', model: 'm1', reasoningEffort: 'xhigh' } }),
+    )
+    const dedicated = fakeClient('m1')
+    const pm = fakeProviderManager(dedicated)
+    const result = resolveLLMClientForAgent('explorer', fallback, pm)
+    expect(result.usedOverride).toBe(true)
+    expect(result.override).toEqual({ providerId: 'p1', model: 'm1', reasoningEffort: 'xhigh' })
+    expect(pm.createClient).toHaveBeenCalledWith('p1', 'm1', 'xhigh')
   })
 
   it('falls back with warning when provider no longer exists', () => {

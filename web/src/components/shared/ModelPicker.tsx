@@ -5,6 +5,7 @@ import { ChevronDownIcon, SearchIcon } from './icons'
 import { useModelSearch, ModelEntryRow } from '../settings/model-list'
 import type { Provider } from '../../stores/config'
 import { shouldAutofocus } from '../../lib/device'
+import { formatModelValue, parseModelValue } from '../../lib/model-value'
 
 export interface ModelPickerProps {
   providers: Provider[]
@@ -19,7 +20,9 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
 
-  const selectedModelId = value?.split('/').slice(1).join('/')
+  const parsedValue = parseModelValue(value)
+  const selectedModelId = parsedValue?.model
+  const selectedEffort = parsedValue?.reasoningEffort
   const shortModelName = selectedModelId
     ? (selectedModelId.split('/').pop()?.replace(/-/g, ' ') ?? selectedModelId)
     : undefined
@@ -37,7 +40,7 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
   } = useModelSearch({
     providers,
     onSelect: (providerId, modelId) => {
-      onChange(`${providerId}/${modelId}`)
+      onChange(formatModelValue(providerId, modelId))
       setIsOpen(false)
     },
     onEscape: () => setIsOpen(false),
@@ -110,6 +113,7 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
       >
         <span className={shortModelName ? 'text-text-primary' : 'text-text-muted'}>
           {shortModelName ?? defaultLabel}
+          {shortModelName && selectedEffort && <span className="text-text-muted">:{selectedEffort}</span>}
         </span>
         <ChevronDownIcon className={`w-3 h-3 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -160,7 +164,10 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
                         (fi) => fi.providerId === group.provider.id && fi.modelConfig.id === modelConfig.id,
                       )
                       const isHighlighted = modelFlatIndex === highlightedIndex
-                      const isActive = value === `${group.provider.id}/${modelConfig.id}`
+                      const isActive =
+                        !!parsedValue &&
+                        parsedValue.providerId === group.provider.id &&
+                        parsedValue.model === modelConfig.id
                       return (
                         <div
                           key={`${group.provider.id}/${modelConfig.id}`}
@@ -172,7 +179,13 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
                             isActive={isActive}
                             highlighted={isHighlighted}
                             onModelClick={(providerId, modelId) => {
-                              onChange(`${providerId}/${modelId}`)
+                              onChange(formatModelValue(providerId, modelId))
+                              setIsOpen(false)
+                            }}
+                            reasoningEfforts={modelConfig.reasoningEfforts}
+                            selectedEffort={isActive ? selectedEffort : undefined}
+                            onSelectEffort={(providerId, modelId, effort) => {
+                              onChange(formatModelValue(providerId, modelId, effort))
                               setIsOpen(false)
                             }}
                           />

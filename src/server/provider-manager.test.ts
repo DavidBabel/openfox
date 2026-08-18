@@ -768,4 +768,82 @@ describe('ProviderManager - Model Selection', () => {
       expect(manager.getLLMClient()).not.toBe(before)
     })
   })
+
+  describe('catalog enrichment in getProviders', () => {
+    function buildManager(providers: Provider[]) {
+      return createProviderManager({
+        providers,
+        defaultModelSelection: 'p/deepseek-v4-flash',
+        server: { port: 10369, host: '127.0.0.1', openBrowser: true },
+        logging: { level: 'info' as const },
+        database: { path: '' },
+        llm: {
+          baseUrl: 'http://localhost:8000/v1',
+          model: 'deepseek-v4-flash',
+          timeout: 120000,
+          idleTimeout: 30000,
+          backend: 'vllm',
+        },
+        context: { maxTokens: 4096, compactionThreshold: 10000, compactionTarget: 8000 },
+        agent: { maxIterations: 100, maxConsecutiveFailures: 5, toolTimeout: 30000 },
+        workdir: process.cwd(),
+      })
+    }
+
+    it('fills reasoningEfforts from the catalog for known models that lack them', () => {
+      const manager = buildManager([
+        {
+          id: 'p',
+          name: 'Local',
+          url: 'http://localhost:8000/v1',
+          backend: 'vllm',
+          models: [{ id: 'deepseek-v4-flash', contextWindow: 1_000_000, source: 'default' as const }],
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+      ])
+
+      const model = manager.getProviders()[0]!.models[0]!
+      expect(model.reasoningEfforts).toEqual(['none', 'low', 'high', 'max'])
+    })
+
+    it('never overrides an existing reasoningEfforts list', () => {
+      const manager = buildManager([
+        {
+          id: 'p',
+          name: 'Local',
+          url: 'http://localhost:8000/v1',
+          backend: 'vllm',
+          models: [
+            {
+              id: 'deepseek-v4-flash',
+              contextWindow: 1_000_000,
+              source: 'default' as const,
+              reasoningEfforts: ['low', 'high'],
+            },
+          ],
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+      ])
+
+      expect(manager.getProviders()[0]!.models[0]!.reasoningEfforts).toEqual(['low', 'high'])
+    })
+
+    it('leaves unknown models untouched', () => {
+      const manager = buildManager([
+        {
+          id: 'p',
+          name: 'Local',
+          url: 'http://localhost:8000/v1',
+          backend: 'vllm',
+          models: [{ id: 'some-unknown-model', contextWindow: 1000, source: 'default' as const }],
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+      ])
+
+      expect(manager.getProviders()[0]!.models[0]!.reasoningEfforts).toBeUndefined()
+    })
+  })
 })

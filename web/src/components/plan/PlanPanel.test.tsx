@@ -165,6 +165,16 @@ vi.mock('../../hooks/useScrolledSend', () => ({
   useScrolledSend: () => ({ sendMessage: vi.fn(), launchWorkflow: vi.fn() }),
 }))
 
+vi.mock('../../hooks/useEffortGateContext', () => ({
+  useEffortGateContext: () => ({
+    sessionId: 's1',
+    currentEffort: undefined,
+    warmCache: false,
+    gate: { requestEffortSwitch: vi.fn() },
+  }),
+  useEffortGatedAgentSwitch: () => vi.fn(),
+}))
+
 vi.mock('../../hooks/usePromptHistory', () => ({
   usePromptHistory: () => ({
     history: [],

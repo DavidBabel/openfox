@@ -213,6 +213,38 @@ describe('db migrations', () => {
     db.close()
   })
 
+  it('adds provider_reasoning_effort column on upgrade from old schema', () => {
+    createOldSchemaDatabase(dbPath)
+
+    const config = loadConfig()
+    config.database.path = dbPath
+    initDatabase(config)
+
+    const db = new Database(dbPath)
+    const columns = db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[]
+    const columnNames = columns.map((c) => c.name)
+
+    expect(columnNames).toContain('provider_reasoning_effort')
+
+    db.close()
+  })
+
+  it('adds provider_pinned_effort column on upgrade from old schema', () => {
+    createOldSchemaDatabase(dbPath)
+
+    const config = loadConfig()
+    config.database.path = dbPath
+    initDatabase(config)
+
+    const db = new Database(dbPath)
+    const columns = db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[]
+    const columnNames = columns.map((c) => c.name)
+
+    expect(columnNames).toContain('provider_pinned_effort')
+
+    db.close()
+  })
+
   it('adds pending_choices column to workflow_executions on upgrade from old schema', () => {
     createOldSchemaDatabase(dbPath)
 

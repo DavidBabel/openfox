@@ -16,6 +16,7 @@ export const AGENT_MODEL_OVERRIDES_KEY = SETTINGS_KEYS.AGENT_MODEL_OVERRIDES
 const overrideSchema = z.object({
   providerId: z.string().min(1),
   model: z.string().min(1),
+  reasoningEffort: z.string().min(1).optional(),
 })
 
 export type AgentModelOverride = z.infer<typeof overrideSchema>
@@ -82,7 +83,7 @@ export function resolveLLMClientForAgent(
     return { client: fallbackClient, usedOverride: false }
   }
 
-  const client = providerManager.createClient(override.providerId, override.model)
+  const client = providerManager.createClient(override.providerId, override.model, override.reasoningEffort)
   if (!client) {
     return {
       client: fallbackClient,

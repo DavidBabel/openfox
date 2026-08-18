@@ -131,23 +131,33 @@ export function updateSessionProvider(
   providerId: string | null,
   providerModel: string | null,
   providerManual?: boolean,
+  reasoningEffort?: string | null,
 ): void {
   const db = getDatabase()
   const now = new Date().toISOString()
 
+  // When the effort isn't explicitly provided (e.g. model-name normalization),
+  // preserve the stored value instead of silently clearing it.
+  let resolvedEffort: string | null = reasoningEffort ?? null
+  if (reasoningEffort === undefined) {
+    const row = db.prepare('SELECT provider_reasoning_effort FROM sessions WHERE id = ?').get(id) as
+      { provider_reasoning_effort: string | null } | undefined
+    resolvedEffort = row?.provider_reasoning_effort ?? null
+  }
+
   if (providerManual !== undefined) {
     db.prepare(
       `
-      UPDATE sessions SET provider_id = ?, provider_model = ?, provider_manual = ?, updated_at = ? WHERE id = ?
+      UPDATE sessions SET provider_id = ?, provider_model = ?, provider_reasoning_effort = ?, provider_manual = ?, updated_at = ? WHERE id = ?
     `,
-    ).run(providerId, providerModel, providerManual ? 1 : 0, now, id)
+    ).run(providerId, providerModel, resolvedEffort, providerManual ? 1 : 0, now, id)
   } else {
     // Preserve the existing manual flag (e.g. model-name normalization).
     db.prepare(
       `
-      UPDATE sessions SET provider_id = ?, provider_model = ?, updated_at = ? WHERE id = ?
+      UPDATE sessions SET provider_id = ?, provider_model = ?, provider_reasoning_effort = ?, updated_at = ? WHERE id = ?
     `,
-    ).run(providerId, providerModel, now, id)
+    ).run(providerId, providerModel, resolvedEffort, now, id)
   }
 }
 
@@ -155,6 +165,12 @@ export function updateSessionProviderActive(id: string, active: boolean): void {
   const db = getDatabase()
   const now = new Date().toISOString()
   db.prepare('UPDATE sessions SET provider_manual_active = ?, updated_at = ? WHERE id = ?').run(active ? 1 : 0, now, id)
+}
+
+export function updateSessionPinnedEffort(id: string, effort: string | null): void {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  db.prepare('UPDATE sessions SET provider_pinned_effort = ?, updated_at = ? WHERE id = ?').run(effort, now, id)
 }
 
 export function updateSessionMode(id: string, mode: SessionMode): void {
@@ -480,6 +496,8 @@ function mapSessionBase(row: SessionRow | SessionSummaryRow): {
   isRunning: boolean
   providerId: string | null
   providerModel: string | null
+  providerReasoningEffort?: string | null
+  providerPinnedEffort?: string | null
   providerManual: boolean
   providerManualActive: boolean
   createdAt: string
@@ -496,6 +514,12 @@ function mapSessionBase(row: SessionRow | SessionSummaryRow): {
     isRunning: Boolean(row.is_running),
     providerId: row.provider_id ?? null,
     providerModel: row.provider_model ?? null,
+    ...('provider_reasoning_effort' in row
+      ? { providerReasoningEffort: (row as SessionRow).provider_reasoning_effort ?? null }
+      : {}),
+    ...('provider_pinned_effort' in row
+      ? { providerPinnedEffort: (row as SessionRow).provider_pinned_effort ?? null }
+      : {}),
     providerManual: Boolean((row as SessionRow).provider_manual),
     providerManualActive: Boolean((row as SessionRow).provider_manual_active),
     createdAt: row.created_at,
@@ -536,6 +560,8 @@ interface SessionRow {
   summary: string | null
   provider_id: string | null
   provider_model: string | null
+  provider_reasoning_effort: string | null
+  provider_pinned_effort: string | null
   provider_manual: number
   provider_manual_active: number
   created_at: string

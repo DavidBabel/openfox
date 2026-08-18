@@ -15,6 +15,7 @@ import {
 import type { AgentDefinition } from '../agents/types.js'
 import { createCrudRoutes, type CrudRouteConfig } from './crud-helpers.js'
 import { getAgentModelOverride, setAgentModelOverride, getAgentModelOverrides } from '../agents/model-overrides.js'
+import { isReasoningEffortValue } from '../providers/model-catalog.js'
 import { logger } from '../utils/logger.js'
 
 // Pre-load default agent IDs at module init for fast synchronous validation.
@@ -56,10 +57,11 @@ const config: CrudRouteConfig<AgentDefinition> = {
   mapToResponse: (a) => a.metadata as unknown as { [key: string]: unknown },
   extraGetData: async () => {
     const overrides = getAgentModelOverrides()
-    // Convert { agentId: { providerId, model } } to { agentId: "providerId/model" }
+    // Convert { agentId: { providerId, model, reasoningEffort? } } to { agentId: "providerId/model:effort" }
     const modelOverrides: Record<string, string> = {}
     for (const [agentId, override] of Object.entries(overrides)) {
-      modelOverrides[agentId] = `${override.providerId}/${override.model}`
+      const suffix = override.reasoningEffort ? `:${override.reasoningEffort}` : ''
+      modelOverrides[agentId] = `${override.providerId}/${override.model}${suffix}`
     }
     return { modelOverrides }
   },
@@ -68,14 +70,25 @@ const config: CrudRouteConfig<AgentDefinition> = {
     router.get('/:id/model', (req, res) => {
       const { id } = req.params
       const override = getAgentModelOverride(id)
-      res.json(override ?? { providerId: null, model: null })
+      res.json(override ?? { providerId: null, model: null, reasoningEffort: null })
     })
 
     router.put('/:id/model', (req, res) => {
       const { id } = req.params
-      const { providerId, model } = req.body as { providerId?: string; model?: string }
+      const { providerId, model, reasoningEffort } = req.body as {
+        providerId?: string
+        model?: string
+        reasoningEffort?: string
+      }
+      if (reasoningEffort !== undefined && !isReasoningEffortValue(reasoningEffort)) {
+        return res.status(400).json({ error: `Unsupported reasoningEffort: ${reasoningEffort}` })
+      }
       if (providerId && model) {
-        setAgentModelOverride(id, { providerId, model })
+        setAgentModelOverride(id, {
+          providerId,
+          model,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+        })
       } else {
         setAgentModelOverride(id, null)
       }

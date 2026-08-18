@@ -219,12 +219,14 @@ function resolveStatsIdentity(
   const provider = getActiveProvider?.()
   const model = llmClient.getModel()
   const backend = provider?.backend ?? (llmClient.getBackend() === 'unknown' ? 'unknown' : llmClient.getBackend())
+  const reasoningEffort = llmClient.getReasoningEffort?.()
 
   return {
     providerId: provider?.id ?? `provider:${model}`,
     providerName: provider?.name ?? 'Unknown Provider',
     backend,
     model,
+    ...(reasoningEffort ? { reasoningEffort } : {}),
   }
 }
 
@@ -367,7 +369,7 @@ export function createWebSocketServer(
 
     const resolvedModel = providerManager.resolveModel(effective.providerId, effective.model)
     const effectiveModel = resolvedModel ?? effective.model
-    const cacheKey = `${effective.providerId}:${effectiveModel}`
+    const cacheKey = `${effective.providerId}:${effectiveModel}:${effective.reasoningEffort ?? ''}`
     const cached = sessionLLMClients.get(sessionId)
     if (cached && cached.key === cacheKey) {
       return cached.client
@@ -384,7 +386,7 @@ export function createWebSocketServer(
       })
       const session = sessionManager.getSession(sessionId)
       if (session?.providerId === effective.providerId) {
-        sessionManager.setSessionProvider(sessionId, null, null, false)
+        sessionManager.setSessionProvider(sessionId, null, null, false, null)
         sessionManager.setSessionProviderActive(sessionId, true)
       }
       sessionLLMClients.delete(sessionId)
@@ -393,7 +395,7 @@ export function createWebSocketServer(
 
     // Let ProviderManager create the session client so provider-specific
     // transports (for example External Provider custom) and auth context are preserved.
-    const client = providerManager.createClient(effective.providerId, effectiveModel)
+    const client = providerManager.createClient(effective.providerId, effectiveModel, effective.reasoningEffort)
     if (!client) {
       logger.warn('Could not create session provider client, falling back to global', {
         sessionId,
@@ -414,9 +416,18 @@ export function createWebSocketServer(
       session.providerModel === effective.model &&
       session.providerModel !== concreteModel
     ) {
-      sessionManager.setSessionProvider(sessionId, effective.providerId, concreteModel)
+      sessionManager.setSessionProvider(
+        sessionId,
+        effective.providerId,
+        concreteModel,
+        undefined,
+        effective.reasoningEffort,
+      )
     }
-    sessionLLMClients.set(sessionId, { key: `${effective.providerId}:${concreteModel}`, client })
+    sessionLLMClients.set(sessionId, {
+      key: `${effective.providerId}:${concreteModel}:${effective.reasoningEffort ?? ''}`,
+      client,
+    })
     return client
   }
 
@@ -428,11 +439,13 @@ export function createWebSocketServer(
 
     const provider = providerManager.getProviders().find((p) => p.id === effective.providerId)
     const client = getSessionLLMClient(sessionId)
+    const reasoningEffort = client.getReasoningEffort?.()
     return {
       providerId: provider?.id ?? effective.providerId,
       providerName: provider?.name ?? 'Unknown Provider',
       backend: (provider?.backend ?? client.getBackend()) as ProviderBackend,
       model: client.getModel(),
+      ...(reasoningEffort ? { reasoningEffort } : {}),
     }
   }
 

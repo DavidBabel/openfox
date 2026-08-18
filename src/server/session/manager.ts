@@ -29,6 +29,7 @@ import {
   updateSessionMetadata,
   updateSessionProvider,
   updateSessionProviderActive,
+  updateSessionPinnedEffort,
   updateSessionDangerLevel,
   updateSessionRunning,
   updateSessionCachedPrompt,
@@ -171,13 +172,20 @@ export class SessionManager {
    * into it. The global default comes from config (pure), never from the provider
    * manager's active state, so a stale override never lingers.
    *
+   * The reasoning effort follows the same source: the agent override's effort,
+   * the session pick's effort, or undefined (falls back to the model default).
+   * A session-pinned effort ("Keep current reasoning effort" on an agent/workflow
+   * switch) overrides the effort of agent overrides and session-stored values
+   * WITHOUT replacing the provider/model.
+   *
    * When `agentId` is omitted, the current session mode's agent override applies.
    */
   resolveEffectiveProviderModel(
     sessionId: string,
     agentId?: string,
-  ): { providerId: string | null; model: string | null } {
+  ): { providerId: string | null; model: string | null; reasoningEffort?: string } {
     const dbSession = dbGetSession(sessionId)
+    const pinnedEffort = dbSession?.providerPinnedEffort ?? undefined
     // An explicit manual pick that is currently ACTIVE wins over any agent
     // override. Selecting an override agent deactivates it (the agent's override
     // is the label truth); a fresh pick or a non-override agent reactivates it.
@@ -187,19 +195,37 @@ export class SessionManager {
       dbSession.providerId &&
       dbSession.providerModel
     ) {
-      return { providerId: dbSession.providerId, model: dbSession.providerModel }
+      return {
+        providerId: dbSession.providerId,
+        model: dbSession.providerModel,
+        ...(dbSession.providerReasoningEffort ? { reasoningEffort: dbSession.providerReasoningEffort } : {}),
+      }
     }
     const mode = agentId ?? dbSession?.mode ?? undefined
     const override = mode ? getAgentModelOverride(mode) : undefined
     if (override) {
-      return { providerId: override.providerId, model: override.model }
+      const effort = pinnedEffort ?? override.reasoningEffort
+      return {
+        providerId: override.providerId,
+        model: override.model,
+        ...(effort ? { reasoningEffort: effort } : {}),
+      }
     }
     if (dbSession?.providerId && dbSession?.providerModel) {
-      return { providerId: dbSession.providerId, model: dbSession.providerModel }
+      const effort = pinnedEffort ?? dbSession.providerReasoningEffort
+      return {
+        providerId: dbSession.providerId,
+        model: dbSession.providerModel,
+        ...(effort ? { reasoningEffort: effort } : {}),
+      }
     }
     const { providerId, model } = parseDefaultModelSelection(this.providerManager.getDefaultModelSelection())
     if (providerId && model) {
-      return { providerId, model }
+      return {
+        providerId,
+        model,
+        ...(pinnedEffort ? { reasoningEffort: pinnedEffort } : {}),
+      }
     }
     return { providerId: null, model: null }
   }
@@ -669,15 +695,40 @@ export class SessionManager {
     providerId: string | null,
     providerModel: string | null,
     providerManual?: boolean,
+    reasoningEffort?: string | null,
   ): Session {
-    logger.debug('Setting session provider', { sessionId, providerId, providerModel })
+    logger.debug('Setting session provider', { sessionId, providerId, providerModel, reasoningEffort })
 
-    updateSessionProvider(sessionId, providerId, providerModel, providerManual)
+    updateSessionProvider(sessionId, providerId, providerModel, providerManual, reasoningEffort)
+    // A fresh manual pick (or a reset) supersedes any pinned effort.
+    if (providerId === null || providerManual === true) {
+      this.clearSessionPinnedEffort(sessionId)
+    }
 
     const updatedSession = this.requireSession(sessionId)
     this.emit({ type: 'session_updated', session: updatedSession })
 
     return updatedSession
+  }
+
+  /**
+   * Pin a reasoning effort for the session ("Keep current reasoning effort" on an
+   * agent/workflow switch). Overrides agent override efforts without touching the
+   * provider/model resolution. Passing null clears the pin.
+   */
+  setSessionPinnedEffort(sessionId: string, effort: string | null): Session {
+    logger.debug('Setting session pinned effort', { sessionId, effort })
+
+    updateSessionPinnedEffort(sessionId, effort)
+
+    const updatedSession = this.requireSession(sessionId)
+    this.emit({ type: 'session_updated', session: updatedSession })
+
+    return updatedSession
+  }
+
+  clearSessionPinnedEffort(sessionId: string): void {
+    updateSessionPinnedEffort(sessionId, null)
   }
 
   /**
@@ -1517,6 +1568,7 @@ export class SessionManager {
     const state = getSessionState(sessionId, maxTokens)
     const dynamicContextChanged = this.getDynamicContextChanged(sessionId)
     const debugDump = this.debugDumpStore.get(sessionId)
+    const warmCache = !!this.getCachedPrompt(sessionId)
     if (!state) {
       return {
         currentTokens: 0,
@@ -1525,10 +1577,16 @@ export class SessionManager {
         dangerZone: false,
         canCompact: false,
         dynamicContextChanged,
+        ...(warmCache ? { warmCache } : {}),
         ...(debugDump ? { debugDump } : {}),
       }
     }
-    return { ...state.contextState, dynamicContextChanged, ...(debugDump ? { debugDump } : {}) }
+    return {
+      ...state.contextState,
+      dynamicContextChanged,
+      ...(warmCache ? { warmCache } : {}),
+      ...(debugDump ? { debugDump } : {}),
+    }
   }
 
   // ============================================================================

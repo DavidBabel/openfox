@@ -237,4 +237,108 @@ describe('createTransportLLMClient', () => {
     const msg = capturedMessages[0] as { attachments?: unknown[] }
     expect(msg.attachments).toHaveLength(1)
   })
+
+  it('threads the client reasoningEffort into complete and getReasoningEffort', async () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [{ id: 'gpt-5', contextWindow: 1_050_000, source: 'backend' }],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const mockComplete = vi.fn(async () => ({
+      id: 'r1',
+      content: '',
+      toolCalls: [],
+      finishReason: 'stop' as const,
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    }))
+    const client = createTransportLLMClient(provider, 'gpt-5', { ...transport, complete: mockComplete }, 'high')
+
+    expect(client.getReasoningEffort?.()).toBe('high')
+    await client.complete({ messages: [{ role: 'user', content: 'hi' }] })
+
+    expect(mockComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ reasoningEffort: 'high', messages: [{ role: 'user', content: 'hi' }] }),
+      expect.anything(),
+    )
+  })
+
+  it('threads the client reasoningEffort into stream', async () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [{ id: 'gpt-5', contextWindow: 1_050_000, source: 'backend' }],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const mockStream = vi.fn(async function* () {
+      yield { type: 'done', response: undefined } as never
+    })
+    const client = createTransportLLMClient(provider, 'gpt-5', { ...transport, stream: mockStream }, 'max')
+
+    for await (const _event of client.stream({ messages: [{ role: 'user', content: 'hi' }] })) {
+      // consume stream
+    }
+
+    expect(mockStream).toHaveBeenCalledWith(
+      expect.objectContaining({ reasoningEffort: 'max', messages: [{ role: 'user', content: 'hi' }] }),
+      expect.anything(),
+    )
+  })
+
+  it('lets an explicit request effort win over the client effort and skips it when requested', async () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [{ id: 'gpt-5', contextWindow: 1_050_000, source: 'backend' }],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const mockComplete = vi.fn(async () => ({
+      id: 'r1',
+      content: '',
+      toolCalls: [],
+      finishReason: 'stop' as const,
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    }))
+    const client = createTransportLLMClient(provider, 'gpt-5', { ...transport, complete: mockComplete }, 'high')
+
+    await client.complete({
+      messages: [{ role: 'user', content: 'hi' }],
+      reasoningEffort: 'low',
+    })
+    expect(mockComplete).toHaveBeenCalledWith(expect.objectContaining({ reasoningEffort: 'low' }), expect.anything())
+
+    await client.complete({
+      messages: [{ role: 'user', content: 'hi' }],
+      skipClientReasoningEffort: true,
+    })
+    expect(mockComplete).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ reasoningEffort: expect.anything() }),
+      expect.anything(),
+    )
+  })
+
+  it('falls back to the model thinkingLevel when no client effort is set', () => {
+    const provider: Provider = {
+      id: 'openai',
+      name: 'External Provider',
+      url: 'https://provider.example/v1',
+      backend: 'openai',
+      models: [
+        { id: 'gpt-5', contextWindow: 1_050_000, source: 'backend', thinkingEnabled: true, thinkingLevel: 'medium' },
+      ],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+    const client = createTransportLLMClient(provider, 'gpt-5', transport)
+    expect(client.getReasoningEffort?.()).toBe('medium')
+  })
 })

@@ -32,6 +32,7 @@ import { useIsSplit, readSplitLayout } from './lib/splitPersistence'
 import { Spinner, SpinnerWithText } from './components/shared/Spinner'
 import { PasswordModal } from './components/PasswordModal'
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard'
+import { EffortChangeGateProvider } from './components/plan/EffortChangeGate'
 import { CrossSessionConfirmationBanner } from './components/shared/CrossSessionConfirmationBanner'
 import { UpdateBanner } from './components/UpdateBanner'
 import { ChangelogModal } from './components/ChangelogModal'
@@ -421,7 +422,7 @@ function App() {
   }
 
   return (
-    <>
+    <EffortChangeGateProvider>
       <PasswordModal
         isOpen={showPasswordModal}
         isRetry={passwordModalRetry}
@@ -469,7 +470,7 @@ function App() {
         onClose={() => setShowChangelog(false)}
         since={getStoredPreviousVersion() ?? undefined}
       />
-    </>
+    </EffortChangeGateProvider>
   )
 }
 

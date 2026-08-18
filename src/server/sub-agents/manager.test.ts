@@ -304,7 +304,7 @@ describe('SubAgentManager', () => {
       })
 
       expect(result.content).toBe('Test result content')
-      expect(pm.createClient).toHaveBeenCalledWith('session-provider', 'session-model')
+      expect(pm.createClient).toHaveBeenCalledWith('session-provider', 'session-model', undefined)
     })
 
     it('uses a dedicated client when an override resolves', async () => {

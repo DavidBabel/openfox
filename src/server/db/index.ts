@@ -232,6 +232,19 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE sessions ADD COLUMN provider_manual_active INTEGER NOT NULL DEFAULT 1`)
   }
 
+  // Migration: per-session reasoning effort override (picked alongside the model)
+  if (!columnNames.includes('provider_reasoning_effort')) {
+    logger.info('Migrating sessions table: adding provider_reasoning_effort column')
+    db.exec(`ALTER TABLE sessions ADD COLUMN provider_reasoning_effort TEXT`)
+  }
+
+  // Migration: per-session pinned reasoning effort ("Keep current" on an agent /
+  // workflow switch — overrides agent override efforts without replacing model).
+  if (!columnNames.includes('provider_pinned_effort')) {
+    logger.info('Migrating sessions table: adding provider_pinned_effort column')
+    db.exec(`ALTER TABLE sessions ADD COLUMN provider_pinned_effort TEXT`)
+  }
+
   // Migration: Add message_count column for efficient sidebar message counts
   if (!columnNames.includes('message_count')) {
     logger.info('Migrating sessions table: adding message_count column')

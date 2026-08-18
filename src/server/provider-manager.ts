@@ -5,6 +5,7 @@ import { createLLMClient, clearModelCache, getModelProfile, type LLMClientWithMo
 import { logger } from './utils/logger.js'
 import { parseLmStudioModels } from './providers/lmstudio.js'
 import { ensureVersionPrefix, stripVersionPrefix, buildModelsUrl } from './llm/url-utils.js'
+import { getCatalogEntry } from './providers/model-catalog.js'
 import './llm/proxy.js'
 
 function normalizeModelId(s: string): string {
@@ -48,6 +49,21 @@ function enrichWithProfileDefaults(model: ModelConfig): ModelConfig {
     defaultTopP: profile.topP,
     ...(profile.topK !== undefined && { defaultTopK: profile.topK }),
     defaultMaxTokens: profile.defaultMaxTokens,
+  }
+}
+
+/**
+ * Add curated reasoning-effort info to models that lack it. Display-only and
+ * idempotent: existing per-model config (thinkingLevel, reasoningEfforts) is
+ * never overridden — the catalog only fills gaps so the UI can offer effort
+ * chips for known models even when their stored config predates the catalog.
+ */
+function enrichWithCatalogDefaults(model: ModelConfig): ModelConfig {
+  const entry = getCatalogEntry(model.id)
+  if (!entry) return model
+  return {
+    ...model,
+    ...(model.reasoningEfforts?.length ? {} : { reasoningEfforts: entry.reasoningEfforts }),
   }
 }
 
@@ -265,7 +281,7 @@ export interface ModelSettingsUpdate {
 
 export interface ProviderManager {
   getProviders(): Provider[]
-  createClient(providerId: string, model: string): LLMClientWithModel | undefined
+  createClient(providerId: string, model: string, reasoningEffort?: string): LLMClientWithModel | undefined
   resolveModel(providerId: string, model?: string): string | undefined
   getActiveProvider(): Provider | undefined
   getActiveProviderId(): string | undefined
@@ -361,8 +377,10 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     return {}
   }
 
-  function createConfigForProvider(provider: Provider, model: string): Config {
-    const modelThinking = resolveModelThinkingConfig(provider, model)
+  function createConfigForProvider(provider: Provider, model: string, reasoningEffort?: string): Config {
+    // An explicit effort (session pick or agent override) wins over the model's
+    // configured thinkingLevel; otherwise fall back to the model default.
+    const modelThinking = reasoningEffort ? { reasoningEffort } : resolveModelThinkingConfig(provider, model)
     return {
       ...config,
       llm: {
@@ -410,12 +428,12 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     return provider.models.find((m) => m.selected)?.id ?? provider.models[0]?.id ?? requestedModel ?? 'auto'
   }
 
-  function createClientForProvider(provider: Provider, model?: string): LLMClientWithModel {
+  function createClientForProvider(provider: Provider, model?: string, reasoningEffort?: string): LLMClientWithModel {
     const resolvedModel = resolveProviderModel(provider, model)
     const transport = options.adapters?.getTransport(resolveTransportAdapter(provider))
     return transport
-      ? createTransportLLMClient(provider, resolvedModel, transport)
-      : createLLMClient(createConfigForProvider(provider, resolvedModel))
+      ? createTransportLLMClient(provider, resolvedModel, transport, reasoningEffort)
+      : createLLMClient(createConfigForProvider(provider, resolvedModel, reasoningEffort))
   }
 
   async function fetchProviderModels(provider: Provider): Promise<ModelConfig[]> {
@@ -442,9 +460,9 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
   }
 
   return {
-    createClient(providerId: string, model: string) {
+    createClient(providerId: string, model: string, reasoningEffort?: string) {
       const provider = providers.find((p) => p.id === providerId)
-      return provider ? createClientForProvider(provider, model) : undefined
+      return provider ? createClientForProvider(provider, model, reasoningEffort) : undefined
     },
 
     resolveModel(providerId: string, model?: string) {
@@ -456,6 +474,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
       return providers.map((p) => ({
         ...p,
         status: providerStatus.get(p.id) ?? 'unknown',
+        models: p.models.map(enrichWithCatalogDefaults),
       }))
     },
 

@@ -1018,13 +1018,18 @@ export const useSessionStore = create<SessionState>((set, get) => {
       wsClient.send('context.compact', { sessionId })
     },
 
-    setSessionProvider: async (sessionId, providerId, model) => {
+    setSessionProvider: async (sessionId, providerId, model, reasoningEffort) => {
       try {
         if (!paneFor(get(), sessionId)?.session) return null
         const res = await authFetch(`/api/sessions/${sessionId}/provider`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId, ...(model ? { model } : {}) }),
+          body: JSON.stringify({
+            providerId,
+            ...(model ? { model } : {}),
+            // An explicit null clears the session effort; undefined leaves it untouched.
+            ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
+          }),
         })
         if (!res.ok) return null
         const data = await res.json()
@@ -1049,6 +1054,54 @@ export const useSessionStore = create<SessionState>((set, get) => {
       try {
         if (!paneFor(get(), sessionId)?.session) return null
         const res = await authFetch(`/api/sessions/${sessionId}/provider`, { method: 'DELETE' })
+        if (!res.ok) return null
+        const data = await res.json()
+        set((state) => {
+          const prior = state.panes[sessionId] ?? paneFromFlat(state)
+          const nextPane: SessionPane = {
+            ...prior,
+            session: data.session,
+            messages: data.messages ?? prior.messages,
+            hiddenCount: (data.hiddenCount as number | undefined) ?? prior.hiddenCount,
+          }
+          return replacePane(state, sessionId, nextPane)
+        })
+        return data.session
+      } catch {
+        return null
+      }
+    },
+
+    pinSessionEffort: async (sessionId, effort) => {
+      try {
+        if (!paneFor(get(), sessionId)?.session) return null
+        const res = await authFetch(`/api/sessions/${sessionId}/pin-effort`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ effort }),
+        })
+        if (!res.ok) return null
+        const data = await res.json()
+        set((state) => {
+          const prior = state.panes[sessionId] ?? paneFromFlat(state)
+          const nextPane: SessionPane = {
+            ...prior,
+            session: data.session,
+            messages: data.messages ?? prior.messages,
+            hiddenCount: (data.hiddenCount as number | undefined) ?? prior.hiddenCount,
+          }
+          return replacePane(state, sessionId, nextPane)
+        })
+        return data.session
+      } catch {
+        return null
+      }
+    },
+
+    clearSessionEffortPin: async (sessionId) => {
+      try {
+        if (!paneFor(get(), sessionId)?.session) return null
+        const res = await authFetch(`/api/sessions/${sessionId}/pin-effort`, { method: 'DELETE' })
         if (!res.ok) return null
         const data = await res.json()
         set((state) => {

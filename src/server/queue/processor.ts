@@ -12,7 +12,11 @@ interface QueueProcessorDeps {
   sessionManager: SessionManager
   providerManager: ProviderManager
   getLLMClient: () => LLMClientWithModel
-  getLLMClientForProvider?: (providerId: string, model: string) => LLMClientWithModel | undefined
+  getLLMClientForProvider?: (
+    providerId: string,
+    model: string,
+    reasoningEffort?: string,
+  ) => LLMClientWithModel | undefined
   getActiveProvider: (() => import('../../shared/types.js').Provider | undefined) | undefined
   broadcastForSession: (sessionId: string, msg: ServerMessage) => void
 }
@@ -185,24 +189,32 @@ export class QueueProcessor {
     const llmClient = getLLMClient()
     const provider = getActiveProvider?.()
 
-    const statsIdentity = {
-      providerId: provider?.id ?? `provider:${llmClient.getModel()}`,
-      providerName: provider?.name ?? 'Unknown Provider',
-      backend: provider?.backend ?? llmClient.getBackend(),
-      model: llmClient.getModel(),
-    }
-
     // Re-resolve the session's LLM client for each retry attempt so a provider
     // switch made mid-turn (e.g. during backoff) takes effect on the next attempt.
+    // The session/agent reasoning effort is passed through so the request and
+    // the stats identity carry it.
     const getSessionLLMClient = (): LLMClientWithModel => {
       const current = sessionManager.resolveEffectiveProviderModel(sessionId)
       if (current.providerId && current.model && this.deps.getLLMClientForProvider) {
         const resolvedModel = providerManager.resolveModel?.(current.providerId, current.model)
         const effectiveModel = resolvedModel ?? current.model
-        const client = this.deps.getLLMClientForProvider(current.providerId, effectiveModel)
+        const client = this.deps.getLLMClientForProvider(current.providerId, effectiveModel, current.reasoningEffort)
         if (client) return client
       }
       return llmClient
+    }
+
+    // Run the turn on the session-aware client (not the global one) so the
+    // reasoning effort actually sent is the session's, and matches the stats.
+    const sessionClient = getSessionLLMClient()
+    const sessionEffort = sessionClient.getReasoningEffort?.()
+
+    const statsIdentity = {
+      providerId: provider?.id ?? `provider:${sessionClient.getModel()}`,
+      providerName: provider?.name ?? 'Unknown Provider',
+      backend: provider?.backend ?? sessionClient.getBackend(),
+      model: sessionClient.getModel(),
+      ...(sessionEffort ? { reasoningEffort: sessionEffort } : {}),
     }
 
     const { runChatTurn } = await import('../chat/orchestrator.js')
@@ -210,7 +222,7 @@ export class QueueProcessor {
     const runChatTurnParams = buildRunChatTurnParams({
       sessionManager,
       sessionId,
-      llmClient,
+      llmClient: sessionClient,
       getSessionLLMClient,
       statsIdentity,
       signal: controller.signal,

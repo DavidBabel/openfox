@@ -163,8 +163,15 @@ export interface SessionState {
   switchDangerLevel: (sessionId: string, dangerLevel: 'normal' | 'dangerous') => void
   editCriteria: (sessionId: string, criteria: Criterion[]) => void
   compactContext: (sessionId: string) => void
-  setSessionProvider: (sessionId: string, providerId: string, model?: string) => Promise<Session | null>
+  setSessionProvider: (
+    sessionId: string,
+    providerId: string,
+    model?: string,
+    reasoningEffort?: string | null,
+  ) => Promise<Session | null>
   resetSessionProvider: (sessionId: string) => Promise<Session | null>
+  pinSessionEffort: (sessionId: string, effort: string) => Promise<Session | null>
+  clearSessionEffortPin: (sessionId: string) => Promise<Session | null>
   updateContextState: (contextState: ContextState) => void
   updateSubAgentContextState: (subAgentId: string, context: ContextState) => void
   clearSubAgentContextState: (subAgentId: string) => void

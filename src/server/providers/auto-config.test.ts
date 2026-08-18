@@ -387,6 +387,129 @@ describe('Rejected-params probing', () => {
     }
   })
 
+  describe('Reasoning-effort probing', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    /** Mock an endpoint that reports prompt_tokens per reasoning_effort value. */
+    function stubEffortEndpoint(tokensByEffort: Record<string, number | null>) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString()
+          if (url.endsWith('/models')) {
+            return new Response(JSON.stringify({ data: [] }), { status: 200 })
+          }
+          const body = init?.body ? (JSON.parse(init.body as string) as Record<string, unknown>) : {}
+          const effort = (body['reasoning_effort'] as string | undefined) ?? 'baseline'
+          const tokens = tokensByEffort[effort]
+          if (tokens === null) {
+            return new Response(JSON.stringify({ error: { message: `unsupported reasoning_effort: ${effort}` } }), {
+              status: 400,
+            })
+          }
+          return new Response(
+            JSON.stringify({ choices: [{ message: { content: 'hi' } }], usage: { prompt_tokens: tokens } }),
+            { status: 200 },
+          )
+        }),
+      )
+    }
+
+    it('dedupes mapped efforts by prompt size and keeps distinct levels', async () => {
+      // low and medium share a prompt (medium maps to low), xhigh maps to high.
+      stubEffortEndpoint({ baseline: 100, low: 120, medium: 120, high: 150, xhigh: 150, max: 180 })
+
+      const result = await autoConfig({
+        url: 'http://localhost:8000/v1',
+        backend: 'unknown',
+        models: [{ id: 'test-model' }],
+      })
+
+      expect(result.models[0]?.reasoningEfforts).toEqual(['low', 'high', 'max'])
+    })
+
+    it('drops accepted-but-ignored efforts that match the baseline when others differ', async () => {
+      // low, medium and xhigh are accepted but produce the same prompt as the
+      // baseline (no measurable effect); high and max genuinely differ.
+      stubEffortEndpoint({ baseline: 100, low: 100, medium: 100, xhigh: 100, high: 150, max: 180 })
+
+      const result = await autoConfig({
+        url: 'http://localhost:8000/v1',
+        backend: 'unknown',
+        models: [{ id: 'test-model' }],
+      })
+
+      expect(result.models[0]?.reasoningEfforts).toEqual(['high', 'max'])
+    })
+
+    it('returns all accepted values when every effort shares the same prompt size', async () => {
+      stubEffortEndpoint({ baseline: 100, low: 110, medium: 110, high: 110, xhigh: 110, max: 110 })
+
+      const result = await autoConfig({
+        url: 'http://localhost:8000/v1',
+        backend: 'unknown',
+        models: [{ id: 'test-model' }],
+      })
+
+      expect(result.models[0]?.reasoningEfforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    })
+
+    it('returns only accepted values when some efforts are rejected', async () => {
+      stubEffortEndpoint({ baseline: 100, low: null, medium: 120, high: 150, xhigh: null, max: 180 })
+
+      const result = await autoConfig({
+        url: 'http://localhost:8000/v1',
+        backend: 'unknown',
+        models: [{ id: 'test-model' }],
+      })
+
+      expect(result.models[0]?.reasoningEfforts).toEqual(['medium', 'high', 'max'])
+    })
+
+    it('leaves reasoningEfforts undefined when the endpoint rejects the probes', async () => {
+      stubEffortEndpoint({ baseline: 100, low: null, medium: null, high: null, xhigh: null, max: null })
+
+      const result = await autoConfig({
+        url: 'http://localhost:8000/v1',
+        backend: 'unknown',
+        models: [{ id: 'test-model' }],
+      })
+
+      expect(result.models[0]?.reasoningEfforts).toBeUndefined()
+    })
+
+    it('trusts the curated catalog for cloud backends without probing', async () => {
+      // backend 'unknown' + catalog coverage → probing is skipped entirely, the
+      // curated values win regardless of what the endpoint would report.
+      stubEffortEndpoint({ baseline: 100, low: 120, medium: 120, high: 150, xhigh: 150, max: 180 })
+
+      const result = await autoConfig({
+        url: 'https://api.deepseek.com/v1',
+        backend: 'unknown',
+        models: [{ id: 'deepseek-v4-flash' }],
+      })
+
+      expect(result.models[0]?.reasoningEfforts).toEqual(['none', 'low', 'high', 'max'])
+      expect(result.models[0]?.defaultReasoningEffort).toBe('high')
+    })
+
+    it('local backends probe even for catalog-known models', async () => {
+      // A self-hosted deepseek-v4-flash (backend vllm) is probed, not trusted
+      // from the catalog — the local variant may differ from the official API.
+      stubEffortEndpoint({ baseline: 100, low: 100, medium: 100, xhigh: 100, high: 150, max: 180 })
+
+      const result = await autoConfig({
+        url: 'http://localhost:8000/v1',
+        backend: 'vllm',
+        models: [{ id: 'deepseek-v4-flash' }],
+      })
+
+      expect(result.models[0]?.reasoningEfforts).toEqual(['high', 'max'])
+    })
+  })
+
   it('skips rejected-params detection when the control probe fails (structural rejection)', async () => {
     const { autoConfig } = await import('./auto-config.js')
 

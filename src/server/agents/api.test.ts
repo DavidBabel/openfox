@@ -16,6 +16,7 @@ import { loadAllAgents, findAgentById, saveAgent, deleteAgent, agentExists } fro
 import { closeDatabase, initDatabase } from '../db/index.js'
 import { loadConfig } from '../config.js'
 import { getAgentModelOverride, setAgentModelOverride } from './model-overrides.js'
+import { isReasoningEffortValue } from '../providers/model-catalog.js'
 
 let tempDir: string
 let server: Server
@@ -85,14 +86,25 @@ function mountAgentRoutes(app: express.Express, configDir: string) {
   app.get('/api/agents/:id/model', (req, res) => {
     const { id } = req.params
     const override = getAgentModelOverride(id)
-    res.json(override ?? { providerId: null, model: null })
+    res.json(override ?? { providerId: null, model: null, reasoningEffort: null })
   })
 
   app.put('/api/agents/:id/model', (req, res) => {
     const { id } = req.params
-    const { providerId, model } = req.body as { providerId?: string; model?: string }
+    const { providerId, model, reasoningEffort } = req.body as {
+      providerId?: string
+      model?: string
+      reasoningEffort?: string
+    }
+    if (reasoningEffort !== undefined && !isReasoningEffortValue(reasoningEffort)) {
+      return res.status(400).json({ error: `Unsupported reasoningEffort: ${reasoningEffort}` })
+    }
     if (providerId && model) {
-      setAgentModelOverride(id, { providerId, model })
+      setAgentModelOverride(id, {
+        providerId,
+        model,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+      })
     } else {
       setAgentModelOverride(id, null)
     }
@@ -287,6 +299,30 @@ describe('Agent model override API', () => {
     const data = getRes.json as any
     expect(data.providerId).toBe('local')
     expect(data.model).toBe('qwen3-coder')
+  })
+
+  it('PUT stores an optional reasoningEffort and GET returns it', async () => {
+    const putRes = await request('PUT', '/api/agents/planner/model', {
+      providerId: 'local',
+      model: 'qwen3-coder',
+      reasoningEffort: 'high',
+    })
+    expect(putRes.status).toBe(200)
+
+    const getRes = await request('GET', '/api/agents/planner/model')
+    const data = getRes.json as any
+    expect(data.providerId).toBe('local')
+    expect(data.model).toBe('qwen3-coder')
+    expect(data.reasoningEffort).toBe('high')
+  })
+
+  it('PUT rejects an unknown reasoningEffort value', async () => {
+    const putRes = await request('PUT', '/api/agents/planner/model', {
+      providerId: 'local',
+      model: 'qwen3-coder',
+      reasoningEffort: 'ultra',
+    })
+    expect(putRes.status).toBe(400)
   })
 
   it('PUT without providerId/model clears override', async () => {

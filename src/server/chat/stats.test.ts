@@ -51,6 +51,21 @@ describe('stats computation', () => {
       expect(stats.generationSpeed).toBe(147.1)
       expect(stats.totalTime).toBe(145)
     })
+
+    it('carries the reasoningEffort from the identity into the message stats', () => {
+      const stats = computeAggregatedStats({
+        identity: { ...identity, reasoningEffort: 'high' },
+        mode: 'builder',
+        totalPrefillTokens: 1000,
+        totalGenTokens: 100,
+        totalPrefillTime: 1,
+        totalGenTime: 1,
+        totalToolTime: 0,
+        totalTime: 5,
+      })
+
+      expect(stats.reasoningEffort).toBe('high')
+    })
   })
 
   describe('prefTokenIncrement', () => {

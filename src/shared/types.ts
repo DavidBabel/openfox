@@ -92,6 +92,10 @@ export interface Session {
   isRunning: boolean // Is the agent actively working?
   providerId?: string | null // Per-session provider override
   providerModel?: string | null // Per-session model override
+  providerReasoningEffort?: string | null // Per-session reasoning effort override (with providerModel)
+  /** Per-session pinned reasoning effort ("Keep current" on an agent/workflow switch):
+   *  overrides the effort of agent overrides without replacing the provider/model. */
+  providerPinnedEffort?: string | null
   providerManual?: boolean // true when the provider/model was explicitly picked by the user
   providerManualActive?: boolean // false while on an override agent (the agent's override is the label truth); a fresh pick re-activates it
   createdAt: string
@@ -171,6 +175,8 @@ export interface MessageStats {
   providerName: string
   backend: ProviderBackend
   model: string
+  /** Reasoning effort applied for this model (e.g. "high"). */
+  reasoningEffort?: string
   mode: ToolMode // Which system prompt was used (planner, builder, verifier)
   totalTime: number // wall clock time (seconds)
   toolTime: number // time spent in tool execution (seconds)
@@ -187,6 +193,8 @@ export interface LLMCallStats {
   providerName: string
   backend: ProviderBackend
   model: string
+  /** Reasoning effort applied for this model (e.g. "high"). */
+  reasoningEffort?: string
   callIndex: number // 1-based call order within the response
   promptTokens: number // prompt tokens for this specific LLM call (total, including cached)
   completionTokens: number // completion tokens for this specific LLM call
@@ -271,6 +279,8 @@ export interface StatsIdentity {
   providerName: string
   backend: ProviderBackend
   model: string
+  /** Reasoning effort applied for this model (e.g. "high"). */
+  reasoningEffort?: string
 }
 
 export interface ModelSessionStats extends StatsIdentity {
@@ -588,6 +598,8 @@ export interface ContextState {
   dangerZone: boolean // True if approaching max (< 20K remaining)
   canCompact: boolean // True if there's enough context to compact
   dynamicContextChanged: boolean // True if dynamic inputs changed since system prompt was cached
+  /** True when the session has a cached system prompt (warm LLM prefix cache). */
+  warmCache?: boolean
   debugDump?: { cachedPrompt: string; cachedTools: string[]; liveTools: string[] }
 }
 

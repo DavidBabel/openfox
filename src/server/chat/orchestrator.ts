@@ -121,11 +121,14 @@ export interface OrchestratorOptions {
 
 function resolveStatsIdentity(options: OrchestratorOptions): StatsIdentity {
   const clientModel = options.llmClient.getModel()
+  const clientEffort = options.llmClient.getReasoningEffort?.()
 
   if (options.statsIdentity) {
+    const effort = options.statsIdentity.reasoningEffort ?? clientEffort
     return {
       ...options.statsIdentity,
       model: options.statsIdentity.model ?? clientModel,
+      ...(effort ? { reasoningEffort: effort } : {}),
     }
   }
 
@@ -134,6 +137,7 @@ function resolveStatsIdentity(options: OrchestratorOptions): StatsIdentity {
     providerName: 'Unknown Provider',
     backend: 'unknown',
     model: clientModel,
+    ...(clientEffort ? { reasoningEffort: clientEffort } : {}),
   }
 }
 

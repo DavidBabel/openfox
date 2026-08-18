@@ -33,6 +33,7 @@ import { useAutoScroll } from '@/hooks/useAutoScroll.ts'
 import { useViewport } from '../../hooks/useViewport'
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { useScrolledSend } from '@/hooks/useScrolledSend.ts'
+import { useEffortGatedAgentSwitch } from '@/hooks/useEffortGateContext.ts'
 import { useKeybindings, useBinding, useAgentSwitchingBindings } from '../../hooks/useKeybindings'
 import { SessionScopeProvider, useScopedPaneState } from '../../stores/session/session-scope'
 
@@ -169,6 +170,7 @@ export function PlanPanel({
     getViewport,
   )
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll, targetSessionId)
+  const gatedAgentSwitch = useEffortGatedAgentSwitch(targetSessionId)
 
   useEffect(() => {
     const handler = () => setAutoScroll(true)
@@ -277,7 +279,7 @@ export function PlanPanel({
     isFocusedPane ? topLevelAgents : [],
     (agentId) => {
       if (targetSessionId) {
-        useSessionStore.getState().switchMode(targetSessionId, agentId)
+        void gatedAgentSwitch(agentId)
       }
     },
   )
