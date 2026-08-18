@@ -148,4 +148,61 @@ describe('useEffortGatedAgentSwitch (criterion 4 — all agent-selection entry p
     expect(mockPinEffort).not.toHaveBeenCalled()
     expect(mockClearPin).not.toHaveBeenCalled()
   })
+
+  it('gates when switching to a non-override agent restores a differing session effort', async () => {
+    // The current agent (builder) carries a ':low' override; the session's own
+    // stored effort is ':max'. Switching to explorer (no override) would change
+    // the effort back to ':max' — that must gate like any other effort change.
+    mockSession = { id: 'session-1', mode: 'builder', providerReasoningEffort: 'max' }
+    mockOverrides = { builder: 'provider-1/model:low' }
+    mockWarmCache = true
+
+    const { result } = renderHook(() => useEffortGatedAgentSwitch(), { wrapper })
+    const switching = result.current('explorer', 'Explorer')
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Reasoning effort change'))
+    expect(mockSwitchMode).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('max')
+
+    const applyButton = [...document.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Apply the reasoning effort'),
+    )
+    applyButton?.click()
+    await switching
+    expect(mockClearPin).toHaveBeenCalledWith('session-1')
+    expect(mockSwitchMode).toHaveBeenCalledWith('session-1', 'explorer')
+  })
+
+  it('keeps the current effort when switching to a non-override agent (pin preserves it)', async () => {
+    mockSession = { id: 'session-1', mode: 'builder', providerReasoningEffort: 'max' }
+    mockOverrides = { builder: 'provider-1/model:low' }
+    mockWarmCache = true
+
+    const { result } = renderHook(() => useEffortGatedAgentSwitch(), { wrapper })
+    const switching = result.current('explorer', 'Explorer')
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Reasoning effort change'))
+
+    const keepButton = [...document.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Keep current reasoning effort'),
+    )
+    keepButton?.click()
+    await switching
+    expect(mockPinEffort).toHaveBeenCalledWith('session-1', 'low')
+    expect(mockSwitchMode).toHaveBeenCalledWith('session-1', 'explorer')
+  })
+
+  it('does not gate a switch to a non-override agent that keeps the same effort', async () => {
+    // Builder's override and the session's stored effort are both ':high' —
+    // switching to explorer (no override) keeps ':high', so no gate.
+    mockSession = { id: 'session-1', mode: 'builder', providerReasoningEffort: 'high' }
+    mockOverrides = { builder: 'provider-1/model:high' }
+    mockWarmCache = true
+
+    const { result } = renderHook(() => useEffortGatedAgentSwitch(), { wrapper })
+    await result.current('explorer', 'Explorer')
+    expect(mockSwitchMode).toHaveBeenCalledWith('session-1', 'explorer')
+    expect(mockPinEffort).not.toHaveBeenCalled()
+    expect(mockClearPin).not.toHaveBeenCalled()
+  })
 })

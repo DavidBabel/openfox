@@ -69,9 +69,28 @@ export function useEffortGateContext(explicitSessionId?: string | null | undefin
     modelDefaultEffort,
   })
 
+  // The effort that would apply WITHOUT the current agent's override — the
+  // session's own pin/session-stored effort, else the session/default model's
+  // default. Used as the proposed effort when switching to a non-override
+  // agent (which can restore a differing stored effort and must gate too).
+  const sessionOwnProviderId = isSessionManual ? sessionProviderId : (sessionProviderId ?? defaultProviderId)
+  const sessionOwnModel = isSessionManual ? sessionModel : (sessionModel ?? defaultModel)
+  const sessionOwnModelConfig = sessionOwnProviderId
+    ? providers.find((p) => p.id === sessionOwnProviderId)?.models.find((m) => m.id === sessionOwnModel)
+    : undefined
+  const sessionOwnModelDefaultEffort =
+    sessionOwnModelConfig?.reasoningEffortOverride ??
+    (sessionOwnModelConfig?.thinkingEnabled ? sessionOwnModelConfig.thinkingLevel : undefined)
+  const sessionOwnEffort = resolveEffectiveEffort({
+    session: currentSession,
+    agentOverrideEffort: undefined,
+    modelDefaultEffort: sessionOwnModelDefaultEffort,
+  })
+
   return {
     sessionId,
     currentEffort,
+    sessionOwnEffort,
     warmCache: contextState?.warmCache,
     gate,
   }
@@ -79,14 +98,17 @@ export function useEffortGateContext(explicitSessionId?: string | null | undefin
 
 /**
  * A gate-aware agent switch shared by every agent-selection entry point (the
- * dropdown and the keyboard shortcuts): switching to an agent whose override
- * carries a differing reasoning effort on a warm cache opens the gate; Apply
- * clears the pin (override effort takes effect), Keep pins the current effort.
+ * dropdown and the keyboard shortcuts): switching to an agent whose resulting
+ * reasoning effort differs from the current one on a warm cache opens the gate.
+ * The resulting effort is the target's override effort, else the session's own
+ * effort (switching away from an override agent can restore a differing stored
+ * effort — that invalidates the cache too). Apply clears the pin (the new
+ * effort takes effect), Keep pins the current effort.
  */
 export function useEffortGatedAgentSwitch(
   explicitSessionId?: string | null | undefined,
 ): (agentId: string, agentName?: string) => Promise<void> {
-  const { sessionId, currentEffort, warmCache, gate } = useEffortGateContext(explicitSessionId)
+  const { sessionId, currentEffort, sessionOwnEffort, warmCache, gate } = useEffortGateContext(explicitSessionId)
   const switchMode = useSessionStore((state) => state.switchMode)
   const pinSessionEffort = useSessionStore((state) => state.pinSessionEffort)
   const clearSessionEffortPin = useSessionStore((state) => state.clearSessionEffortPin)
@@ -96,17 +118,18 @@ export function useEffortGatedAgentSwitch(
     async (agentId: string, agentName?: string) => {
       if (!sessionId) return
       const overrideEffort = parseModelValue(modelOverrides[agentId])?.reasoningEffort
+      const proposedEffort = overrideEffort ?? sessionOwnEffort
       if (
-        overrideEffort &&
+        proposedEffort &&
         shouldGateEffortChange({
           warmCache,
           currentEffort,
-          proposedEffort: overrideEffort,
+          proposedEffort,
         })
       ) {
         const choice = await gate.requestEffortSwitch({
           fromEffort: currentEffort,
-          toEffort: overrideEffort,
+          toEffort: proposedEffort,
           contextLabel: agentName,
         })
         if (choice === 'keep') {
@@ -117,6 +140,16 @@ export function useEffortGatedAgentSwitch(
       }
       await switchMode(sessionId, agentId)
     },
-    [sessionId, warmCache, currentEffort, gate, switchMode, pinSessionEffort, clearSessionEffortPin, modelOverrides],
+    [
+      sessionId,
+      warmCache,
+      currentEffort,
+      sessionOwnEffort,
+      gate,
+      switchMode,
+      pinSessionEffort,
+      clearSessionEffortPin,
+      modelOverrides,
+    ],
   )
 }

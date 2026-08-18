@@ -7,7 +7,9 @@ import {
 } from './effort-gate'
 
 describe('resolveEffectiveEffort', () => {
-  it('an active manual pick wins', () => {
+  it('an active pin wins over an active manual pick and an agent override', () => {
+    // The pin ("Keep current reasoning effort") is the most recent explicit
+    // choice and wins even while a manual pick is active.
     expect(
       resolveEffectiveEffort({
         session: {
@@ -19,22 +21,21 @@ describe('resolveEffectiveEffort', () => {
         agentOverrideEffort: 'max',
         modelDefaultEffort: 'medium',
       }),
-    ).toBe('none')
+    ).toBe('high')
   })
 
-  it('an active manual pick with no effort ignores pin and override (model default applies)', () => {
+  it('an active manual pick with no pin wins over override and model default', () => {
     expect(
       resolveEffectiveEffort({
         session: {
-          providerReasoningEffort: null,
-          providerPinnedEffort: 'high',
+          providerReasoningEffort: 'none',
           providerManual: true,
           providerManualActive: true,
         },
         agentOverrideEffort: 'max',
         modelDefaultEffort: 'medium',
       }),
-    ).toBe('medium')
+    ).toBe('none')
   })
 
   it('pinned effort beats agent override and session-stored efforts', () => {
@@ -78,12 +79,11 @@ describe('resolveEffectiveEffort', () => {
     expect(resolveEffectiveEffort({ session: null, modelDefaultEffort: 'turbo' })).toBeUndefined()
   })
 
-  it('an active manual pick with a non-vocabulary model default resolves to undefined', () => {
+  it('an active manual pick with no pin and a non-vocabulary model default resolves to undefined', () => {
     expect(
       resolveEffectiveEffort({
         session: {
           providerReasoningEffort: null,
-          providerPinnedEffort: 'high',
           providerManual: true,
           providerManualActive: true,
         },
@@ -213,6 +213,40 @@ describe('resolveWorkflowFirstAgentId', () => {
 
   it('returns undefined for shell/user entry steps', () => {
     const wf = { ...workflow, entryStep: 'shell' }
+    expect(resolveWorkflowFirstAgentId(wf)).toBeUndefined()
+  })
+
+  it('skips a leading user step and returns the next agent step (Build & Verify shape)', () => {
+    const wf = {
+      entryStep: 'work_location',
+      steps: [
+        { id: 'work_location', name: 'Work location', type: 'user', phase: 'build', transitions: [] },
+        { id: 'setup_workspace', name: 'Setup', type: 'agent', agentId: 'builder', phase: 'build', transitions: [] },
+        { id: 'build', name: 'Build', type: 'agent', agentId: 'builder', phase: 'build', transitions: [] },
+      ],
+    }
+    expect(resolveWorkflowFirstAgentId(wf)).toBe('builder')
+  })
+
+  it('skips a leading shell step and returns the next agent step', () => {
+    const wf = {
+      entryStep: 'setup',
+      steps: [
+        { id: 'setup', name: 'Setup', type: 'shell', phase: 'build', transitions: [] },
+        { id: 'build', name: 'Build', type: 'agent', agentId: 'builder', phase: 'build', transitions: [] },
+      ],
+    }
+    expect(resolveWorkflowFirstAgentId(wf)).toBe('builder')
+  })
+
+  it('returns undefined when the workflow has no agent steps at all', () => {
+    const wf = {
+      entryStep: 'a',
+      steps: [
+        { id: 'a', name: 'A', type: 'user', phase: 'build', transitions: [] },
+        { id: 'b', name: 'B', type: 'shell', phase: 'build', transitions: [] },
+      ],
+    }
     expect(resolveWorkflowFirstAgentId(wf)).toBeUndefined()
   })
 

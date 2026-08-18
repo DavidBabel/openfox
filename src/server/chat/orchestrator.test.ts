@@ -465,13 +465,93 @@ describe('chat orchestrator', () => {
       return data.stats !== undefined
     })
 
+    // The stats reflect the per-agent client actually used (the harness's
+    // createClientForAgent returns the 'test-model' stub). Provider context
+    // still comes from the caller identity.
     expect(messageDoneEvent?.[1]).toMatchObject({
       data: {
         stats: expect.objectContaining({
           providerId: 'provider-1',
           providerName: 'Local vLLM',
           backend: 'vllm',
-          model: 'qwen3-32b',
+          model: 'test-model',
+        }),
+      },
+    })
+  })
+
+  it('prefers the client actually used (override) over the caller statsIdentity for model and effort', async () => {
+    const eventStore = createEventStore()
+    getEventStoreMock.mockReturnValue(eventStore)
+    getAllInstructionsMock.mockResolvedValue({ content: 'Plan carefully', files: [] })
+    getToolRegistryForModeMock.mockReturnValue({ tools: [], definitions: [], execute: vi.fn() })
+    streamLLMPureMock.mockReturnValue({ kind: 'stream' })
+    consumeStreamGeneratorMock.mockResolvedValue({
+      content: 'Planned response',
+      toolCalls: [],
+      segments: [{ type: 'text', content: 'Planned response' }],
+      usage: { promptTokens: 30, completionTokens: 10 },
+      timing: { ttft: 1, completionTime: 2, tps: 5, prefillTps: 30 },
+      aborted: false,
+    })
+
+    const state: any = {
+      current: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/tmp/project',
+        mode: 'planner',
+        phase: 'plan',
+        isRunning: true,
+        criteria: [],
+        executionState: { currentTokenCount: 0, compactionCount: 0 },
+        messages: [{ id: 'user-1', role: 'user', content: 'Do the plan' }],
+      },
+    }
+    const sessionManager = createSessionManager(state)
+
+    // runAgentTurn re-resolves the per-agent override client. The workflow-launch
+    // identity is session-based (":max", session model); the client actually used
+    // carries the agent override (":low", override model). The stats must describe
+    // the client that ran, not the caller's stale identity.
+    sessionManager.createClientForAgent = vi.fn(() => ({
+      getModel: () => 'override-model',
+      getReasoningEffort: () => 'low',
+      setModel: vi.fn(),
+      getProfile: vi.fn(),
+      getBackend: () => 'vllm',
+      setBackend: vi.fn(),
+      complete: vi.fn(),
+      stream: vi.fn(),
+    })) as never
+
+    await runChatTurn({
+      sessionManager: sessionManager as never,
+      sessionId: 'session-1',
+      llmClient: { getModel: () => 'session-model' } as never,
+      statsIdentity: {
+        providerId: 'provider-1',
+        providerName: 'Local vLLM',
+        backend: 'vllm',
+        model: 'session-model',
+        reasoningEffort: 'max',
+      },
+    })
+
+    const messageDoneEvent = eventStore.append.mock.calls.find(([, event]) => {
+      if (event.type !== 'message.done') return false
+      const data = event.data as { stats?: unknown }
+      return data.stats !== undefined
+    })
+
+    expect(messageDoneEvent?.[1]).toMatchObject({
+      data: {
+        stats: expect.objectContaining({
+          providerId: 'provider-1',
+          providerName: 'Local vLLM',
+          backend: 'vllm',
+          model: 'override-model',
+          reasoningEffort: 'low',
         }),
       },
     })

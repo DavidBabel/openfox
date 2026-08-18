@@ -144,16 +144,21 @@ export class SessionManager {
    * client for that provider+model. Falls back to the global client if no
    * override is set or the provider no longer exists.
    *
+   * A session-pinned effort ("Keep current reasoning effort") wins over the
+   * override's own effort, mirroring resolveEffectiveProviderModel.
+   *
    * @param preferredFallback - When provided, used as fallback instead of
    *   providerManager.getLLMClient(). This is important in mock/test mode
    *   where the caller already has a mock client that should be preserved.
    */
   createClientForAgent(
+    sessionId: string,
     agentId: string,
     preferredFallback?: import('../llm/client.js').LLMClientWithModel,
   ): import('../llm/client.js').LLMClientWithModel {
     const fallback = preferredFallback ?? this.providerManager.getLLMClient()
-    const resolved = resolveLLMClientForAgent(agentId, fallback, this.providerManager)
+    const pinnedEffort = dbGetSession(sessionId)?.providerPinnedEffort ?? undefined
+    const resolved = resolveLLMClientForAgent(agentId, fallback, this.providerManager, pinnedEffort)
     if (resolved.warning) {
       logger.warn('Agent model override unavailable, falling back', {
         agentId,
@@ -189,16 +194,19 @@ export class SessionManager {
     // An explicit manual pick that is currently ACTIVE wins over any agent
     // override. Selecting an override agent deactivates it (the agent's override
     // is the label truth); a fresh pick or a non-override agent reactivates it.
+    // An active pin ("Keep current reasoning effort") is the most recent explicit
+    // intent and wins even over the manual pick.
     if (
       dbSession?.providerManual &&
       dbSession?.providerManualActive &&
       dbSession.providerId &&
       dbSession.providerModel
     ) {
+      const effort = pinnedEffort ?? dbSession.providerReasoningEffort
       return {
         providerId: dbSession.providerId,
         model: dbSession.providerModel,
-        ...(dbSession.providerReasoningEffort ? { reasoningEffort: dbSession.providerReasoningEffort } : {}),
+        ...(effort ? { reasoningEffort: effort } : {}),
       }
     }
     const mode = agentId ?? dbSession?.mode ?? undefined

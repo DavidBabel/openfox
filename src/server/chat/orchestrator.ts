@@ -124,11 +124,18 @@ function resolveStatsIdentity(options: OrchestratorOptions): StatsIdentity {
   const clientEffort = options.llmClient.getReasoningEffort?.()
 
   if (options.statsIdentity) {
-    const effort = options.statsIdentity.reasoningEffort ?? clientEffort
+    // The client actually used for the turn is authoritative for the model and
+    // effort: a caller identity built from the session client (e.g. a workflow
+    // launch) predates the per-agent override re-resolution inside runAgentTurn
+    // and would otherwise report an effort/model that was never sent.
     return {
       ...options.statsIdentity,
-      model: options.statsIdentity.model ?? clientModel,
-      ...(effort ? { reasoningEffort: effort } : {}),
+      model: clientModel,
+      ...(clientEffort
+        ? { reasoningEffort: clientEffort }
+        : options.statsIdentity.reasoningEffort
+          ? { reasoningEffort: options.statsIdentity.reasoningEffort }
+          : {}),
     }
   }
 
@@ -356,6 +363,7 @@ export async function runAgentTurn(
   // switch (e.g. during backoff) is honored by the next attempt.
   const resolveAgentClient = (): LLMClientWithModel =>
     options.sessionManager.createClientForAgent(
+      options.sessionId,
       agentId,
       options.getSessionLLMClient ? options.getSessionLLMClient() : options.llmClient,
     )

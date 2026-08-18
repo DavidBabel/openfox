@@ -178,15 +178,17 @@ export function ProviderSelector() {
     : (agentOverrideProviderId ?? sessionProviderId ?? defaultProviderId)
   const effectiveModel = isSessionManual ? sessionModel : (agentOverrideModel ?? sessionModel ?? defaultModel)
   // The effective effort follows the same source as the model selection. A
-  // session-pinned effort ("Keep current reasoning effort") overrides agent
-  // override efforts without replacing the provider/model.
-  const effectiveEffort = isSessionManual
-    ? (sessionReasoningEffort ?? undefined)
-    : (sessionPinnedEffort ?? agentOverrideEffort ?? sessionReasoningEffort ?? undefined)
-  // A session pin ("Keep current reasoning effort") is active when a pin exists
-  // and no manual pick is currently winning — it applies regardless of agent
-  // override or session-stored effort.
-  const isEffortPinned = !!sessionPinnedEffort && !isSessionManual
+  // session-pinned effort ("Keep current reasoning effort") is the most recent
+  // explicit intent and wins over the manual pick, agent override efforts, and
+  // session-stored values without replacing the provider/model.
+  const effectiveEffort =
+    sessionPinnedEffort ??
+    (isSessionManual ? sessionReasoningEffort : (agentOverrideEffort ?? sessionReasoningEffort)) ??
+    undefined
+  // A session pin ("Keep current reasoning effort") is active whenever a pin
+  // exists — it applies regardless of manual pick, agent override, or
+  // session-stored effort.
+  const isEffortPinned = !!sessionPinnedEffort
   const shortModelName = effectiveModel
     ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
     : 'No model'

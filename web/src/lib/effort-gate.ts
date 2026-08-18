@@ -27,12 +27,13 @@ export interface ResolveEffectiveEffortOptions {
 
 /**
  * The reasoning effort that would currently be SENT for the session, mirroring
- * the server's resolution: manual pick > pinned effort > agent override >
- * session-stored effort > model default.
+ * the server's resolution: pin > manual pick > agent override > session-stored
+ * effort > model default.
  *
- * An ACTIVE manual pick is authoritative: the server returns only its stored
- * effort (empty → the model's default effort applies), never the pin or an
- * agent override.
+ * An active pin ("Keep current reasoning effort") is the most recent explicit
+ * choice and wins even over an active manual pick. Otherwise an ACTIVE manual
+ * pick is authoritative: the server returns only its stored effort (empty →
+ * the model's default effort applies), never an agent override.
  *
  * The result is always a STORABLE effort: only shared-vocabulary values can be
  * pinned or written to the session, so a custom model default (free-text
@@ -47,7 +48,7 @@ export function resolveEffectiveEffort({
 }: ResolveEffectiveEffortOptions): string | undefined {
   const isManual = !!session?.providerManual && !!session?.providerManualActive
   const resolved = isManual
-    ? (session?.providerReasoningEffort ?? modelDefaultEffort)
+    ? (session?.providerPinnedEffort ?? session?.providerReasoningEffort ?? modelDefaultEffort)
     : (session?.providerPinnedEffort ?? agentOverrideEffort ?? session?.providerReasoningEffort ?? modelDefaultEffort)
   return resolved && isReasoningEffortValue(resolved) ? resolved : undefined
 }
@@ -113,20 +114,32 @@ export interface WorkflowStepLike {
 }
 
 /**
- * The agent a workflow launch will run first: the entry step (or the first
- * step of the launched sub-group slice, mirroring the server executor). Agent
- * and sub_agent steps have an agent identity whose model override may carry a
- * reasoning effort; shell and user steps do not.
+ * The agent a workflow launch will run first — the first step that will
+ * actually issue an LLM query. Mirrors the server executor's start-step
+ * selection (entry step, or the first step of the launched sub-group slice),
+ * then walks the steps in order and returns the first one with an agent
+ * identity (agent → agentId, sub_agent → subAgentType), skipping `user` and
+ * `shell` steps that pause or run commands without querying the LLM. Returns
+ * undefined when the workflow has no agent/sub_agent step at all.
  */
 export function resolveWorkflowFirstAgentId(
   workflow: { entryStep: string; steps: WorkflowStepLike[] },
   subGroup?: string,
 ): string | undefined {
-  const steps = subGroup ? workflow.steps.filter((s) => s.subGroup === subGroup) : workflow.steps
-  const firstId = subGroup ? (steps[0]?.id ?? workflow.entryStep) : workflow.entryStep
-  const step = workflow.steps.find((s) => s.id === firstId)
-  if (!step) return undefined
-  if (step.type === 'agent') return step.agentId
-  if (step.type === 'sub_agent') return step.subAgentType
+  const slice = subGroup ? workflow.steps.filter((s) => s.subGroup === subGroup) : workflow.steps
+  // An empty sub-group slice falls back to the full workflow (the executor
+  // starts at the entry step in that case).
+  const steps = slice.length > 0 ? slice : workflow.steps
+  const startId = subGroup ? (slice[0]?.id ?? workflow.entryStep) : workflow.entryStep
+  const startIndex = Math.max(
+    0,
+    steps.findIndex((s) => s.id === startId),
+  )
+  for (let i = startIndex; i < steps.length; i++) {
+    const step = steps[i]
+    if (!step) continue
+    if (step.type === 'agent') return step.agentId
+    if (step.type === 'sub_agent') return step.subAgentType
+  }
   return undefined
 }

@@ -1473,6 +1473,49 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     expect(screen.getByRole('button').textContent).not.toContain('📍')
   })
 
+  it('[AUTOMATED] a pinned effort wins over an active manual pick in the label', async () => {
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              selected: true,
+              reasoningEfforts: ['low', 'medium', 'high'],
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+        providerReasoningEffort: 'none',
+        providerManual: true,
+        providerManualActive: true,
+        providerPinnedEffort: 'high',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    renderProviderSelector()
+    // The pin (the most recent "keep" intent) beats the active manual pick.
+    expect(screen.getByRole('button').textContent).toContain(':high')
+    expect(screen.getByRole('button').textContent).toContain('📍')
+  })
+
   it('[AUTOMATED] unpin affordance clears the pinned effort from the dropdown', async () => {
     const user = userEvent.setup()
     const mockClearPin = vi.fn()

@@ -72,18 +72,25 @@ export interface AgentClientResolution {
  * provider/model still exists, returns a dedicated client. Otherwise returns
  * the fallback (session/global) client, with a warning when an override was
  * configured but could not be resolved.
+ *
+ * A session-pinned effort ("Keep current reasoning effort") is the most recent
+ * explicit intent and wins over the override's own reasoningEffort — without
+ * replacing the override's provider/model. The returned `override` reflects
+ * the effective effort so callers (stats identity) report what is actually sent.
  */
 export function resolveLLMClientForAgent(
   agentId: string,
   fallbackClient: LLMClientWithModel,
   providerManager: ProviderManager,
+  pinnedEffort?: string,
 ): AgentClientResolution {
   const override = getAgentModelOverride(agentId)
   if (!override) {
     return { client: fallbackClient, usedOverride: false }
   }
 
-  const client = providerManager.createClient(override.providerId, override.model, override.reasoningEffort)
+  const effectiveEffort = pinnedEffort ?? override.reasoningEffort
+  const client = providerManager.createClient(override.providerId, override.model, effectiveEffort)
   if (!client) {
     return {
       client: fallbackClient,
@@ -93,5 +100,9 @@ export function resolveLLMClientForAgent(
     }
   }
 
-  return { client, usedOverride: true, override }
+  return {
+    client,
+    usedOverride: true,
+    override: effectiveEffort ? { ...override, reasoningEffort: effectiveEffort } : override,
+  }
 }

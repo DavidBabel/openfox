@@ -124,6 +124,30 @@ describe('resolveLLMClientForAgent', () => {
     expect(pm.createClient).toHaveBeenCalledWith('p1', 'm1', 'xhigh')
   })
 
+  it('a session-pinned effort wins over the override reasoningEffort', () => {
+    getSettingMock.mockReturnValue(
+      JSON.stringify({ explorer: { providerId: 'p1', model: 'm1', reasoningEffort: 'low' } }),
+    )
+    const dedicated = fakeClient('m1')
+    const pm = fakeProviderManager(dedicated)
+    // "Keep current reasoning effort" pinned ':max' — the most recent explicit
+    // intent wins over the agent override's ':low'.
+    const result = resolveLLMClientForAgent('explorer', fallback, pm, 'max')
+    expect(result.usedOverride).toBe(true)
+    expect(result.override).toEqual({ providerId: 'p1', model: 'm1', reasoningEffort: 'max' })
+    expect(pm.createClient).toHaveBeenCalledWith('p1', 'm1', 'max')
+  })
+
+  it('uses the override effort when no pin is set', () => {
+    getSettingMock.mockReturnValue(
+      JSON.stringify({ explorer: { providerId: 'p1', model: 'm1', reasoningEffort: 'low' } }),
+    )
+    const dedicated = fakeClient('m1')
+    const pm = fakeProviderManager(dedicated)
+    resolveLLMClientForAgent('explorer', fallback, pm, undefined)
+    expect(pm.createClient).toHaveBeenCalledWith('p1', 'm1', 'low')
+  })
+
   it('falls back with warning when provider no longer exists', () => {
     getSettingMock.mockReturnValue(JSON.stringify({ explorer: { providerId: 'gone', model: 'm1' } }))
     const pm = fakeProviderManager(undefined)

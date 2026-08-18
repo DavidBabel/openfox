@@ -162,7 +162,10 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
   let hasOverride = false
   let overrideModelSettings: Record<string, unknown> | undefined
   if (providerManager) {
-    const resolved = resolveLLMClientForAgent(subAgentType, parentLlmClient, providerManager)
+    // A session-pinned effort ("Keep current reasoning effort") wins over the
+    // sub-agent override's own effort, mirroring the top-level agent path.
+    const pinnedEffort = session.providerPinnedEffort ?? undefined
+    const resolved = resolveLLMClientForAgent(subAgentType, parentLlmClient, providerManager, pinnedEffort)
     if (resolved.usedOverride && resolved.override) {
       hasOverride = true
       llmClient = resolved.client

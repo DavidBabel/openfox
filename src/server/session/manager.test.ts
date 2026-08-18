@@ -834,43 +834,57 @@ describe('SessionManager', () => {
     })
 
     it('returns global client when no override set', () => {
-      const client = manager.createClientForAgent('planner')
+      const session = manager.createSession(projectId, 'Test Session')
+      const client = manager.createClientForAgent(session.id, 'planner')
       expect(client).toBe(mockGlobalClient)
       expect(mockProviderManager.createClient).not.toHaveBeenCalled()
     })
 
     it('creates dedicated client when override exists', () => {
+      const session = manager.createSession(projectId, 'Test Session')
       setAgentModelOverride('planner', { providerId: 'test-provider', model: 'dedicated-model' })
-      const client = manager.createClientForAgent('planner')
+      const client = manager.createClientForAgent(session.id, 'planner')
       expect(client).toBe(mockDedicatedClient)
       expect(mockProviderManager.createClient).toHaveBeenCalledWith('test-provider', 'dedicated-model', undefined)
     })
 
     it('falls back to global client when provider not found', () => {
+      const session = manager.createSession(projectId, 'Test Session')
       mockProviderManager.createClient.mockReturnValueOnce(undefined)
       setAgentModelOverride('planner', { providerId: 'nonexistent', model: 'dedicated-model' })
-      const client = manager.createClientForAgent('planner')
+      const client = manager.createClientForAgent(session.id, 'planner')
       expect(client).toBe(mockGlobalClient)
     })
 
     it('falls back to global client when override cleared', () => {
+      const session = manager.createSession(projectId, 'Test Session')
       setAgentModelOverride('planner', { providerId: 'test-provider', model: 'dedicated-model' })
       setAgentModelOverride('planner', null)
-      const client = manager.createClientForAgent('planner')
+      const client = manager.createClientForAgent(session.id, 'planner')
       expect(client).toBe(mockGlobalClient)
       expect(mockProviderManager.createClient).not.toHaveBeenCalled()
     })
 
     it('creates client with correct provider and model', () => {
+      const session = manager.createSession(projectId, 'Test Session')
       setAgentModelOverride('verifier', { providerId: 'my-provider', model: 'my-model' })
-      manager.createClientForAgent('verifier')
+      manager.createClientForAgent(session.id, 'verifier')
       expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model', undefined)
     })
 
     it('passes the override reasoningEffort through to createClient', () => {
+      const session = manager.createSession(projectId, 'Test Session')
       setAgentModelOverride('verifier', { providerId: 'my-provider', model: 'my-model', reasoningEffort: 'high' })
-      manager.createClientForAgent('verifier')
+      manager.createClientForAgent(session.id, 'verifier')
       expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model', 'high')
+    })
+
+    it('a session-pinned effort wins over the override reasoningEffort', () => {
+      const session = manager.createSession(projectId, 'Test Session')
+      manager.setSessionPinnedEffort(session.id, 'max')
+      setAgentModelOverride('verifier', { providerId: 'my-provider', model: 'my-model', reasoningEffort: 'low' })
+      manager.createClientForAgent(session.id, 'verifier')
+      expect(mockProviderManager.createClient).toHaveBeenCalledWith('my-provider', 'my-model', 'max')
     })
   })
 
@@ -1163,16 +1177,18 @@ describe('SessionManager', () => {
         })
       })
 
-      it('an active manual pick beats the pin', () => {
+      it('an active pin wins over an active manual pick', () => {
         const session = manager.createSession(projectId, 'Test Session')
-        manager.setSessionPinnedEffort(session.id, 'high')
         manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'none')
         manager.setSessionProviderActive(session.id, true)
+        // "Keep current reasoning effort" pinned after the manual pick — the pin
+        // is the most recent explicit intent and must win over the manual effort.
+        manager.setSessionPinnedEffort(session.id, 'high')
 
         expect(manager.resolveEffectiveProviderModel(session.id)).toEqual({
           providerId: 'session-provider',
           model: 'session-model',
-          reasoningEffort: 'none',
+          reasoningEffort: 'high',
         })
       })
 
