@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.124 - 2026-08-19
+
+### Enhancements
+
+- **project_tasks list paginates** — capped at 10 results (25 max) to keep agent context lean
+- **Pinned effort chips light up for any model** — the selector highlights a model's pinned effort even when it isn't the active pick
+
+### Bug Fixes
+
+- **Reasoning effort options come from a curated catalog** — endpoint probing that collapsed or misdetected levels is gone
+- **Qwen effort presets corrected** — qwen3.8 offers none/low/medium/xhigh (default xhigh), qwen3.5/3.6 offer none/high
+- **maxTokens budget accounts for tool results** — tool-result tokens are subtracted so large outputs no longer overstate the budget
+- **Context-overflow retries halve maxTokens** — retry immediately with a halved budget instead of a doomed backoff retry
+- **`..` paths respect shell cd state** — relative traversals no longer trigger false outside-sandbox confirmations
+- **Division expressions no longer flagged as paths** — 'length / 4' no longer trips the root-path safety check
+
 ## 2.0.123 - 2026-08-18
 
 ### Features
