@@ -2,8 +2,16 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWorkflowsStore } from '../../stores/workflows'
-import { useAgentsStore } from '../../stores/agents'
 import { WorkflowsModal } from './WorkflowsModal'
+
+vi.mock('../../hooks/useResource', () => ({
+  useResource: () => ({
+    data: { defaults: [], userItems: [], projectItems: [], modelOverrides: {} },
+    loading: false,
+    error: undefined,
+    refresh: vi.fn(),
+  }),
+}))
 
 const reviewUser = {
   id: 'review',
@@ -33,7 +41,6 @@ describe('WorkflowsModal confirm-delete scoping', () => {
   afterEach(cleanup)
 
   beforeEach(() => {
-    useAgentsStore.setState({ defaults: [], userItems: [], projectItems: [], loading: false })
     useWorkflowsStore.setState({
       defaults: [],
       userItems: [reviewUser],
@@ -55,7 +62,6 @@ describe('WorkflowsModal confirm-delete scoping', () => {
   it('confirms delete on one same-id row without confirming the sibling scope', async () => {
     const deleteWorkflow = vi.fn(async () => ({ success: true }))
     useWorkflowsStore.setState({ deleteWorkflow })
-    useAgentsStore.setState({ fetchAgents: vi.fn(async () => undefined) })
 
     render(<WorkflowsModal isOpen onClose={vi.fn()} />)
 
@@ -83,7 +89,6 @@ describe('WorkflowsModal confirm-delete scoping', () => {
   it('confirms delete on the project row with the project scope', async () => {
     const deleteWorkflow = vi.fn(async () => ({ success: true }))
     useWorkflowsStore.setState({ deleteWorkflow })
-    useAgentsStore.setState({ fetchAgents: vi.fn(async () => undefined) })
 
     render(<WorkflowsModal isOpen onClose={vi.fn()} />)
 

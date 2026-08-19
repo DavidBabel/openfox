@@ -1,14 +1,14 @@
-import { useAgentsStore } from '../stores/agents'
+import { useResource } from './useResource'
+import { agentsResource } from '../lib/resources'
 
 /**
- * Merged agent list (defaults + user + project) plus the lazy loader, so any
- * surface that needs agents can populate the store on demand — the chat
- * composer, the task editor, and the board all read the same source.
+ * Merged agent list (defaults + user + project) with implicit loadership via
+ * the agents resource cache — any surface that needs agents gets them without
+ * remembering to fire a fetch. Scoped by workdir so project agents are loaded
+ * for the right project.
  */
-export function useAgents() {
-  const defaults = useAgentsStore((state) => state.defaults)
-  const userItems = useAgentsStore((state) => state.userItems)
-  const projectItems = useAgentsStore((state) => state.projectItems)
-  const fetchAgents = useAgentsStore((state) => state.fetchAgents)
-  return { agents: [...defaults, ...userItems, ...projectItems], fetchAgents }
+export function useAgents(workdir?: string) {
+  const { data, refresh } = useResource(agentsResource, workdir)
+  const agents = data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []
+  return { agents, refresh }
 }

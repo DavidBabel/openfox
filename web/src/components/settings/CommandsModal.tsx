@@ -4,7 +4,8 @@ import { Button } from '../shared/Button'
 import { EditButton } from '../shared/IconButton'
 import { EyeIcon } from '../shared/icons'
 import { useCommandsStore, type CommandInfo, type CommandFull } from '../../stores/commands'
-import { useAgentsStore } from '../../stores/agents'
+import { useResource } from '../../hooks/useResource'
+import { agentsResource } from '../../lib/resources'
 import {
   useConfirmDialog,
   ConfirmButton,
@@ -79,14 +80,12 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
   const { requestDelete, clearConfirm, isConfirming } = useConfirmDialog()
   const clearConfirmCalled = useRef(false)
 
-  const agentDefaults = useAgentsStore((state) => state.defaults)
-  const agentUserItems = useAgentsStore((state) => state.userItems)
-  const fetchAgents = useAgentsStore((state) => state.fetchAgents)
-  const allAgents = [...agentDefaults, ...agentUserItems]
+  const { data, refresh } = useResource(agentsResource, projectDir)
+  const allAgents = data ? [...data.defaults, ...data.userItems] : []
   const topLevelAgents = allAgents.filter((a) => !a.subagent)
 
   const fetchCommandsRef = useRef(fetchCommands)
-  const fetchAgentsRef = useRef(fetchAgents)
+  const refreshAgentsRef = useRef(refresh)
   const fetchCommandRef = useRef(fetchCommand)
   const fetchDefaultContentRef = useRef(fetchDefaultContent)
   const projectDirRef = useRef(projectDir)
@@ -98,7 +97,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
 
   useEffect(() => {
     fetchCommandsRef.current = fetchCommands
-    fetchAgentsRef.current = fetchAgents
+    refreshAgentsRef.current = refresh
     fetchCommandRef.current = fetchCommand
     fetchDefaultContentRef.current = fetchDefaultContent
     projectDirRef.current = projectDir
@@ -112,7 +111,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
   useEffect(() => {
     if (isOpen) {
       fetchCommandsRef.current(projectDirRef.current)
-      fetchAgentsRef.current(projectDirRef.current)
+      refreshAgentsRef.current()
       if (!clearConfirmCalled.current) {
         clearConfirmRef.current()
         clearConfirmCalled.current = true

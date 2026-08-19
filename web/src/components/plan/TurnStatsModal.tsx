@@ -1,6 +1,6 @@
 import { Modal } from '../shared/SelfContainedModal'
 import type { TurnStats } from '../../lib/types'
-import { useAgentsStore } from '../../stores/agents'
+import { useAgents } from '../../hooks/useAgents'
 import { formatTime } from '../../lib/format-stats'
 
 interface TurnStatsModalProps {
@@ -9,9 +9,7 @@ interface TurnStatsModalProps {
 }
 
 export function TurnStatsModal({ stats: s, onClose }: TurnStatsModalProps) {
-  const defaults = useAgentsStore((state) => state.defaults)
-  const userItems = useAgentsStore((state) => state.userItems)
-  const agents = [...defaults, ...userItems]
+  const { agents } = useAgents()
   const agentInfo = agents.find((a) => a.id === s.mode)
   const modeName = agentInfo?.name ?? s.mode
   const modelLabel = s.reasoningEffort ? `${s.model}:${s.reasoningEffort}` : s.model

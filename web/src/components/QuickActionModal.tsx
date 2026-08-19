@@ -9,7 +9,7 @@ function getProjectIdFromPath(path: string): string | undefined {
 }
 import { useCommandsStore } from '../stores/commands'
 import { useWorkflowsStore } from '../stores/workflows'
-import { useAgentsStore } from '../stores/agents'
+import { useAgents } from '../hooks/useAgents'
 import { useSessionStore } from '../stores/session'
 import { useSessionScope, useScopedPaneState } from '../stores/session/session-scope'
 import { dedupById, fuzzyMatch, handleModalNavigation } from '../lib/modal-utils'
@@ -51,16 +51,12 @@ export function QuickActionModal({
   const [, navigate] = useLocation()
   const fetchCommands = useCommandsStore((state) => state.fetchCommands)
   const fetchWorkflows = useWorkflowsStore((state) => state.fetchWorkflows)
-  const fetchAgents = useAgentsStore((state) => state.fetchAgents)
   const commandDefaults = useCommandsStore((state) => state.defaults)
   const commandUserItems = useCommandsStore((state) => state.userItems)
   const commandProjectItems = useCommandsStore((state) => state.projectItems)
   const workflowDefaults = useWorkflowsStore((state) => state.defaults)
   const workflowUserItems = useWorkflowsStore((state) => state.userItems)
   const workflowProjectItems = useWorkflowsStore((state) => state.projectItems)
-  const agentDefaults = useAgentsStore((state) => state.defaults)
-  const agentUserItems = useAgentsStore((state) => state.userItems)
-  const agentProjectItems = useAgentsStore((state) => state.projectItems)
   const sessionId = useSessionScope()
   const currentMode = useScopedPaneState(
     sessionId,
@@ -88,6 +84,7 @@ export function QuickActionModal({
     (state) => state.currentSession?.workdir,
     undefined,
   )
+  const { agents } = useAgents(currentWorkdir)
   const closeCompleteAction = useRef<(() => void) | undefined>(undefined)
 
   const [search, setSearch] = useState('')
@@ -103,7 +100,6 @@ export function QuickActionModal({
     if (isOpen) {
       fetchCommands(currentWorkdir)
       fetchWorkflows(currentWorkdir)
-      fetchAgents(currentWorkdir)
       setSearch('')
       setSelectedIndex(0)
       const timer = setTimeout(() => {
@@ -111,7 +107,7 @@ export function QuickActionModal({
       }, 50)
       return () => clearTimeout(timer)
     }
-  }, [isOpen, fetchCommands, fetchWorkflows, fetchAgents, currentWorkdir])
+  }, [isOpen, fetchCommands, fetchWorkflows, currentWorkdir])
 
   useEffect(() => {
     if (!isOpen && wasOpenRef.current) {
@@ -158,7 +154,7 @@ export function QuickActionModal({
         onToggleAutoScroll?.(!isAutoScrollActive)
       },
     },
-    ...dedupById(dedupById(agentDefaults, agentUserItems), agentProjectItems)
+    ...agents
       .filter((a) => !a.subagent && a.id !== currentMode)
       .map((a) => ({
         id: a.id,

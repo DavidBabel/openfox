@@ -1,12 +1,21 @@
 import { useCallback } from 'react'
 import { useSessionStore } from '../stores/session'
-import { useAgentsStore } from '../stores/agents'
 import { useWorkflowsStore, selectAllWorkflows } from '../stores/workflows'
 import { resolveWorkflowForLaunch } from '../lib/workflow-scope'
+import { readAgents } from '../lib/resources'
 import { parseModelValue } from '../lib/model-value'
 import { shouldGateEffortChange, resolveWorkflowFirstAgentId } from '../lib/effort-gate'
 import { useEffortGateContext } from './useEffortGateContext'
 import type { Attachment, WorkflowLaunchScope } from '@shared/types.js'
+
+function sessionWorkdir(sessionId: string | null | undefined): string | undefined {
+  const state = useSessionStore.getState()
+  if (!sessionId) return state.currentSession?.workdir
+  return (
+    state.panes?.[sessionId]?.session?.workdir ??
+    (state.currentSession?.id === sessionId ? state.currentSession?.workdir : undefined)
+  )
+}
 
 export function useScrolledSend(setAutoScroll: (active: boolean) => void, sessionId: string | null | undefined) {
   const storeSendMessage = useSessionStore((state) => state.sendMessage)
@@ -46,9 +55,8 @@ export function useScrolledSend(setAutoScroll: (active: boolean) => void, sessio
       if (workflowId && warmCache) {
         // Cheap pre-check: if no agent override carries an effort at all, no
         // gate can ever trigger — skip the workflow fetch roundtrip entirely.
-        const anyOverrideEffort = Object.values(useAgentsStore.getState().modelOverrides).some(
-          (v) => parseModelValue(v)?.reasoningEffort,
-        )
+        const modelOverrides = readAgents(sessionWorkdir(sessionId))?.modelOverrides ?? {}
+        const anyOverrideEffort = Object.values(modelOverrides).some((v) => parseModelValue(v)?.reasoningEffort)
         if (anyOverrideEffort) {
           const workflows = selectAllWorkflows(useWorkflowsStore.getState())
           const wf = resolveWorkflowForLaunch(workflows, workflowId, scope)
@@ -57,9 +65,7 @@ export function useScrolledSend(setAutoScroll: (active: boolean) => void, sessio
               .getState()
               .fetchWorkflow(wf.id, useWorkflowsStore.getState().workdir, wf.scope)
             const agentId = full ? resolveWorkflowFirstAgentId(full, subGroup) : undefined
-            const overrideEffort = agentId
-              ? parseModelValue(useAgentsStore.getState().modelOverrides[agentId])?.reasoningEffort
-              : undefined
+            const overrideEffort = agentId ? parseModelValue(modelOverrides[agentId])?.reasoningEffort : undefined
             if (
               overrideEffort &&
               shouldGateEffortChange({

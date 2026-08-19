@@ -2,7 +2,8 @@ import { memo, useRef, useState, useCallback } from 'react'
 import type { Message, ContextState } from '@shared/types.js'
 import { AssistantMessage } from './AssistantMessage'
 import { ChatMessage } from './ChatMessage'
-import { useAgentsStore, getAgentColor } from '../../stores/agents'
+import { useAgents } from '../../hooks/useAgents'
+import { getAgentColor } from '../../stores/agents'
 import { useSessionStore } from '../../stores/session'
 import { useDisplaySettings } from '../../stores/settings'
 import { formatTokens } from '../../lib/format-stats'
@@ -67,9 +68,7 @@ export const SubAgentContainer = memo(function SubAgentContainer({
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<OverlayScrollbarsComponentRef<'div'>>(null)
   const [expanded, setExpanded] = useState(false)
-  const agentDefaults = useAgentsStore((state) => state.defaults)
-  const agentUserItems = useAgentsStore((state) => state.userItems)
-  const agents = [...agentDefaults, ...agentUserItems]
+  const { agents } = useAgents()
   const contextState = useSessionStore((state) => state.subAgentContextStates[subAgentId])
   const { showThinking, showVerboseToolOutput } = useDisplaySettings()
 

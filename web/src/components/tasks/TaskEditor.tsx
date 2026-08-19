@@ -49,23 +49,19 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
   const updateTask = useTasksStore((state) => state.updateTask)
   const lastError = useTasksStore((state) => state.lastError)
 
-  const { agents: allAgents, fetchAgents } = useAgents()
-  const agents = allAgents.filter((a) => !a.subagent)
   const providers = useConfigStore((state) => state.providers)
   const projects = useProjectStore((state) => state.projects)
   const workdir = projects.find((p) => p.id === projectId)?.workdir
+  // Agents scope to the project workdir so project-scoped agents are assignable.
+  const { agents: allAgents } = useAgents(workdir)
+  const agents = allAgents.filter((a) => !a.subagent)
   const fetchWorkflows = useWorkflowsStore((state) => state.fetchWorkflows)
   const fetchCommands = useCommandsStore((state) => state.fetchCommands)
-
-  // Agents load lazily (chat composer, settings…). The editor must own its own
-  // fetch so the dropdown is populated even when opened from the homepage.
-  useEffect(() => {
-    void fetchAgents()
-  }, [fetchAgents])
 
   // Workflows and commands load lazily too (plan/session views). Own the fetch
   // here so the slash menu is populated even on a cold start from the homepage;
   // re-run when the project workdir resolves to pick up project-scoped items.
+  // Agents load via the resource cache (implicit loadership).
   useEffect(() => {
     void fetchWorkflows(workdir)
     void fetchCommands(workdir)

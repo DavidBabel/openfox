@@ -101,26 +101,25 @@ vi.mock('../shared/ProviderModal', () => ({
   providerFormPayload: (data: any) => data,
 }))
 
-vi.mock('../../stores/agents', () => {
-  let state = {
+const { mockAgentsData } = vi.hoisted(() => ({
+  mockAgentsData: {
     defaults: [
       { id: 'planner', name: 'Planner', color: '#a855f7', subagent: false, allowedTools: [], description: '' },
       { id: 'builder', name: 'Builder', color: '#3b82f6', subagent: false, allowedTools: [], description: '' },
     ],
-    userItems: [],
-    modelOverrides: {},
-  }
-  const fn = vi.fn((selector?: (s: typeof state) => any) => {
-    return selector ? selector(state) : state
-  })
-  ;(fn as any).setState = (updater: Record<string, any> | ((s: typeof state) => Record<string, any>)) => {
-    state = typeof updater === 'function' ? { ...state, ...updater(state) } : { ...state, ...updater }
-  }
-  return {
-    useAgentsStore: fn,
-    getAgentColor: () => '#a855f7',
-  }
-})
+    userItems: [] as unknown[],
+    projectItems: [] as unknown[],
+    modelOverrides: {} as Record<string, string>,
+  },
+}))
+
+vi.mock('../../stores/agents', () => ({
+  getAgentColor: () => '#a855f7',
+}))
+
+vi.mock('../../hooks/useResource', () => ({
+  useResource: () => ({ data: mockAgentsData, loading: false, error: undefined, refresh: vi.fn() }),
+}))
 
 vi.mock('../../hooks/useKeybindings', () => ({
   useKeybindings: () => ({
@@ -151,8 +150,7 @@ async function setSessionState(partial: Record<string, any>) {
 }
 
 async function setAgentsState(partial: Record<string, any>) {
-  const { useAgentsStore } = await import('../../stores/agents')
-  ;(useAgentsStore as unknown as MockStore).setState(partial)
+  Object.assign(mockAgentsData, partial)
 }
 
 function renderProviderSelector(): ReturnType<typeof render> {
@@ -959,7 +957,6 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     const user = userEvent.setup()
     const mockSetSessionProvider = vi.fn()
     const { authFetch } = await import('../../lib/api')
-    const { useAgentsStore } = await import('../../stores/agents')
     await setConfigState({
       providers: [
         {
@@ -1000,7 +997,7 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     // The agent override must NOT be deleted — the manual pick suppresses it
     // for this session only, leaving the agent's stored config intact.
     expect(authFetch).not.toHaveBeenCalledWith('/api/agents/planner/model', { method: 'DELETE' })
-    expect((useAgentsStore as unknown as () => any)().modelOverrides).toEqual({ planner: 'provider-2/claude-3' })
+    expect(mockAgentsData.modelOverrides).toEqual({ planner: 'provider-2/claude-3' })
   })
 
   it('[AUTOMATED] a manual pick suppresses the override highlight for the session', async () => {

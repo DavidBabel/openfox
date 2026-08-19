@@ -33,16 +33,8 @@ vi.mock('../../stores/settings', () => ({
   }),
 }))
 
-vi.mock('../../stores/agents', () => ({
-  useAgentsStore: vi.fn((selector) => {
-    const state = {
-      defaults: [],
-      userItems: [],
-      fetchAgents: vi.fn(),
-    }
-    return selector(state)
-  }),
-  getAgentColor: vi.fn(() => '#6b7280'),
+vi.mock('../../../hooks/useAgents', () => ({
+  useAgents: () => ({ agents: [], refresh: vi.fn() }),
 }))
 
 vi.mock('../useSettingsStore', () => ({

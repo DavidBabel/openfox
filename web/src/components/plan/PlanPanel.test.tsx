@@ -21,9 +21,8 @@ vi.mock('../../stores/session', () => ({
   useIsRunning: () => false,
 }))
 
-vi.mock('../../stores/agents', () => ({
-  useAgentsStore: (selector?: (state: unknown) => unknown) =>
-    selector ? selector({ defaults: [], userItems: [] }) : { defaults: [], userItems: [] },
+vi.mock('../../hooks/useAgents', () => ({
+  useAgents: () => ({ agents: [], refresh: vi.fn() }),
 }))
 
 vi.mock('../../stores/commands', () => ({

@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EffortChangeGateProvider } from './EffortChangeGate'
+import { clearCache } from '../../lib/resourceCache'
+import { readAgents } from '../../lib/resources'
 
 const mockSwitchMode = vi.fn().mockResolvedValue(undefined)
 const mockPinEffort = vi.fn().mockResolvedValue({})
@@ -29,21 +31,14 @@ vi.mock('../../stores/session/session-scope', () => ({
     }),
 }))
 
-const mockFetchAgents = vi.fn()
+const mockAuthFetch = vi.hoisted(() => vi.fn())
 let mockOverrides: Record<string, string> = {}
 
+vi.mock('../../lib/api', () => ({
+  authFetch: mockAuthFetch,
+}))
+
 vi.mock('../../stores/agents', () => ({
-  useAgentsStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      defaults: [
-        { id: 'builder', name: 'Builder', subagent: false, allowedTools: [], description: '' },
-        { id: 'explorer', name: 'Explorer', subagent: false, allowedTools: [], description: '' },
-      ],
-      userItems: [],
-      projectItems: [],
-      modelOverrides: mockOverrides,
-      fetchAgents: mockFetchAgents,
-    }),
   getAgentColor: () => '#3b82f6',
 }))
 
@@ -74,12 +69,31 @@ vi.mock('../shared/icons', () => ({
 
 import { AgentSelector } from './AgentSelector'
 
+function agentsPayload(overrides: Record<string, string>) {
+  return {
+    defaults: [
+      { id: 'builder', name: 'Builder', subagent: false, allowedTools: [], description: '' },
+      { id: 'explorer', name: 'Explorer', subagent: false, allowedTools: [], description: '' },
+    ],
+    userItems: [],
+    projectItems: [],
+    modelOverrides: overrides,
+  }
+}
+
 async function renderSelector() {
+  mockAuthFetch.mockImplementation(async () => ({
+    ok: true,
+    json: async () => agentsPayload(mockOverrides),
+  }))
   const utils = render(
     <EffortChangeGateProvider>
       <AgentSelector />
     </EffortChangeGateProvider>,
   )
+  // Loadership is implicit: wait for the resource cache to land the payload so
+  // the effort gate reads the current overrides.
+  await waitFor(() => expect(readAgents()?.modelOverrides).toEqual(mockOverrides))
   await userEvent.click(screen.getByTitle('Switch agent'))
   return utils
 }
@@ -96,6 +110,7 @@ function dropdownAgent(agentName: string): HTMLElement {
 describe('AgentSelector — effort-change gate (case 2a)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearCache()
     mockOverrides = {}
     mockSessionMode = 'builder'
     mockWarmCache = true
@@ -161,5 +176,24 @@ describe('AgentSelector — effort-change gate (case 2a)', () => {
     await userEvent.click(dropdownAgent('Builder'))
     expect(screen.queryByText('Reasoning effort change')).toBeNull()
     expect(mockSwitchMode).not.toHaveBeenCalled()
+  })
+
+  it('does not fetch agents again on re-render (loadership is implicit, not per-render)', async () => {
+    const { rerender } = render(
+      <EffortChangeGateProvider>
+        <AgentSelector />
+      </EffortChangeGateProvider>,
+    )
+    await waitFor(() => expect(readAgents()?.defaults.length).toBe(2))
+    expect(mockAuthFetch).toHaveBeenCalledTimes(1)
+
+    mockSessionMode = 'explorer'
+    rerender(
+      <EffortChangeGateProvider>
+        <AgentSelector />
+      </EffortChangeGateProvider>,
+    )
+
+    expect(mockAuthFetch).toHaveBeenCalledTimes(1)
   })
 })

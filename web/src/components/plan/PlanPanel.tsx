@@ -9,7 +9,7 @@ import { SessionHeader } from './SessionHeader'
 import { TurnStatsModal } from './TurnStatsModal'
 import { MessageList } from './MessageList'
 import { ConnectionStatusBar } from '../shared/ConnectionStatusBar'
-import { useAgentsStore } from '../../stores/agents'
+import { useAgents } from '../../hooks/useAgents'
 import { useCommandsStore } from '../../stores/commands'
 import { useWorkflowsStore, selectAllWorkflows } from '../../stores/workflows'
 import { focusChatTextarea } from '../../lib/focusChatTextarea'
@@ -101,9 +101,8 @@ export function PlanPanel({
 
   const { maxVisibleItems } = useDisplaySettings()
 
-  const agentDefaults = useAgentsStore((state) => state.defaults)
-  const agentUserItems = useAgentsStore((state) => state.userItems)
-  const topLevelAgents = [...agentDefaults, ...agentUserItems].filter((a) => !a.subagent)
+  const { agents } = useAgents(session?.workdir)
+  const topLevelAgents = agents.filter((a) => !a.subagent)
 
   const { history, selectedIndex, showHistory, openHistory, closeHistory, navigateUp, navigateDown, selectCurrent } =
     usePromptHistory(messages, sessions, session?.id)

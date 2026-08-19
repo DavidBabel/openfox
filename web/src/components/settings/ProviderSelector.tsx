@@ -4,7 +4,9 @@ import { useLocation } from 'wouter'
 import { useConfigStore, getBackendDisplayName, type Provider } from '../../stores/config'
 import { useSessionStore } from '../../stores/session'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
-import { useAgentsStore, getAgentColor } from '../../stores/agents'
+import { useResource } from '../../hooks/useResource'
+import { agentsResource } from '../../lib/resources'
+import { getAgentColor } from '../../stores/agents'
 import { ProviderModal, providerFormPayload, type ProviderFormData } from '../shared/ProviderModal'
 import { Modal } from '../shared/Modal'
 import { authFetch } from '../../lib/api'
@@ -145,10 +147,12 @@ export function ProviderSelector() {
   const defaultProviderId = defaultModelSelection?.split('/')[0] ?? null
   const defaultModel = defaultModelSelection?.split('/').slice(1).join('/') ?? null
 
-  // Agent model override — sourced from the agents store (populated via fetchAgents)
-  const agentDefaults = useAgentsStore((state) => state.defaults)
-  const agentUserItems = useAgentsStore((state) => state.userItems)
-  const modelOverrides = useAgentsStore((state) => state.modelOverrides)
+  // Agent model override — sourced from the agents resource cache, scoped to
+  // the session's workdir so project-scoped agents resolve correctly.
+  const { data } = useResource(agentsResource, currentSession?.workdir)
+  const agentDefaults = data?.defaults ?? []
+  const agentUserItems = data?.userItems ?? []
+  const modelOverrides = data?.modelOverrides ?? {}
   const currentAgentId = currentSession?.mode
   const currentAgent = currentAgentId
     ? (agentDefaults.find((a) => a.id === currentAgentId) ?? agentUserItems.find((a) => a.id === currentAgentId))

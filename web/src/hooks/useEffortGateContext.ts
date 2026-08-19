@@ -2,7 +2,8 @@ import { useCallback } from 'react'
 import { useSessionScope, useScopedPaneState } from '../stores/session/session-scope'
 import { useSessionStore } from '../stores/session'
 import { useConfigStore } from '../stores/config'
-import { useAgentsStore } from '../stores/agents'
+import { useResource } from './useResource'
+import { agentsResource } from '../lib/resources'
 import { useEffortChangeGate } from '../components/plan/EffortChangeGate'
 import { resolveEffectiveEffort, shouldGateEffortChange } from '../lib/effort-gate'
 import { parseModelValue } from '../lib/model-value'
@@ -34,7 +35,10 @@ export function useEffortGateContext(explicitSessionId?: string | null | undefin
 
   const providers = useConfigStore((s) => s.providers)
   const defaultModelSelection = useConfigStore((s) => s.defaultModelSelection)
-  const modelOverrides = useAgentsStore((s) => s.modelOverrides)
+  // Agent overrides come from the agents resource cache, scoped to the
+  // session's workdir so project-scoped overrides resolve correctly.
+  const { data } = useResource(agentsResource, currentSession?.workdir)
+  const modelOverrides = data?.modelOverrides ?? {}
 
   // Current agent's override effort and model (the agent currently active in
   // the session). The override's MODEL is the source of the model-default
@@ -93,6 +97,7 @@ export function useEffortGateContext(explicitSessionId?: string | null | undefin
     sessionOwnEffort,
     warmCache: contextState?.warmCache,
     gate,
+    modelOverrides,
   }
 }
 
@@ -108,11 +113,11 @@ export function useEffortGateContext(explicitSessionId?: string | null | undefin
 export function useEffortGatedAgentSwitch(
   explicitSessionId?: string | null | undefined,
 ): (agentId: string, agentName?: string) => Promise<void> {
-  const { sessionId, currentEffort, sessionOwnEffort, warmCache, gate } = useEffortGateContext(explicitSessionId)
+  const { sessionId, currentEffort, sessionOwnEffort, warmCache, gate, modelOverrides } =
+    useEffortGateContext(explicitSessionId)
   const switchMode = useSessionStore((state) => state.switchMode)
   const pinSessionEffort = useSessionStore((state) => state.pinSessionEffort)
   const clearSessionEffortPin = useSessionStore((state) => state.clearSessionEffortPin)
-  const modelOverrides = useAgentsStore((state) => state.modelOverrides)
 
   return useCallback(
     async (agentId: string, agentName?: string) => {

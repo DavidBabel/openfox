@@ -4,10 +4,8 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Message } from '@shared/types.js'
 
-vi.mock('../../stores/agents', () => ({
-  useAgentsStore: (selector: (state: { defaults: Array<{ id: string; name: string }>; userItems: [] }) => unknown) =>
-    selector({ defaults: [{ id: 'scout', name: 'Scout' }], userItems: [] }),
-  getAgentColor: () => '#8b5cf6',
+vi.mock('../../hooks/useAgents', () => ({
+  useAgents: () => ({ agents: [{ id: 'scout', name: 'Scout' }], refresh: vi.fn() }),
 }))
 
 vi.mock('../../stores/session', () => ({

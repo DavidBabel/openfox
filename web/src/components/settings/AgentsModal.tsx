@@ -3,6 +3,8 @@ import { Modal } from '../shared/SelfContainedModal'
 import { useAgentsStore, type AgentFull } from '../../stores/agents'
 import { useConfigStore } from '../../stores/config'
 import { authFetch } from '../../lib/api'
+import { useResource } from '../../hooks/useResource'
+import { agentsResource } from '../../lib/resources'
 import { CRUDListHeader, useConfirmDialog, DestinationSelector, ModalActions } from './CRUDModal'
 import { AgentGroup } from './agents/AgentListItem'
 import { AgentForm } from './agents/AgentForm'
@@ -26,11 +28,11 @@ function toSlug(name: string): string {
 }
 
 export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: AgentsModalProps) {
-  const defaults = useAgentsStore((state) => state.defaults)
-  const userItems = useAgentsStore((state) => state.userItems)
-  const projectItems = useAgentsStore((state) => state.projectItems)
-  const loading = useAgentsStore((state) => state.loading)
-  const fetchAgents = useAgentsStore((state) => state.fetchAgents)
+  const { data, loading } = useResource(agentsResource, projectDir)
+  const defaults = data?.defaults ?? []
+  const userItems = data?.userItems ?? []
+  const projectItems = data?.projectItems ?? []
+  const modelOverrides = data?.modelOverrides ?? {}
   const fetchAgent = useAgentsStore((state) => state.fetchAgent)
   const fetchDefaultContent = useAgentsStore((state) => state.fetchDefaultContent)
   const createAgent = useAgentsStore((state) => state.createAgent)
@@ -112,7 +114,6 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
 
   useEffect(() => {
     if (isOpen) {
-      fetchAgents(projectDir)
       authFetch('/api/tools')
         .then((r) => r.json())
         .then((d) => {
@@ -148,7 +149,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
         setIsReadOnly(false)
       }
     }
-  }, [isOpen, fetchAgents, fetchAgent, fetchDefaultContent, initialEditId, projectDir])
+  }, [isOpen, fetchAgent, fetchDefaultContent, initialEditId, projectDir])
 
   const handleView = async (agentId: string) => {
     const isDefault = defaults.some((d) => d.id === agentId)
@@ -240,7 +241,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
     await saveAgentModelOverride(editingId ?? formId, formModel)
 
     // Re-fetch agents so the list reflects the updated model override badge
-    await fetchAgents(projectDir)
+    await agentsResource.refresh(projectDir)
 
     setSaving(false)
 
@@ -264,7 +265,6 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
     }
   }
 
-  const modelOverrides = useAgentsStore((state) => state.modelOverrides)
   const defaultSubAgents = defaults.filter((a) => a.subagent)
   const defaultTopLevelAgents = defaults.filter((a) => !a.subagent)
   const userSubAgents = userItems.filter((a) => a.subagent)
@@ -337,7 +337,8 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
         <BuiltInModelModal
           agentId={modelModalAgentId}
           onClose={() => setModelModalAgentId(null)}
-          onSaved={() => fetchAgents(projectDir)}
+          projectDir={projectDir}
+          onSaved={() => void agentsResource.refresh(projectDir)}
         />
       </>
     )
@@ -413,7 +414,8 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
       <BuiltInModelModal
         agentId={modelModalAgentId}
         onClose={() => setModelModalAgentId(null)}
-        onSaved={() => fetchAgents(projectDir)}
+        projectDir={projectDir}
+        onSaved={() => void agentsResource.refresh(projectDir)}
       />
     </>
   )
@@ -450,19 +452,19 @@ function BuiltInModelModal({
   agentId,
   onClose,
   onSaved,
+  projectDir,
 }: {
   agentId: string | null
   onClose: () => void
   onSaved: () => void
+  projectDir?: string
 }) {
   const [value, setValue] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const defaults = useAgentsStore((s) => s.defaults)
-  const userItems = useAgentsStore((s) => s.userItems)
-  const projectItems = useAgentsStore((s) => s.projectItems)
-  const agents = [...defaults, ...userItems, ...projectItems]
+  const { data } = useResource(agentsResource, projectDir)
+  const agents = data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []
   const agent = agentId ? agents.find((a) => a.id === agentId) : undefined
   const providers = useConfigStore((s) => s.providers)
 

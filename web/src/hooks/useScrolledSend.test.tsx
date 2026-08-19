@@ -10,22 +10,23 @@ const mockClearPin = vi.fn().mockResolvedValue({})
 const mockFetchWorkflow = vi.fn()
 
 vi.mock('../stores/session', () => ({
-  useSessionStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      sendMessage: vi.fn(),
-      launchWorkflow: mockLaunch,
-      pinSessionEffort: mockPinEffort,
-      clearSessionEffortPin: mockClearPin,
-    }),
-}))
-
-vi.mock('../stores/agents', () => ({
-  useAgentsStore: Object.assign((selector: (s: unknown) => unknown) => selector({ modelOverrides: mockOverrides }), {
-    getState: () => ({ modelOverrides: mockOverrides }),
-  }),
+  useSessionStore: Object.assign(
+    (selector: (s: unknown) => unknown) =>
+      selector({
+        sendMessage: vi.fn(),
+        launchWorkflow: mockLaunch,
+        pinSessionEffort: mockPinEffort,
+        clearSessionEffortPin: mockClearPin,
+      }),
+    { getState: () => ({ currentSession: null, panes: {} }) },
+  ),
 }))
 
 const mockOverrides: Record<string, string> = {}
+
+vi.mock('../lib/resources', () => ({
+  readAgents: () => ({ defaults: [], userItems: [], projectItems: [], modelOverrides: mockOverrides }),
+}))
 
 vi.mock('../stores/workflows', () => ({
   useWorkflowsStore: {

@@ -32,8 +32,13 @@ vi.mock('../stores/session/session-scope', () => ({
     }),
 }))
 
-vi.mock('../stores/agents', () => ({
-  useAgentsStore: (selector: (s: unknown) => unknown) => selector({ modelOverrides: mockOverrides }),
+vi.mock('../hooks/useResource', () => ({
+  useResource: () => ({
+    data: { defaults: [], userItems: [], projectItems: [], modelOverrides: mockOverrides },
+    loading: false,
+    error: undefined,
+    refresh: vi.fn(),
+  }),
 }))
 
 vi.mock('../stores/config', () => ({

@@ -10,7 +10,8 @@ import {
   type WorkflowCondition,
   type WorkflowParameter,
 } from '../../stores/workflows'
-import { useAgentsStore } from '../../stores/agents'
+import { useResource } from '../../hooks/useResource'
+import { agentsResource } from '../../lib/resources'
 import { ArrowRightIcon, EyeIcon } from '../shared/icons'
 import { CollapsibleSection } from '../shared/CollapsibleSection'
 import {
@@ -97,14 +98,8 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
   const [formDestination, setFormDestination] = useState<'project' | 'user'>('user')
   const [formError, setFormError] = useState('')
   const [_saving, setSaving] = useState(false)
-  const agentDefaults = useAgentsStore((s) => s.defaults)
-  const agentUserItems = useAgentsStore((s) => s.userItems)
-  const agentProjectItems = useAgentsStore((s) => s.projectItems)
-  const agentTypes = useMemo(
-    () => [...agentDefaults, ...agentUserItems, ...agentProjectItems],
-    [agentDefaults, agentUserItems, agentProjectItems],
-  )
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents)
+  const { data } = useResource(agentsResource, projectDir)
+  const agentTypes = useMemo(() => (data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []), [data])
 
   const [_confirmDeleteId] = useState<string | null>(null)
 
@@ -112,7 +107,6 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
     if (isOpen) {
       fetchWorkflows(projectDir)
       fetchTemplateVariables()
-      fetchAgents()
       setSelectedNodeKey(null)
       setSelectedEdgeKey(null)
       if (initialEditId) {

@@ -13,12 +13,8 @@ vi.mock('../shared/Modal', () => ({
   Modal: () => null,
 }))
 
-vi.mock('../../stores/agents', () => ({
-  useAgentsStore: vi.fn(
-    (selector: (state: { defaults: unknown[]; userItems: unknown[]; projectItems: unknown[] }) => unknown) =>
-      selector({ defaults: [], userItems: [], projectItems: [] }),
-  ),
-  getAgentColor: vi.fn(() => '#000000'),
+vi.mock('../../hooks/useAgents', () => ({
+  useAgents: () => ({ agents: [], refresh: vi.fn() }),
 }))
 
 vi.mock('../../stores/workflows', () => ({

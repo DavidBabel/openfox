@@ -12,7 +12,7 @@ import { useConfigStore } from '../../../stores/config'
 import { useUpdateStore } from '../../../stores/update'
 import { AutoUpdateModal } from '../../AutoUpdateModal'
 import { ChangelogModal } from '../../ChangelogModal'
-import { useAgentsStore } from '../../../stores/agents'
+import { useAgents } from '../../../hooks/useAgents'
 
 export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const [, navigate] = useLocation()
@@ -43,10 +43,8 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   // "Up to date" only answers a manual check; the background check on app
   // load may be hours old by the time this tab is opened.
   const [manuallyChecked, setManuallyChecked] = useState(false)
-  const defaults = useAgentsStore((state) => state.defaults)
-  const userItems = useAgentsStore((state) => state.userItems)
-  const fetchAgents = useAgentsStore((state) => state.fetchAgents)
-  const topLevelAgents = [...defaults, ...userItems].filter((a) => !a.subagent)
+  const { agents } = useAgents()
+  const topLevelAgents = agents.filter((a) => !a.subagent)
 
   useEffect(() => {
     setLocalToggles({
@@ -81,10 +79,6 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
       setProxyUrl(raw)
     }
   }, [settings])
-
-  useEffect(() => {
-    fetchAgents().catch(() => {})
-  }, [fetchAgents])
 
   useEffect(() => {
     getSetting(SETTINGS_KEYS.DEFAULT_AGENT)

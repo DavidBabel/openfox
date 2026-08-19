@@ -5,7 +5,8 @@ import { ModalCrumbTitle } from '../shared/ModalCrumbTitle'
 import { McpServerCard } from './McpServerCard'
 import { ModalFooter } from '../shared/ModalFooter'
 import { useProjectStore } from '../../stores/project'
-import { useAgentsStore } from '../../stores/agents'
+import { useResource } from '../../hooks/useResource'
+import { agentsResource } from '../../lib/resources'
 import { useWorkspaceConfigStore, type WorkspaceConfigResponse } from '../../stores/workspace-config'
 import { useMcpStore } from '../../stores/mcp'
 import { mcpStatusColor, mcpStatusDot } from '../../lib/mcp-utils'
@@ -26,10 +27,10 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   const wsLoading = useWorkspaceConfigStore((s) => s.loading)
   const fetchWsConfig = useWorkspaceConfigStore((s) => s.fetchConfig)
   const saveWsConfig = useWorkspaceConfigStore((s) => s.saveConfig)
-  const defaultAgents = useAgentsStore((s) => s.defaults)
-  const userAgents = useAgentsStore((s) => s.userItems)
-  const projectAgents = useAgentsStore((s) => s.projectItems)
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents)
+  const { data } = useResource(agentsResource, project.workdir)
+  const defaultAgents = data?.defaults ?? []
+  const userAgents = data?.userItems ?? []
+  const projectAgents = data?.projectItems ?? []
   const topLevelByScope = {
     builtin: defaultAgents.filter((a) => !a.subagent),
     user: userAgents.filter((a) => !a.subagent),
@@ -100,9 +101,8 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       setMcpDirty(false)
       setExpandedServers(new Set())
       fetchWsConfig(project.workdir)
-      fetchAgents(project.workdir).catch(() => {})
     }
-  }, [isOpen, project, fetchWsConfig, fetchAgents])
+  }, [isOpen, project, fetchWsConfig])
 
   useEffect(() => {
     if (wsConfig?.setup && wsConfig.setup.length > 0) {

@@ -32,7 +32,7 @@ export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
   const lastError = useTasksStore((state) => state.lastError)
   const project = useProjectStore((state) => state.projects.find((p) => p.id === projectId))
 
-  const { agents, fetchAgents } = useAgents()
+  const { agents } = useAgents()
 
   const [editor, setEditor] = useState<{ mode: 'create' } | { mode: 'edit'; task: ProjectTask } | null>(null)
   const [gatesOpen, setGatesOpen] = useState(false)
@@ -45,11 +45,10 @@ export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
     if (isOpen) {
       void loadBoard(projectId)
       void loadGates(projectId)
-      // Agents load lazily elsewhere; refresh so card chips render even when
-      // the board is opened from the homepage.
-      void fetchAgents()
+      // Agents load via the resource cache (implicit loadership), so the card
+      // chips render even when the board is opened from the homepage.
     }
-  }, [isOpen, projectId, loadBoard, loadGates, fetchAgents])
+  }, [isOpen, projectId, loadBoard, loadGates])
 
   const filteredTasks = useMemo(() => {
     if (!search.trim()) return tasks

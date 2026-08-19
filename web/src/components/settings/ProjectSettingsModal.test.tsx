@@ -17,7 +17,7 @@ const { mockStoreState, mockFetchConfig, mockSaveConfig, mockUpdateProject, mock
   },
 )
 
-const { mockDefaultAgents, mockUserAgents, mockProjectAgents, mockFetchAgents } = vi.hoisted(() => ({
+const { mockDefaultAgents, mockUserAgents, mockProjectAgents, mockRefreshAgents } = vi.hoisted(() => ({
   mockDefaultAgents: [
     { id: 'planner', name: 'Planner', description: '', subagent: false, allowedTools: [] },
     { id: 'builder', name: 'Builder', description: '', subagent: false, allowedTools: [] },
@@ -27,17 +27,21 @@ const { mockDefaultAgents, mockUserAgents, mockProjectAgents, mockFetchAgents } 
     { id: 'qa-lead', name: 'QA Lead', description: '', subagent: false, allowedTools: [] },
     { id: 'builder', name: 'Builder', description: '', subagent: false, allowedTools: [] },
   ],
-  mockFetchAgents: vi.fn(async () => undefined),
+  mockRefreshAgents: vi.fn(),
 }))
 
-vi.mock('../../stores/agents', () => ({
-  useAgentsStore: (selector: any) =>
-    selector({
+vi.mock('../../hooks/useResource', () => ({
+  useResource: vi.fn(() => ({
+    data: {
       defaults: mockDefaultAgents,
       userItems: mockUserAgents,
       projectItems: mockProjectAgents,
-      fetchAgents: mockFetchAgents,
-    }),
+      modelOverrides: {},
+    },
+    loading: false,
+    error: undefined,
+    refresh: mockRefreshAgents,
+  })),
 }))
 
 vi.mock('../../stores/project', () => ({
@@ -284,10 +288,11 @@ describe('ProjectSettingsModal — default agent', () => {
     expect((screen.getByTestId('save-btn') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('fetches agents scoped to the project when opened', () => {
+  it('loads agents scoped to the project when opened', async () => {
     render(<ProjectSettingsModal isOpen={true} onClose={vi.fn()} project={defaultProject} />)
 
-    expect(mockFetchAgents).toHaveBeenCalledWith(defaultProject.workdir)
+    const { useResource } = await import('../../hooks/useResource')
+    expect(vi.mocked(useResource)).toHaveBeenCalledWith(expect.anything(), defaultProject.workdir)
   })
 
   it('lists top-level project-scoped agents in the default agent select', () => {

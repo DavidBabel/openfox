@@ -1,12 +1,15 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { ChevronDownIcon, CheckIcon } from '../shared/icons'
-import { useAgentsStore, getAgentColor } from '../../stores/agents'
+import { getAgentColor } from '../../stores/agents'
 import { AgentsModal } from '../settings/AgentsModal'
 import { useKeybindings } from '../../hooks/useKeybindings'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { formatKeybinding } from '../../lib/keybindings'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 import { useEffortGatedAgentSwitch } from '../../hooks/useEffortGateContext'
+import { useResource } from '../../hooks/useResource'
+import { agentsResource } from '../../lib/resources'
+
 export function AgentSelector() {
   const sessionId = useSessionScope()
   const currentMode = useScopedPaneState(
@@ -21,20 +24,13 @@ export function AgentSelector() {
     (state) => state.currentSession?.workdir,
     undefined,
   )
-  const defaults = useAgentsStore((state) => state.defaults)
-  const userItems = useAgentsStore((state) => state.userItems)
-  const projectItems = useAgentsStore((state) => state.projectItems)
-  const fetchAgents = useAgentsStore((state) => state.fetchAgents)
+  const { data } = useResource(agentsResource, currentWorkdir)
   const gatedAgentSwitch = useEffortGatedAgentSwitch()
-  const agents = [...defaults, ...userItems, ...projectItems]
+  const agents = data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []
   const [isOpen, setIsOpen] = useState(false)
   const [showManager, setShowManager] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    fetchAgents(currentWorkdir)
-  }, [fetchAgents, currentWorkdir])
 
   // Close dropdown when clicking outside
   useClickOutside(dropdownRef, () => setIsOpen(false))

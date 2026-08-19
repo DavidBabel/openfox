@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authFetch } from '../lib/api'
+import { clearCache } from '../lib/resourceCache'
 import { useAgentsStore, type AgentFull } from './agents'
 
 vi.mock('../lib/api', () => ({
@@ -28,13 +29,7 @@ function jsonResponse(data: unknown = {}): Response {
 describe('AgentsStore project scoping', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useAgentsStore.setState({
-      defaults: [],
-      userItems: [],
-      projectItems: [],
-      modelOverrides: {},
-      loading: false,
-    })
+    clearCache()
     vi.mocked(authFetch).mockResolvedValue(jsonResponse())
   })
 
@@ -65,5 +60,27 @@ describe('AgentsStore project scoping', () => {
 
     expect(authFetch).toHaveBeenNthCalledWith(1, '/api/agents', expect.objectContaining({ method: 'POST' }))
     expect(authFetch).toHaveBeenNthCalledWith(2, '/api/agents')
+  })
+
+  it('deletes an agent then refreshes the scoped list', async () => {
+    await useAgentsStore.getState().deleteAgent(agent.metadata.id, '/repo/a')
+
+    expect(authFetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/agents/custom-reviewer?workdir=%2Frepo%2Fa',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+    expect(authFetch).toHaveBeenNthCalledWith(2, '/api/agents?workdir=%2Frepo%2Fa')
+  })
+
+  it('duplicates an agent then refreshes the scoped list', async () => {
+    await useAgentsStore.getState().duplicateAgent(agent.metadata.id, 'project', '/repo/a')
+
+    expect(authFetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/agents/custom-reviewer/duplicate?workdir=%2Frepo%2Fa',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(authFetch).toHaveBeenNthCalledWith(2, '/api/agents?workdir=%2Frepo%2Fa')
   })
 })

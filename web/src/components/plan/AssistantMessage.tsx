@@ -8,7 +8,8 @@ import { TodoListDisplay } from '../shared/TodoListDisplay'
 import { AskUserCard } from '../shared/AskUserCard'
 import { CriteriaGroupDisplay, isCriterionTool } from '../shared/CriteriaGroupDisplay'
 import { useSessionStore } from '../../stores/session'
-import { useAgentsStore, getAgentColor } from '../../stores/agents'
+import { useAgents } from '../../hooks/useAgents'
+import { getAgentColor } from '../../stores/agents'
 import { BranchIcon, CopyIcon, InfoIcon, WarningSmallIcon } from '../shared/icons'
 import { forkSession } from '../../lib/api.js'
 import { deriveToolCallStatus } from '../../lib/toolStatus'
@@ -157,9 +158,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   sessionId,
 }: AssistantMessageProps) {
   const criteria = useSessionStore((state) => state.currentSession?.metadataEntries?.['criteria'])
-  const agentDefaults = useAgentsStore((state) => state.defaults)
-  const agentUserItems = useAgentsStore((state) => state.userItems)
-  const agents = [...agentDefaults, ...agentUserItems]
+  const { agents } = useAgents()
   const rawElements = messageToElements(message, showStats)
   const filteredElements = showThinking ? rawElements : rawElements.filter((e) => e.type !== 'thinking')
   const elements = groupConsecutiveCriteria(filteredElements)

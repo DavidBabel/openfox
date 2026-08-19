@@ -4,7 +4,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TaskEditor } from './TaskEditor'
 import { useTasksStore } from '../../stores/tasks'
-import { useAgentsStore } from '../../stores/agents'
 import { useWorkflowsStore } from '../../stores/workflows'
 import { useCommandsStore } from '../../stores/commands'
 import { useProjectStore } from '../../stores/project'
@@ -13,6 +12,21 @@ import type { ProjectTask } from '@shared/types.js'
 
 vi.mock('../../lib/api', () => ({
   authFetch: vi.fn(),
+}))
+
+const { mockAgents, mockRefreshAgents } = vi.hoisted(() => ({
+  mockAgents: [] as Array<{
+    id: string
+    name: string
+    description: string
+    subagent: boolean
+    allowedTools: string[]
+  }>,
+  mockRefreshAgents: vi.fn(),
+}))
+
+vi.mock('../../hooks/useAgents', () => ({
+  useAgents: () => ({ agents: mockAgents, refresh: mockRefreshAgents }),
 }))
 
 const SCROLL_HEIGHT_DESC = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight')
@@ -57,14 +71,13 @@ describe('TaskEditor', () => {
     })
     // Real-world ordering: builder sorts first, but the configured default agent
     // is planner — a new task must NOT pin the first agent in the list.
-    useAgentsStore.setState({
-      defaults: [
-        { id: 'builder', name: 'Builder', description: '', subagent: false, allowedTools: [] },
-        { id: 'planner', name: 'Planner', description: '', subagent: false, allowedTools: [] },
-        { id: 'explorer', name: 'Explorer', description: '', subagent: false, allowedTools: [] },
-      ],
-      userItems: [],
-    })
+    mockAgents.splice(
+      0,
+      mockAgents.length,
+      { id: 'builder', name: 'Builder', description: '', subagent: false, allowedTools: [] },
+      { id: 'planner', name: 'Planner', description: '', subagent: false, allowedTools: [] },
+      { id: 'explorer', name: 'Explorer', description: '', subagent: false, allowedTools: [] },
+    )
     // Neutralize the cold-start fetches (asserted in their own test) so other
     // tests can seed the stores directly without an async refetch wiping them.
     useWorkflowsStore.setState({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() })
@@ -91,11 +104,10 @@ describe('TaskEditor', () => {
     expect(screen.getAllByText(/already in progress/i).length).toBeGreaterThan(0)
   })
 
-  it('loads the agent list on mount so the dropdown is never empty', () => {
-    const fetchAgents = vi.fn()
-    useAgentsStore.setState({ defaults: [], userItems: [], fetchAgents })
+  it('renders the loaded agent list in the dropdown so it is never empty', () => {
     render(<TaskEditor projectId="proj-1" onClose={() => {}} onSaved={() => {}} />)
-    expect(fetchAgents).toHaveBeenCalled()
+    expect(screen.getByRole('option', { name: 'Builder' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Planner' })).toBeTruthy()
   })
 
   it('restores an unsaved draft when editing (edit-mode draft preservation)', async () => {

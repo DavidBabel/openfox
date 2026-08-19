@@ -5,7 +5,9 @@ import { shouldAutofocus } from '../../lib/device'
 import { PlusIcon, XCloseIcon, TrashIcon, InfoIcon } from '../shared/icons'
 import { Modal } from '../shared/Modal'
 import { MetadataStatusIcon, decodeHtmlEntities } from '../shared/MetadataStatusIcon'
-import { useAgentsStore, getAgentColor } from '../../stores/agents'
+import { useAgents } from '../../hooks/useAgents'
+import { getAgentColor } from '../../stores/agents'
+import { useScopedPaneState } from '../../stores/session/session-scope'
 import { useWorkflowsStore } from '../../stores/workflows'
 
 const statusCycle: Record<string, string> = {
@@ -59,10 +61,15 @@ export function CriteriaEditor({ entries, sessionId }: CriteriaEditorProps) {
   const [editDescription, setEditDescription] = useState('')
   const [clearConfirm, setClearConfirm] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
-  const defaults = useAgentsStore((s) => s.defaults)
-  const userItems = useAgentsStore((s) => s.userItems)
-  const projectItems = useAgentsStore((s) => s.projectItems)
-  const agents = useMemo(() => [...defaults, ...userItems, ...projectItems], [defaults, userItems, projectItems])
+  // Scope agents to this session's workdir so project-scoped agents render as
+  // name+color badges instead of raw IDs.
+  const workdir = useScopedPaneState(
+    sessionId,
+    (pane) => pane.session?.workdir ?? undefined,
+    (state) => state.currentSession?.workdir,
+    undefined,
+  )
+  const { agents } = useAgents(workdir)
   const addInputRef = useRef<HTMLInputElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
