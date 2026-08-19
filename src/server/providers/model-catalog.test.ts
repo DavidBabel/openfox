@@ -11,14 +11,30 @@ describe('model catalog', () => {
     }
   })
 
-  it('maps qwen3.6/3.8 family members to low/medium/high', () => {
-    for (const id of ['qwen3.6-35b-a3b', 'qwen3.6-max', 'qwen3.8-27b']) {
-      expect(getCatalogEntry(id)?.reasoningEfforts).toEqual(['low', 'medium', 'high'])
+  it('maps qwen3.8 to none/low/medium/xhigh with an xhigh default', () => {
+    for (const id of ['qwen3.8-27b', 'Qwen/Qwen3.8-27B-FP8']) {
+      expect(getCatalogEntry(id)).toEqual({
+        reasoningEfforts: ['none', 'low', 'medium', 'xhigh'],
+        defaultReasoningEffort: 'xhigh',
+      })
     }
   })
 
+  it('maps qwen3.5/3.6 family members to none/high', () => {
+    for (const id of ['qwen3.5-27b', 'qwen3.6-35b-a3b', 'qwen3.6-max']) {
+      expect(getCatalogEntry(id)).toEqual({
+        reasoningEfforts: ['none', 'high'],
+        defaultReasoningEffort: 'high',
+      })
+    }
+  })
+
+  it('leaves qwen3.7 without a catalog entry', () => {
+    expect(getCatalogEntry('qwen3.7-27b')).toBeUndefined()
+  })
+
   it('matches org-prefixed model ids via their basename', () => {
-    expect(getCatalogEntry('Qwen/Qwen3.6-27B-FP8')?.reasoningEfforts).toEqual(['low', 'medium', 'high'])
+    expect(getCatalogEntry('Qwen/Qwen3.6-27B-FP8')?.reasoningEfforts).toEqual(['none', 'high'])
     expect(getCatalogEntry('deepseek-ai/deepseek-v4-flash')?.reasoningEfforts).toEqual(['none', 'low', 'high', 'max'])
   })
 
@@ -56,7 +72,8 @@ describe('model catalog', () => {
 
   it('exposes the default effort helper', () => {
     expect(getCatalogDefaultEffort('deepseek-v4-flash')).toBe('high')
-    expect(getCatalogDefaultEffort('qwen3.6-27b')).toBe('medium')
+    expect(getCatalogDefaultEffort('qwen3.6-27b')).toBe('high')
+    expect(getCatalogDefaultEffort('qwen3.8-27b')).toBe('xhigh')
   })
 
   it('validates the canonical reasoning effort vocabulary', () => {

@@ -142,7 +142,7 @@ export function ModelEntryRow({
           aria-label={`Reasoning efforts for ${modelConfig.id}`}
         >
           {reasoningEfforts!.map((effort) => {
-            const isEffortActive = isActive && selectedEffort === effort
+            const isEffortActive = selectedEffort === effort
             return (
               <button
                 key={effort}

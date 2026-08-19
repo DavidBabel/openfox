@@ -210,11 +210,19 @@ export function ProviderSelector() {
     override: effectiveModelConfig?.reasoningEffortOverride,
   })
 
-  // The effort that is currently active for a given model row (only meaningful for
-  // the active model — other rows show no highlighted chip).
+  // The effort shown as active on a model row: the session-effective effort for
+  // the active model, otherwise the model's own pinned default (thinkingLevel /
+  // override) so a non-selected model with a pinned effort still shows it.
   const effortForModel = (providerId: string, modelId: string): string | undefined => {
-    if (effectiveProviderId !== providerId || effectiveModel !== modelId) return undefined
-    return displayEffort
+    if (effectiveProviderId === providerId && effectiveModel === modelId) return displayEffort
+    const config = providers.find((p) => p.id === providerId)?.models.find((m) => m.id === modelId)
+    if (!config) return undefined
+    return resolveDisplayEffort({
+      reasoningEfforts: config.reasoningEfforts,
+      thinkingLevel: config.thinkingLevel,
+      thinkingEnabled: config.thinkingEnabled,
+      override: config.reasoningEffortOverride,
+    })
   }
 
   const [settingDefault, setSettingDefault] = useState(false)

@@ -2135,6 +2135,72 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     expect(mediumChip?.className).not.toContain('bg-accent-primary/10')
   })
 
+  it('[AUTOMATED] a non-active model with a pinned effort highlights its chip in the dropdown', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              contextWindow: 128000,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'medium',
+            },
+            {
+              id: 'gpt-5',
+              name: 'GPT-5',
+              contextWindow: 128000,
+              reasoningEfforts: ['low', 'medium', 'high'],
+              thinkingEnabled: true,
+              thinkingLevel: 'high',
+            },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    await setSessionState({
+      currentSession: {
+        id: 'session-1',
+        mode: 'planner',
+        providerId: 'provider-1',
+        providerModel: 'gpt-4',
+      },
+      setSessionProvider: vi.fn(),
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    // gpt-5 is not selected but has 'high' pinned → its chip is highlighted.
+    const gpt5EffortBox = screen.getByLabelText('Reasoning efforts for gpt-5')
+    const gpt5High = Array.from(gpt5EffortBox.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'high')
+    expect(gpt5High?.className).toContain('bg-accent-primary/10')
+    const gpt5Medium = Array.from(gpt5EffortBox.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'medium',
+    )
+    expect(gpt5Medium?.className).not.toContain('bg-accent-primary/10')
+
+    // The active model keeps its own highlight (medium).
+    const gpt4EffortBox = screen.getByLabelText('Reasoning efforts for gpt-4')
+    const gpt4Medium = Array.from(gpt4EffortBox.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'medium',
+    )
+    expect(gpt4Medium?.className).toContain('bg-accent-primary/10')
+    const gpt4High = Array.from(gpt4EffortBox.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'high')
+    expect(gpt4High?.className).not.toContain('bg-accent-primary/10')
+  })
+
   it('[AUTOMATED] effort pick on a warm cache + Apply persists the effort as the model default', async () => {
     const user = userEvent.setup()
     const mockSetSessionProvider = vi.fn().mockResolvedValue(true)

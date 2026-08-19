@@ -36,9 +36,16 @@ const CATALOG: CatalogRule[] = [
     entry: { reasoningEfforts: ['none', 'low', 'high', 'max'], defaultReasoningEffort: 'high' },
   },
   {
-    // Qwen3.6 / 3.7 / 3.8 families: low/medium/high is the common denominator.
-    pattern: /^qwen3\.(6|7|8)(\b|-)/i,
-    entry: { reasoningEfforts: ['low', 'medium', 'high'], defaultReasoningEffort: 'medium' },
+    // Qwen3.8: official reasoning_effort values are low/medium/xhigh
+    // (xhigh is the model default); 'none' disables thinking on setups
+    // that honor it.
+    pattern: /^qwen3\.8(\b|-)/i,
+    entry: { reasoningEfforts: ['none', 'low', 'medium', 'xhigh'], defaultReasoningEffort: 'xhigh' },
+  },
+  {
+    // Qwen3.5 / 3.6: on/off thinking only — none (off) or high (thinking on).
+    pattern: /^qwen3\.(5|6)(\b|-)/i,
+    entry: { reasoningEfforts: ['none', 'high'], defaultReasoningEffort: 'high' },
   },
   {
     // Z.ai GLM-5.3: only max/high/low are accepted.
