@@ -61,12 +61,15 @@ const mockProviderManager = {
   getCurrentModel: vi.fn(() => 'global-model'),
   getProviders: vi.fn(() => [] as Array<{ id: string; models: Array<{ id: string; contextWindow: number }> }>),
   getDefaultModelSelection: vi.fn(() => 'default-provider/default-model'),
-  getModelSettings: vi.fn((_providerId: string, modelId: string): { maxTokens: number } | undefined => {
-    if (modelId === 'override-model') return { maxTokens: 32000 }
-    if (modelId === 'session-model') return { maxTokens: 262000 }
-    if (modelId === 'default-model') return { maxTokens: 100000 }
-    return undefined
-  }),
+  getModelSettings: vi.fn(
+    (_providerId: string, modelId: string, _mode?: 'thinking' | 'non-thinking'): { maxTokens: number } | undefined => {
+      if (modelId === 'override-model') return { maxTokens: 32000 }
+      if (modelId === 'session-model') return { maxTokens: 262000 }
+      if (modelId === 'default-model') return { maxTokens: 100000 }
+      return undefined
+    },
+  ),
+  resolveModelEffort: vi.fn((): string | undefined => undefined),
 }
 
 describe('SessionManager', () => {
@@ -943,6 +946,43 @@ describe('SessionManager', () => {
         providerId: 'override-provider',
         model: 'override-model',
       })
+    })
+
+    it('getCurrentModelSettings requests non-thinking mode when the effective effort is none', () => {
+      ;(mockProviderManager.resolveModelEffort as ReturnType<typeof vi.fn>).mockReturnValue('none')
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'none')
+      manager.setSessionProviderActive(session.id, true)
+
+      manager.getCurrentModelSettings(session.id)
+
+      expect(mockProviderManager.getModelSettings).toHaveBeenCalledWith(
+        'session-provider',
+        'session-model',
+        'non-thinking',
+      )
+    })
+
+    it('getCurrentModelSettings requests thinking mode when the effective effort is a thinking level', () => {
+      ;(mockProviderManager.resolveModelEffort as ReturnType<typeof vi.fn>).mockReturnValue('high')
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true, 'high')
+      manager.setSessionProviderActive(session.id, true)
+
+      manager.getCurrentModelSettings(session.id)
+
+      expect(mockProviderManager.getModelSettings).toHaveBeenCalledWith('session-provider', 'session-model', 'thinking')
+    })
+
+    it('getCurrentModelSettings defaults to thinking mode when no effort is resolved', () => {
+      ;(mockProviderManager.resolveModelEffort as ReturnType<typeof vi.fn>).mockReturnValue(undefined)
+      const session = manager.createSession(projectId, 'Test Session', 'session-provider', 'session-model')
+      manager.setSessionProvider(session.id, 'session-provider', 'session-model', true)
+      manager.setSessionProviderActive(session.id, true)
+
+      manager.getCurrentModelSettings(session.id)
+
+      expect(mockProviderManager.getModelSettings).toHaveBeenCalledWith('session-provider', 'session-model', 'thinking')
     })
 
     it('setMode deactivates the manual pick on override agents and reactivates it otherwise', () => {

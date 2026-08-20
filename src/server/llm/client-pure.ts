@@ -87,7 +87,7 @@ async function buildAttachmentContent(
   return content
 }
 
-type MinimalCapabilities = Pick<BackendCapabilities, 'supportsTopK' | 'supportsChatTemplateKwargs'>
+type MinimalCapabilities = Pick<BackendCapabilities, 'supportsTopK' | 'supportsChatTemplateKwargs' | 'supportsNumCtx'>
 type MinimalProfile = Pick<ModelProfile, 'temperature' | 'defaultMaxTokens' | 'topP' | 'topK' | 'supportsVision'>
 
 function convertToolCalls(
@@ -267,6 +267,14 @@ async function buildChatCompletionCreateParams(
 
   if (topK !== undefined) {
     ;(params as unknown as Record<string, unknown>)['top_k'] = topK
+  }
+
+  // Ollama's OpenAI-compatible endpoint cannot request a larger context (it
+  // silently truncates prompts to its 4096-token default, dropping the user
+  // message). The num_ctx-capable backend talks to the native /api/chat
+  // endpoint which consumes this field via options.num_ctx.
+  if (capabilities.supportsNumCtx && request.modelSettings?.numCtx) {
+    ;(params as unknown as Record<string, unknown>)['num_ctx'] = request.modelSettings.numCtx
   }
 
   const resolvedEffort = reasoningEffort ?? request.reasoningEffort

@@ -1750,6 +1750,7 @@ describe('createWebSocketServer', () => {
       updateModelSettings: vi.fn(),
       refreshProviderModels: vi.fn(),
       getModelSettings: vi.fn(),
+      resolveModelEffort: vi.fn(),
     } as never
 
     const session = {
@@ -1852,6 +1853,7 @@ describe('createWebSocketServer', () => {
       updateModelSettings: vi.fn(),
       refreshProviderModels: vi.fn(),
       getModelSettings: vi.fn(),
+      resolveModelEffort: vi.fn(),
     } as never
 
     // The user picked deepseek-provider/manual-model, then switched to an override

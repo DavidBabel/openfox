@@ -244,11 +244,13 @@ export class SessionManager {
   ): { temperature?: number; topP?: number; topK?: number; maxTokens?: number; supportsVision?: boolean } | undefined {
     let providerId: string | undefined
     let model: string | undefined
+    let reasoningEffort: string | undefined
 
     if (sessionId) {
       const effective = this.resolveEffectiveProviderModel(sessionId, agentId)
       providerId = effective.providerId ?? undefined
       model = effective.model ?? undefined
+      reasoningEffort = effective.reasoningEffort
     }
 
     if (!providerId || !model) {
@@ -257,7 +259,16 @@ export class SessionManager {
     }
 
     if (!model || !providerId) return undefined
-    return this.providerManager.getModelSettings(providerId, model)
+
+    // The thinking mode must mirror the effort actually sent to the provider:
+    // "none" turns thinking off (chat_template_kwargs enable_thinking=false),
+    // anything else keeps it on. Without an explicit effort the model's
+    // configured default (thinkingLevel) decides — forcing thinking on for a
+    // model whose default is off makes Qwen3-style models burn their output
+    // budget on reasoning and return empty/garbled responses.
+    const effort = this.providerManager.resolveModelEffort(providerId, model, reasoningEffort)
+    const mode = effort === 'none' ? 'non-thinking' : 'thinking'
+    return this.providerManager.getModelSettings(providerId, model, mode)
   }
 
   getCurrentModelContext(sessionId?: string, agentId?: string): number {

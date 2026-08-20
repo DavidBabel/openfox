@@ -87,6 +87,7 @@ describe('QueueProcessor', () => {
       getCurrentModel: vi.fn(() => 'test-model'),
       activateProvider: vi.fn(),
       getModelSettings: vi.fn(() => undefined),
+      resolveModelEffort: vi.fn(() => undefined),
       getProviders: vi.fn(() => []),
     }
     mockGetLLMClient = vi.fn(() => ({

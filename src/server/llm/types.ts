@@ -41,6 +41,8 @@ export interface LLMCompletionRequest {
     queryParams?: Record<string, unknown>
     /** Top-level request body params to strip from outgoing requests. */
     omitParams?: string[]
+    /** The model's context window — sent as top-level num_ctx to backends that support it (Ollama). */
+    numCtx?: number
   }
   /** When true, include the raw API response body in the result */
   returnRaw?: boolean

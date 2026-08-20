@@ -7,6 +7,17 @@ import { parseLmStudioModels } from './providers/lmstudio.js'
 import { ensureVersionPrefix, stripVersionPrefix, buildModelsUrl } from './llm/url-utils.js'
 import { getCatalogEntry } from './providers/model-catalog.js'
 import { resolveEffortForModel } from '../shared/reasoning-effort.js'
+
+/**
+ * Cap for the num_ctx we request from Ollama's OpenAI-compatible endpoint.
+ * Ollama auto-detects a model's contextWindow from /api/show (often the model's
+ * full 128k-262k max) but allocates KV cache proportionally — and unlike its
+ * automatic VRAM-tier default, an EXPLICIT num_ctx is never reduced on OOM.
+ * Requesting the full auto-detected window would hard-fail on modest GPUs, so
+ * we clamp to Ollama's own 23-47GB VRAM tier default: ample for agent prompts
+ * (system prompt + tools + history) without a catastrophic allocation.
+ */
+const MAX_REQUESTED_NUM_CTX = 32768
 import './llm/proxy.js'
 
 function normalizeModelId(s: string): string {
@@ -326,8 +337,13 @@ export interface ProviderManager {
         chatTemplateKwargs?: Record<string, unknown>
         queryParams?: Record<string, unknown>
         omitParams?: string[]
+        numCtx?: number
       }
     | undefined
+  /** Resolve the effective reasoning effort for a model: explicit effort wins,
+   *  then the model's configured default (thinkingLevel), clamped to the model's
+   *  advertised preset list. `undefined` when the model has no thinking config. */
+  resolveModelEffort(providerId: string, modelId: string, explicitEffort?: string): string | undefined
 }
 
 export function parseDefaultModelSelection(selection?: string): {
@@ -878,6 +894,8 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
       if (model['maxTokens'] !== undefined) baseSettings['maxTokens'] = model['maxTokens']
       if (model['supportsVision'] !== undefined) baseSettings['supportsVision'] = model['supportsVision']
       if (model['omitParams'] !== undefined) baseSettings['omitParams'] = model['omitParams']
+      if (model['contextWindow'] !== undefined)
+        baseSettings['numCtx'] = Math.min(model['contextWindow'], MAX_REQUESTED_NUM_CTX)
 
       // User-configured queryParams take priority
       const rawQueryParams = mode === 'thinking' ? model.thinkingQueryParams : model.nonThinkingQueryParams
@@ -900,10 +918,17 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
         return { ...baseSettings, queryParams: JSON.parse(fallbackRawQP) as Record<string, unknown> }
       }
 
-      // Return base settings only when omitParams is configured (no thinking config)
-      if (model['omitParams'] !== undefined) return baseSettings
+      // Return base settings when any base setting is configured (temperature,
+      // topP, numCtx, omitParams, …) — otherwise undefined (no model config).
+      if (Object.keys(baseSettings).length > 0) return baseSettings
 
       return undefined
+    },
+
+    resolveModelEffort(providerId: string, modelId: string, explicitEffort?: string): string | undefined {
+      const provider = providers.find((p) => p.id === providerId)
+      if (!provider) return undefined
+      return resolveModelThinkingConfig(provider, modelId, explicitEffort).reasoningEffort
     },
 
     async refreshProviderModels(providerId: string) {

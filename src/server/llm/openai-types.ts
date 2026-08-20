@@ -80,6 +80,7 @@ export interface ChatCompletionResponse {
       content: string | ContentBlock[] | null
       reasoning_content?: string | null
       reasoning?: string | null
+      thinking?: string | null
       tool_calls?: ChatCompletionMessageToolCall[]
     }
   }>
@@ -97,6 +98,7 @@ export interface ChatCompletionChunk {
       content?: string | ContentBlock[] | null
       reasoning_content?: string | null
       reasoning?: string | null
+      thinking?: string | null
       tool_calls?: Array<{
         index: number
         id?: string

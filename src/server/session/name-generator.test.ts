@@ -460,6 +460,7 @@ describe('Session Name Generator', () => {
         ]),
         getCurrentModel: vi.fn().mockReturnValue('gpt-5.6'),
         getModelSettings: vi.fn().mockReturnValue(undefined),
+        resolveModelEffort: vi.fn(() => undefined),
       }
 
       await generateSessionNameForSession('test-session', 'Hello world', {

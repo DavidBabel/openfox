@@ -46,6 +46,16 @@ describe('llm client', () => {
     httpClientCreateStreamMock.mockReset()
   })
 
+  it('defaults the backend from config.llm.backend when no initial backend is given', () => {
+    const client = createLLMClient(createConfig({ backend: 'ollama' }))
+    expect(client.getBackend()).toBe('ollama')
+  })
+
+  it('falls back to unknown backend when config has none', () => {
+    const client = createLLMClient(createConfig())
+    expect(client.getBackend()).toBe('unknown')
+  })
+
   it('normalizes the base url and maps complete responses with reasoning and tool calls', async () => {
     httpClientCreateMock.mockResolvedValueOnce({
       id: 'resp-1',

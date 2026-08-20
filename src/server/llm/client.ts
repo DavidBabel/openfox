@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js'
 import { LLMError } from '../utils/errors.js'
 import { getModelProfile, type ModelProfile } from './profiles.js'
 import { type Backend, getBackendCapabilities } from './backend.js'
-import { ensureVersionPrefix } from './url-utils.js'
+import { ensureVersionPrefix, stripVersionPrefix } from './url-utils.js'
 import {
   buildNonStreamingCreateParams,
   buildStreamingCreateParams,
@@ -21,6 +21,7 @@ import {
   parseToolArguments,
 } from './client-pure.js'
 import { OpenAIHttpClient } from './http-client.js'
+import { OllamaHttpClient } from './ollama-native.js'
 
 /**
  * Extract text and thinking content from structured content blocks
@@ -53,13 +54,23 @@ export interface LLMClientWithModel extends LLMClient {
   getReasoningEffort?(): string | undefined
 }
 
-export function createLLMClient(config: Config, initialBackend: Backend = 'unknown'): LLMClientWithModel {
+export function createLLMClient(
+  config: Config,
+  initialBackend: Backend = config.llm.backend ?? 'unknown',
+): LLMClientWithModel {
   const baseURL = ensureVersionPrefix(config.llm.baseUrl)
 
   const httpClient = new OpenAIHttpClient({
     baseURL,
     apiKey: config.llm.apiKey ?? 'not-needed',
   })
+  // Ollama's OpenAI-compatible endpoint cannot set num_ctx, so the Ollama
+  // backend talks to the native /api/chat endpoint instead (which accepts
+  // options.num_ctx). Dispatched per request based on the current backend.
+  const ollamaHttpClient = new OllamaHttpClient({
+    baseURL: stripVersionPrefix(baseURL),
+  })
+  const httpFor = (b: Backend) => (b === 'ollama' ? ollamaHttpClient : httpClient)
 
   let model = config.llm.model
   let profile = getModelProfile(model)
@@ -131,7 +142,7 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
           capabilities,
           ...buildExtraParams(resolvedEffort),
         })
-        const httpResponse = await httpClient.createChatCompletion(
+        const httpResponse = await httpFor(backend).createChatCompletion(
           createParams,
           {
             signal: request.signal,
@@ -240,7 +251,7 @@ export function createLLMClient(config: Config, initialBackend: Backend = 'unkno
           ? AbortSignal.any([request.signal, idleTimeoutController.signal])
           : idleTimeoutController.signal
 
-        const stream = httpClient.createChatCompletionStream(streamingParams, {
+        const stream = httpFor(backend).createChatCompletionStream(streamingParams, {
           signal: streamSignal,
         })
 

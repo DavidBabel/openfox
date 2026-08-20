@@ -11,44 +11,55 @@ export interface BackendCapabilities {
   supportsChatTemplateKwargs: boolean
   /** Whether top_k parameter is supported in OpenAI-compatible mode */
   supportsTopK: boolean
+  /** Whether the client uses Ollama's native /api/chat (consumes num_ctx) */
+  supportsNumCtx: boolean
 }
 
 const BACKEND_CAPABILITIES: Record<Backend, BackendCapabilities> = {
   vllm: {
     supportsChatTemplateKwargs: true,
     supportsTopK: true,
+    supportsNumCtx: false,
   },
   sglang: {
     supportsChatTemplateKwargs: true,
     supportsTopK: true,
+    supportsNumCtx: false,
   },
   openai: {
     supportsChatTemplateKwargs: false,
     supportsTopK: false,
+    supportsNumCtx: false,
   },
   anthropic: {
     supportsChatTemplateKwargs: false,
     supportsTopK: false,
+    supportsNumCtx: false,
   },
   ollama: {
     supportsChatTemplateKwargs: false,
     supportsTopK: false,
+    supportsNumCtx: true,
   },
   llamacpp: {
     supportsChatTemplateKwargs: false,
     supportsTopK: true,
+    supportsNumCtx: false,
   },
   lmstudio: {
     supportsChatTemplateKwargs: false,
     supportsTopK: true,
+    supportsNumCtx: false,
   },
   'opencode-go': {
     supportsChatTemplateKwargs: false,
     supportsTopK: true,
+    supportsNumCtx: false,
   },
   unknown: {
     supportsChatTemplateKwargs: true,
     supportsTopK: true,
+    supportsNumCtx: false,
   },
 }
 

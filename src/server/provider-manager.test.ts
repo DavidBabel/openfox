@@ -628,6 +628,75 @@ describe('ProviderManager - Model Selection', () => {
       expect(settings?.queryParams).toEqual({ reasoning_effort: 'high' })
       expect(settings?.omitParams).toEqual(['top_p'])
     })
+
+    it('includes numCtx from the model context window', async () => {
+      await providerManager.updateModelSettings('provider-1', 'model-a', {
+        contextWindow: 32768,
+      })
+
+      const settings = providerManager.getModelSettings('provider-1', 'model-a')
+      expect(settings?.numCtx).toBe(32768)
+    })
+
+    it('caps numCtx to a sane ceiling for large auto-detected context windows', async () => {
+      await providerManager.updateModelSettings('provider-1', 'model-a', {
+        contextWindow: 262144,
+      })
+
+      const settings = providerManager.getModelSettings('provider-1', 'model-a')
+      expect(settings?.numCtx).toBe(32768)
+    })
+  })
+
+  describe('resolveModelEffort', () => {
+    it('returns the model default effort from thinkingLevel when no explicit effort', async () => {
+      await providerManager.updateModelSettings('provider-1', 'model-a', {
+        thinkingEnabled: true,
+        thinkingLevel: 'none',
+        reasoningEfforts: ['none', 'high'],
+      })
+
+      expect(providerManager.resolveModelEffort('provider-1', 'model-a')).toBe('none')
+    })
+
+    it('an explicit none always wins, even against a high default', async () => {
+      await providerManager.updateModelSettings('provider-1', 'model-a', {
+        thinkingEnabled: true,
+        thinkingLevel: 'high',
+        reasoningEfforts: ['none', 'high'],
+      })
+
+      expect(providerManager.resolveModelEffort('provider-1', 'model-a', 'none')).toBe('none')
+    })
+
+    it('an explicit in-list effort wins over the model default', async () => {
+      await providerManager.updateModelSettings('provider-1', 'model-a', {
+        thinkingEnabled: true,
+        thinkingLevel: 'none',
+        reasoningEfforts: ['none', 'high'],
+      })
+
+      expect(providerManager.resolveModelEffort('provider-1', 'model-a', 'high')).toBe('high')
+    })
+
+    it('clamps an out-of-list explicit effort to the model default', async () => {
+      await providerManager.updateModelSettings('provider-1', 'model-a', {
+        thinkingEnabled: true,
+        thinkingLevel: 'high',
+        reasoningEfforts: ['none', 'high'],
+      })
+
+      expect(providerManager.resolveModelEffort('provider-1', 'model-a', 'xhigh')).toBe('high')
+    })
+
+    it('returns undefined for models without thinking config', () => {
+      expect(providerManager.resolveModelEffort('provider-1', 'model-a')).toBeUndefined()
+    })
+
+    it('returns undefined for unknown provider or model', () => {
+      expect(providerManager.resolveModelEffort('non-existent', 'model-a')).toBeUndefined()
+      expect(providerManager.resolveModelEffort('provider-1', 'non-existent')).toBeUndefined()
+    })
   })
 
   describe('automatic model resolution', () => {

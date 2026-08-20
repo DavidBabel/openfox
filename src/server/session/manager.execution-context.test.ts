@@ -74,6 +74,7 @@ const mockProviderManager = {
   getCurrentModel: vi.fn(() => 'global-model'),
   getDefaultModelSelection: vi.fn(() => 'test-provider/global-model'),
   getModelSettings: vi.fn(() => undefined),
+  resolveModelEffort: vi.fn(() => undefined),
   getProviders: vi.fn(() => []),
   createClientForAgent: vi.fn(() => ({
     getModel: () => 'mock-test-model',

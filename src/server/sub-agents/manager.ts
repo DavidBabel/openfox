@@ -178,7 +178,18 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
         ...(resolved.override.reasoningEffort ? { reasoningEffort: resolved.override.reasoningEffort } : {}),
       }
       // Use model settings from the override provider/model, not the session model
-      overrideModelSettings = providerManager.getModelSettings(resolved.override.providerId, resolved.override.model)
+      // — with the mode derived from the override's effective effort so "none"
+      // disables thinking instead of forcing chat_template_kwargs enable_thinking=true.
+      const overrideEffort = providerManager.resolveModelEffort(
+        resolved.override.providerId,
+        resolved.override.model,
+        resolved.override.reasoningEffort,
+      )
+      overrideModelSettings = providerManager.getModelSettings(
+        resolved.override.providerId,
+        resolved.override.model,
+        overrideEffort === 'none' ? 'non-thinking' : 'thinking',
+      )
       logger.info('Sub-agent using model override', { subAgentType, ...resolved.override })
     } else if (resolved.warning) {
       logger.warn('Sub-agent model override unavailable, falling back', { subAgentType, warning: resolved.warning })

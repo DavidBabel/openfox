@@ -240,6 +240,7 @@ describe('SubAgentManager', () => {
         createClient: vi.fn(() => client),
         getProviders: vi.fn(() => []),
         getModelSettings: vi.fn(() => undefined),
+        resolveModelEffort: vi.fn(() => undefined),
       } as unknown as ProviderManager
     }
 
@@ -331,6 +332,64 @@ describe('SubAgentManager', () => {
 
       expect(resolveLLMClientForAgentMock).toHaveBeenCalled()
       expect(result.content).toBe('Test result content')
+    })
+
+    it('derives non-thinking model settings when the override effort is none', async () => {
+      resolveLLMClientForAgentMock.mockReturnValue({
+        client: createMockLLMClient(),
+        usedOverride: true,
+        override: { providerId: 'p1', model: 'claude-x', reasoningEffort: 'none' },
+      })
+      const dedicatedClient = createMockLLMClient()
+      const pm = {
+        createClient: vi.fn(() => dedicatedClient),
+        getProviders: vi.fn(() => [{ id: 'p1', name: 'P', backend: 'ollama', models: [] }]),
+        getModelSettings: vi.fn(() => undefined),
+        resolveModelEffort: vi.fn(() => 'none'),
+      } as unknown as ProviderManager
+
+      await executeSubAgent({
+        subAgentType: 'explorer',
+        prompt: 'Explore.',
+        sessionManager: createMockSessionManager(),
+        sessionId: 'test-session',
+        llmClient: createMockLLMClient(),
+        toolRegistry: createMockToolRegistry(),
+        turnMetrics: createMockTurnMetrics(),
+        statsIdentity: TEST_STATS_IDENTITY,
+        providerManager: pm,
+      })
+
+      expect(pm.getModelSettings).toHaveBeenCalledWith('p1', 'claude-x', 'non-thinking')
+    })
+
+    it('derives thinking model settings when the override effort is a thinking level', async () => {
+      resolveLLMClientForAgentMock.mockReturnValue({
+        client: createMockLLMClient(),
+        usedOverride: true,
+        override: { providerId: 'p1', model: 'claude-x', reasoningEffort: 'high' },
+      })
+      const dedicatedClient = createMockLLMClient()
+      const pm = {
+        createClient: vi.fn(() => dedicatedClient),
+        getProviders: vi.fn(() => [{ id: 'p1', name: 'P', backend: 'ollama', models: [] }]),
+        getModelSettings: vi.fn(() => undefined),
+        resolveModelEffort: vi.fn(() => 'high'),
+      } as unknown as ProviderManager
+
+      await executeSubAgent({
+        subAgentType: 'explorer',
+        prompt: 'Explore.',
+        sessionManager: createMockSessionManager(),
+        sessionId: 'test-session',
+        llmClient: createMockLLMClient(),
+        toolRegistry: createMockToolRegistry(),
+        turnMetrics: createMockTurnMetrics(),
+        statsIdentity: TEST_STATS_IDENTITY,
+        providerManager: pm,
+      })
+
+      expect(pm.getModelSettings).toHaveBeenCalledWith('p1', 'claude-x', 'thinking')
     })
 
     it('falls back to the parent client with a visible warning when the override is invalid', async () => {
