@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.125 - 2026-08-21
+
+### Features
+
+- **xAI Grok (SuperGrok) plugin** — new curated plugin logs in with your X (xAI) SuperGrok subscription via OAuth, no API key needed
+
+### Enhancements
+
+- **Small-context models are flagged** — the model picker and edit-model modal warn when a model's context window sits under 16k tokens
+
+### Bug Fixes
+
+- **llama.cpp now honors the reasoning effort** — the chosen level reaches the model (it was silently ignored); 'none' turns thinking off
+- **Symlinked project folders show up in discovery** — directory browser, workspace and plugin listings now include symlinked directories
+- **Ollama requests are fixed end to end** — the native /api/chat endpoint uses the model's full context window so prompts are no longer truncated, unsupported params are dropped, and multi-turn tool calls work again
+- **Thinking mode follows the resolved reasoning effort** — session and sub-agent thinking is no longer force-enabled
+
 ## 2.0.124 - 2026-08-19
 
 ### Enhancements
