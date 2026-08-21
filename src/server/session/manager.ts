@@ -115,6 +115,16 @@ type SessionEvents = {
   turn_done: [{ sessionId: string }]
 }
 
+// A workspace's origin is the original local repo (a --shared clone). Pushing a
+// branch the original repo has checked out is refused (receive.denyCurrentBranch);
+// a branch it is NOT on pushes directly. This recipe lands workspace commits there.
+const WORKSPACE_COMMIT_RECIPE = `
+To land changes from this workspace into the original repo (its origin is the local repo itself):
+1. Commit your work.
+2. If the original repo has this branch checked out, a direct push is refused — push to a temp branch, then in the original repo merge it back and clean up: \`git push origin HEAD:<feature-slug>\` then \`git merge --ff-only <feature-slug> && git branch -d <feature-slug>\`
+3. If the original repo is on a different branch, push directly instead: \`git push origin <branch>\`
+4. To reach the remote, push from the original repo: \`git push origin <branch>\``
+
 // ============================================================================
 // Session Manager
 // ============================================================================
@@ -1778,7 +1788,8 @@ export class SessionManager {
       }
 
       const wsLabel = target === 'original' ? 'original' : target
-      const reminderContent = `<system-reminder>\nThis session is now operating in workspace "${wsLabel}" on branch "${actualBranch ?? 'unknown'}" at ${effectiveWorkdir}.${stalenessHint}\nAll file and git operations should use this directory.\n</system-reminder>`
+      const commitHint = target === 'original' ? '' : WORKSPACE_COMMIT_RECIPE
+      const reminderContent = `<system-reminder>\nThis session is now operating in workspace "${wsLabel}" on branch "${actualBranch ?? 'unknown'}" at ${effectiveWorkdir}.${stalenessHint}\nAll file and git operations should use this directory.${commitHint}\n</system-reminder>`
       this.addMessage(sessionId, {
         role: 'user',
         content: reminderContent,

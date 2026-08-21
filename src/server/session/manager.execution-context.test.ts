@@ -371,6 +371,47 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
   })
 
   // ==========================================================================
+  // Workspace commit guidance — a workspace's origin is the original local repo
+  // (a --shared clone). Pushing a branch the original has checked out is refused
+  // (receive.denyCurrentBranch); a branch the original is NOT on pushes directly.
+  // The switch reminder must carry the branch-aware recipe, but only when
+  // actually entering a workspace (in the original repo a normal push works).
+  // ==========================================================================
+
+  describe('workspace commit guidance in the switch reminder', () => {
+    it('appends the commit recipe to the reminder when switching into a workspace', async () => {
+      const session = manager.createSession(projectId, 'Ctx-ws-commit-1')
+
+      await manager.switchWorkspace(session.id, 'feat-x')
+
+      const messages = manager.getSession(session.id)!.messages
+      const reminders = messages.filter((m) => m.messageKind === 'auto-prompt')
+      expect(reminders.length).toBeGreaterThan(0)
+      const content = reminders[reminders.length - 1]!.content!
+      expect(content).toContain('git push origin HEAD:')
+      expect(content).toContain('git merge --ff-only')
+      expect(content).toContain('git branch -d')
+      // The recipe must state the refusal condition (same branch checked out)
+      // and that a direct push works otherwise.
+      expect(content).toContain('checked out')
+      expect(content).toContain('git push origin <branch>')
+    })
+
+    it('omits the commit recipe when switching back to the original repo', async () => {
+      const session = manager.createSession(projectId, 'Ctx-ws-commit-2', undefined, undefined, '/ws/openfox/feat-x')
+
+      await manager.switchWorkspace(session.id, 'original')
+
+      const messages = manager.getSession(session.id)!.messages
+      const reminders = messages.filter((m) => m.messageKind === 'auto-prompt')
+      expect(reminders.length).toBeGreaterThan(0)
+      const content = reminders[reminders.length - 1]!.content!
+      expect(content).not.toContain('git push origin HEAD:')
+      expect(content).not.toContain('git merge --ff-only')
+    })
+  })
+
+  // ==========================================================================
   // A failed workspace creation must NOT manufacture a fake refreshed context:
   // cache stays intact, no workspace reminder, no session_updated emitted.
   // ==========================================================================
