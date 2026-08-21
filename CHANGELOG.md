@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.126 - 2026-08-21
+
+### Bug Fixes
+
+- **Numeric criterion ids are no longer rejected** — session_metadata now accepts number-form ids (e.g. 0) for add, update, and remove, so agents can mark criteria complete reliably
+- **Auto-generated metadata ids start at 1** — criteria, todos, and review findings now get sequential ids from 1 instead of 0
+
 ## 2.0.125 - 2026-08-21
 
 ### Features
