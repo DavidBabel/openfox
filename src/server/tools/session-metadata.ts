@@ -5,7 +5,7 @@ const SCHEMAS: Record<string, { fields: Record<string, string>; description: str
   criteria: {
     description: 'Acceptance criteria that drive workflow transitions',
     fields: {
-      id: 'string (auto-generated)',
+      id: 'string (auto-generated; numeric ids accepted and normalized)',
       description: 'string — what needs to be done and how to verify it',
       status: 'pending | completed | passed | failed',
     },
@@ -37,13 +37,19 @@ interface SessionMetadataArgs {
   status?: string
 }
 
+function normalizeId(id: unknown): string | undefined {
+  if (typeof id !== 'string' && typeof id !== 'number') return undefined
+  if (id === '') return undefined
+  return String(id)
+}
+
 function requireKeyAndId(
   args: SessionMetadataArgs,
   helpers: { error: (msg: string) => ToolResult },
   entries: Record<string, MetadataEntry[]>,
 ): MetadataEntry[] | ToolResult {
   if (!args.key) return helpers.error('Missing required field: key')
-  if (!args.id) return helpers.error('Missing required field: id')
+  if (normalizeId(args.id) === undefined) return helpers.error('Missing required field: id')
   const current = entries[args.key]
   if (!current) return helpers.error(`Key "${args.key}" not found.`)
   return current
@@ -72,7 +78,8 @@ export const sessionMetadataTool = createTool<SessionMetadataArgs>(
           },
           id: {
             type: 'string',
-            description: 'Item ID (required for: update, remove)',
+            description:
+              'Item ID (required for: update, remove). Accepts numeric ids too — they are normalized to strings.',
           },
           description: {
             type: 'string',
@@ -134,7 +141,7 @@ export const sessionMetadataTool = createTool<SessionMetadataArgs>(
 
       const current = entries[args.key] ?? []
       const newEntry: MetadataEntry = {
-        id: args.id || current.length.toString(),
+        id: normalizeId(args.id) ?? (current.length + 1).toString(),
         description: args.description,
         status: args.status || 'pending',
       }
@@ -146,8 +153,9 @@ export const sessionMetadataTool = createTool<SessionMetadataArgs>(
     if (args.action === 'update') {
       const current = requireKeyAndId(args, helpers, entries)
       if (!Array.isArray(current)) return current
-      const idx = current.findIndex((e) => e.id === args.id)
-      if (idx === -1) return helpers.error(`Item "${args.id}" not found in "${args.key}".`)
+      const id = normalizeId(args.id)!
+      const idx = current.findIndex((e) => e.id === id)
+      if (idx === -1) return helpers.error(`Item "${id}" not found in "${args.key}".`)
 
       const updated = current.map((e, i) =>
         i === idx
@@ -159,18 +167,19 @@ export const sessionMetadataTool = createTool<SessionMetadataArgs>(
           : e,
       )
       context.sessionManager.setMetadataEntries(context.sessionId, args.key!, updated)
-      return helpers.success(`Updated item "${args.id}" in "${args.key}".`)
+      return helpers.success(`Updated item "${id}" in "${args.key}".`)
     }
 
     if (args.action === 'remove') {
       const current = requireKeyAndId(args, helpers, entries)
       if (!Array.isArray(current)) return current
+      const id = normalizeId(args.id)!
 
-      const updated = current.filter((e) => e.id !== args.id)
-      if (updated.length === current.length) return helpers.error(`Item "${args.id}" not found in "${args.key}".`)
+      const updated = current.filter((e) => e.id !== id)
+      if (updated.length === current.length) return helpers.error(`Item "${id}" not found in "${args.key}".`)
 
       context.sessionManager.setMetadataEntries(context.sessionId, args.key!, updated)
-      return helpers.success(`Removed item "${args.id}" from "${args.key}". ${updated.length} items remaining.`)
+      return helpers.success(`Removed item "${id}" from "${args.key}". ${updated.length} items remaining.`)
     }
 
     return helpers.error('Unexpected error')

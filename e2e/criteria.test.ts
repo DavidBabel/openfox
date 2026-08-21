@@ -66,7 +66,7 @@ describe('Criteria System', () => {
         expect(criteria.length).toBe(1)
 
         const criterion = criteria[0] as { id: string; description: string; status: string }
-        expect(criterion.id).toBe('0')
+        expect(criterion.id).toBe('1')
         expect(criterion.description).toBe('Test criterion')
         expect(criterion.status).toBe('pending')
       })
@@ -87,8 +87,8 @@ describe('Criteria System', () => {
         expect(criteria.length).toBe(2)
         const c0 = criteria[0] as { id: string }
         const c1 = criteria[1] as { id: string }
-        expect(c0.id).toBe('0')
-        expect(c1.id).toBe('1')
+        expect(c0.id).toBe('1')
+        expect(c1.id).toBe('2')
       })
 
       it('emits metadata.updated event', async () => {
@@ -146,7 +146,7 @@ describe('Criteria System', () => {
 
         await client.send('chat.send', {
           content:
-            'Use session_metadata with action "update" to change the first criterion (ID "0") description to "Updated description".',
+            'Use session_metadata with action "update" to change the first criterion (ID "1") description to "Updated description".',
         })
 
         await client.waitForChatDone()
@@ -155,7 +155,7 @@ describe('Criteria System', () => {
 
         const session = client.getSession()!
         const criteria = getCriteria(session) as Array<{ id: string; description: string }>
-        const criterion = criteria.find((c: { id: string }) => c.id === '0')
+        const criterion = criteria.find((c: { id: string }) => c.id === '1')
         expect(criterion?.description).toContain('Updated')
       })
     })
@@ -171,7 +171,7 @@ describe('Criteria System', () => {
         expect(getCriteria(client.getSession()!).length).toBe(1)
 
         await client.send('chat.send', {
-          content: 'Use session_metadata with action "remove" to remove the first criterion (ID "0").',
+          content: 'Use session_metadata with action "remove" to remove the first criterion (ID "1").',
         })
 
         await client.waitForChatDone()
@@ -203,7 +203,7 @@ describe('Criteria System', () => {
       it('marks criterion as completed', async () => {
         await client.send('chat.send', {
           content:
-            'Create the file src/utils.ts with any content, then call session_metadata with action "update" and status "completed" for the first criterion (ID "0").',
+            'Create the file src/utils.ts with any content, then call session_metadata with action "update" and status "completed" for the first criterion (ID "1").',
         })
 
         await collectChatEvents(client)
@@ -289,7 +289,7 @@ describe('Criteria System', () => {
         const criteria = getCriteria(session)
         expect(criteria.length).toBe(1)
         const c0 = criteria[0] as { id: string }
-        expect(c0.id).toBe('0')
+        expect(c0.id).toBe('1')
       } finally {
         await client2.close()
       }

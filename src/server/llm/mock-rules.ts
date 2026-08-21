@@ -135,14 +135,14 @@ export const RULES: MockRule[] = [
     tools: [
       {
         name: 'session_metadata',
-        arguments: { action: 'update', key: 'criteria', id: '0', description: 'Updated description' },
+        arguments: { action: 'update', key: 'criteria', id: '1', description: 'Updated description' },
       },
     ],
     response: 'Updated the criterion.',
   },
   {
     match: /session_metadata.*action\s*["']remove["']/i,
-    tools: [{ name: 'session_metadata', arguments: { action: 'remove', key: 'criteria', id: '0' } }],
+    tools: [{ name: 'session_metadata', arguments: { action: 'remove', key: 'criteria', id: '1' } }],
     response: 'Removed the criterion.',
   },
   {
