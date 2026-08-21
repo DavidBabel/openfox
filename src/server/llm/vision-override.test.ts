@@ -60,7 +60,12 @@ describe('user vision override', () => {
         messages: makeMessagesWithImage(),
       },
       profile,
-      capabilities: { supportsTopK: false, supportsChatTemplateKwargs: false, supportsNumCtx: false },
+      capabilities: {
+        supportsTopK: false,
+        supportsChatTemplateKwargs: false,
+        supportsNumCtx: false,
+        routesEffortViaChatTemplateKwargs: false,
+      },
     })
 
     expect((result.params as any).messages).toEqual([
@@ -89,7 +94,12 @@ describe('user vision override', () => {
         modelSettings: { supportsVision: true },
       },
       profile,
-      capabilities: { supportsTopK: false, supportsChatTemplateKwargs: false, supportsNumCtx: false },
+      capabilities: {
+        supportsTopK: false,
+        supportsChatTemplateKwargs: false,
+        supportsNumCtx: false,
+        routesEffortViaChatTemplateKwargs: false,
+      },
     })
 
     expect((result.params as any).messages).toEqual([
@@ -118,7 +128,12 @@ describe('user vision override', () => {
         modelSettings: { supportsVision: false },
       },
       profile,
-      capabilities: { supportsTopK: false, supportsChatTemplateKwargs: false, supportsNumCtx: false },
+      capabilities: {
+        supportsTopK: false,
+        supportsChatTemplateKwargs: false,
+        supportsNumCtx: false,
+        routesEffortViaChatTemplateKwargs: false,
+      },
     })
 
     expect((result.params as any).messages).toEqual([
@@ -147,7 +162,12 @@ describe('user vision override', () => {
         modelSettings: { supportsVision: true },
       },
       profile,
-      capabilities: { supportsTopK: false, supportsChatTemplateKwargs: false, supportsNumCtx: false },
+      capabilities: {
+        supportsTopK: false,
+        supportsChatTemplateKwargs: false,
+        supportsNumCtx: false,
+        routesEffortViaChatTemplateKwargs: false,
+      },
     })
 
     expect((result.params as any).messages).toEqual([
