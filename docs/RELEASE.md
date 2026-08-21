@@ -155,15 +155,7 @@ git add web/package-lock.json
 git commit -m "chore: sync web lockfile to the released version"
 ```
 
-**Verify idempotence** — the synced lockfile must match what a fresh `npm install` produces. A known npm quirk can drop `"name": "openfox"` from the `".."` entry when the sync runs right after `npm version` regenerates the root lockfile; the next `npm install` then re-adds it, dirtying every fresh clone/workspace. Confirm the `".."` entry still carries the name, and that re-running the sync is a no-op:
-
-```bash
-grep -A2 '"\.\."' web/package-lock.json | head -4   # must show "name": "openfox"
-cd web && npm install --package-lock-only --no-audit --no-fund && cd ..
-git status --short web/                              # must be clean (exit 0)
-```
-
-If the name is missing, add it back (`"name": "openfox",` above `"version"` in the `".."` entry) and amend the sync commit.
+**Do NOT "fix" the `".."` entry's name.** npm intentionally omits `"name": "openfox"` from the `".."` entry when the checkout folder is named `openfox` (to prevent churn based on the project's directory name), and adds it back when the folder has any other name. So the committed lockfile is folder-dependent: a workspace or clone named anything other than `openfox` will always show a `+ "name": "openfox"` diff after `npm install` — that is expected npm behavior, not a regression. Never commit that diff.
 
 ### 9. Publish
 
