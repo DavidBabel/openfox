@@ -9,6 +9,7 @@ import { QueryParamsInput } from './QueryParamsInput'
 import { formatTokens } from '../../lib/format-stats'
 import { shouldAutofocus } from '../../lib/device'
 import { REASONING_EFFORT_VALUES } from '../../lib/model-value'
+import { isSmallContext } from '../../lib/context-warning'
 
 const COMMON_PORTS = [8080, 11434, 8000, 1234]
 
@@ -190,6 +191,11 @@ function ModelConfigPanel({
             }
             className="w-32 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary"
           />
+          {isSmallContext(modelConfigs[model.id]?.contextWindow ?? model.contextWindow) && (
+            <p data-small-context className="text-[11px] text-accent-warning mt-1 w-40 leading-snug">
+              Small context — agent prompts may be truncated by the provider.
+            </p>
+          )}
         </div>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary pb-1">
           <input

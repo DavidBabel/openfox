@@ -9,15 +9,13 @@ import { getCatalogEntry } from './providers/model-catalog.js'
 import { resolveEffortForModel } from '../shared/reasoning-effort.js'
 
 /**
- * Cap for the num_ctx we request from Ollama's OpenAI-compatible endpoint.
- * Ollama auto-detects a model's contextWindow from /api/show (often the model's
- * full 128k-262k max) but allocates KV cache proportionally — and unlike its
- * automatic VRAM-tier default, an EXPLICIT num_ctx is never reduced on OOM.
- * Requesting the full auto-detected window would hard-fail on modest GPUs, so
- * we clamp to Ollama's own 23-47GB VRAM tier default: ample for agent prompts
- * (system prompt + tools + history) without a catastrophic allocation.
+ * num_ctx is the context window we request from Ollama's native /api/chat
+ * endpoint. We send the model's contextWindow as-is — the value probed from
+ * /api/show (the model's full native context) or the one the user set in the
+ * edit-model modal. Ollama allocates KV cache to match and silently truncates
+ * anything beyond it, so a too-small value must be the user's explicit choice
+ * (surfaced as a warning in the UI), never something we silently clamp.
  */
-const MAX_REQUESTED_NUM_CTX = 32768
 import './llm/proxy.js'
 
 function normalizeModelId(s: string): string {
@@ -894,8 +892,8 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
       if (model['maxTokens'] !== undefined) baseSettings['maxTokens'] = model['maxTokens']
       if (model['supportsVision'] !== undefined) baseSettings['supportsVision'] = model['supportsVision']
       if (model['omitParams'] !== undefined) baseSettings['omitParams'] = model['omitParams']
-      if (model['contextWindow'] !== undefined)
-        baseSettings['numCtx'] = Math.min(model['contextWindow'], MAX_REQUESTED_NUM_CTX)
+      if (typeof model['contextWindow'] === 'number' && model['contextWindow'] > 0)
+        baseSettings['numCtx'] = model['contextWindow']
 
       // User-configured queryParams take priority
       const rawQueryParams = mode === 'thinking' ? model.thinkingQueryParams : model.nonThinkingQueryParams

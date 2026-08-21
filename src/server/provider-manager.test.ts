@@ -638,13 +638,22 @@ describe('ProviderManager - Model Selection', () => {
       expect(settings?.numCtx).toBe(32768)
     })
 
-    it('caps numCtx to a sane ceiling for large auto-detected context windows', async () => {
+    it('passes the full context window through for large auto-detected windows', async () => {
       await providerManager.updateModelSettings('provider-1', 'model-a', {
         contextWindow: 262144,
       })
 
       const settings = providerManager.getModelSettings('provider-1', 'model-a')
-      expect(settings?.numCtx).toBe(32768)
+      expect(settings?.numCtx).toBe(262144)
+    })
+
+    it('omits numCtx when the context window is not a positive number', async () => {
+      await providerManager.updateModelSettings('provider-1', 'model-a', {
+        contextWindow: 0,
+      })
+
+      const settings = providerManager.getModelSettings('provider-1', 'model-a')
+      expect(settings?.numCtx).toBeUndefined()
     })
   })
 

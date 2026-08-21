@@ -969,3 +969,53 @@ describe('ProviderModal - effort presets and override editor', () => {
     expect(savedModel?.reasoningEffortOverride).toBe('deep')
   })
 })
+
+describe('ProviderModal - small context window warning', () => {
+  let container: HTMLElement
+  let root: ReturnType<typeof createRoot>
+  let onSaveMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    onSaveMock = vi.fn()
+  })
+
+  afterEach(() => {
+    root.unmount()
+    document.body.removeChild(container)
+  })
+
+  async function renderModal(models: Array<Record<string, unknown>>) {
+    await new Promise<void>((resolve) => {
+      root.render(
+        <ProviderModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={onSaveMock as (provider: ProviderFormData) => void}
+          initialStep={2}
+          editProvider={{
+            id: 'test-provider',
+            name: 'Test Provider',
+            url: 'http://localhost:8000/v1',
+            backend: 'vllm' as const,
+            models: models as never,
+          }}
+          editModelId="test-model"
+        />,
+      )
+      setTimeout(resolve, 200)
+    })
+  }
+
+  it('shows a warning when the context window is below the threshold', async () => {
+    await renderModal([{ id: 'test-model', contextWindow: 8192 }])
+    expect(document.body.querySelector('[data-small-context]')).not.toBeNull()
+  })
+
+  it('hides the warning when the context window is adequate', async () => {
+    await renderModal([{ id: 'test-model', contextWindow: 32768 }])
+    expect(document.body.querySelector('[data-small-context]')).toBeNull()
+  })
+})

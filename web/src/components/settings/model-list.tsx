@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo, type RefObject } from 'react'
-import { CheckIcon, EditSmallIcon, StarIcon, StarFilledIcon } from '../shared/icons'
+import { CheckIcon, EditSmallIcon, StarIcon, StarFilledIcon, WarningIcon } from '../shared/icons'
 import type { Provider } from '../../stores/config'
+import { isSmallContext } from '../../lib/context-warning'
 
 export function formatContextWindow(context: number): string {
   if (context >= 1000000) return `${(context / 1000000).toFixed(1)}M`
@@ -101,6 +102,15 @@ export function ModelEntryRow({
         </button>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           <span className="text-xs text-text-muted">{formatContextWindow(modelConfig.contextWindow)}</span>
+          {isSmallContext(modelConfig.contextWindow) && (
+            <span
+              data-small-context
+              className="text-accent-warning"
+              title="Small context window — agent prompts may be truncated by the provider"
+            >
+              <WarningIcon className="w-3.5 h-3.5" />
+            </span>
+          )}
           {hasSession && onSetDefault && (
             <button
               type="button"
