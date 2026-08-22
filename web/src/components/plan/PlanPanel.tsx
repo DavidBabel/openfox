@@ -39,6 +39,8 @@ import { SessionScopeProvider, useScopedPaneState } from '../../stores/session/s
 
 interface PlanPanelProps {
   criteriaSidebarOpen?: boolean
+  /** When true, the criteria sidebar renders as an overlay instead of inline. */
+  criteriaSidebarOverlay?: boolean
   onCriteriaSidebarToggle?: () => void
   rawMessages?: Message[]
   hiddenCount?: number
@@ -48,6 +50,7 @@ interface PlanPanelProps {
 
 export function PlanPanel({
   criteriaSidebarOpen: externalCriteriaSidebarOpen,
+  criteriaSidebarOverlay: externalCriteriaSidebarOverlay,
   onCriteriaSidebarToggle,
   rawMessages: propRawMessages,
   hiddenCount: propHiddenCount,
@@ -331,6 +334,7 @@ export function PlanPanel({
     <SessionScopeProvider value={targetSessionId}>
       <SessionLayout
         criteriaSidebarOpen={criteriaSidebarOpen}
+        criteriaSidebarOverlay={externalCriteriaSidebarOverlay}
         onCriteriaSidebarToggle={onCriteriaSidebarToggle}
         messages={messages}
         sessionId={targetSessionId}

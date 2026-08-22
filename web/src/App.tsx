@@ -1,5 +1,5 @@
 import { ScrollArea } from './components/shared/ScrollArea'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SETTINGS_KEYS, DISPLAY_SETTINGS_KEYS, useSettingsStore } from './stores/settings'
 import { useVisualViewport } from './hooks/useVisualViewport'
 import { Route, Switch, useRoute, useLocation } from 'wouter'
@@ -11,6 +11,8 @@ import { useMcpStore } from './stores/mcp'
 import { useThemeStore } from './stores/theme'
 import { useProjectLoader } from './hooks/useProjectLoader'
 import { useSessionLoader } from './hooks/useSessionLoader'
+import { computeSidebarVisibility, FEED_MIN_WIDTH } from './lib/sidebar-visibility'
+import { useSidebarStore } from './stores/sidebar'
 
 // Apply theme synchronously from localStorage before React renders
 // to prevent flash of default theme
@@ -51,7 +53,15 @@ function LoadingSpinner() {
   )
 }
 
-function ProjectView({ sidebarOpen, onSidebarToggle }: { sidebarOpen: boolean; onSidebarToggle: () => void }) {
+function ProjectView({
+  sidebarOpen,
+  sidebarOverlay,
+  onSidebarToggle,
+}: {
+  sidebarOpen: boolean
+  sidebarOverlay: boolean
+  onSidebarToggle: () => void
+}) {
   const [, params] = useRoute('/p/:projectId')
   const projectId = params?.projectId
 
@@ -69,7 +79,7 @@ function ProjectView({ sidebarOpen, onSidebarToggle }: { sidebarOpen: boolean; o
 
   return (
     <>
-      <Sidebar projectId={projectId!} isOpen={sidebarOpen} onClose={onSidebarToggle} />
+      <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
       <div className="flex-1 min-w-0 bg-primary">
         <EmptyProjectView />
       </div>
@@ -79,13 +89,17 @@ function ProjectView({ sidebarOpen, onSidebarToggle }: { sidebarOpen: boolean; o
 
 function ProjectSessionView({
   sidebarOpen,
+  sidebarOverlay,
   onSidebarToggle,
   rightSidebarOpen,
+  rightSidebarOverlay,
   onRightSidebarToggle,
 }: {
   sidebarOpen: boolean
+  sidebarOverlay: boolean
   onSidebarToggle: () => void
   rightSidebarOpen: boolean
+  rightSidebarOverlay: boolean
   onRightSidebarToggle: () => void
 }) {
   const [, params] = useRoute('/p/:projectId/s/:sessionId')
@@ -123,10 +137,14 @@ function ProjectSessionView({
 
   return (
     <>
-      <Sidebar projectId={projectId!} isOpen={sidebarOpen} onClose={onSidebarToggle} />
+      <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
       <div className="flex-1 min-w-0 bg-primary flex flex-col">
         <CrossSessionConfirmationBanner projectId={projectId} />
-        <PlanPanel criteriaSidebarOpen={rightSidebarOpen} onCriteriaSidebarToggle={onRightSidebarToggle} />
+        <PlanPanel
+          criteriaSidebarOpen={rightSidebarOpen}
+          criteriaSidebarOverlay={rightSidebarOverlay}
+          onCriteriaSidebarToggle={onRightSidebarToggle}
+        />
       </div>
     </>
   )
@@ -305,19 +323,23 @@ function App() {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(getInitialLeftSidebar)
   const [rightSidebarOpen, setRightSidebarOpen] = useState(getInitialRightSidebar)
 
+  // Transient "explicitly open on tight space" desktop flags: a sidebar opens
+  // as an overlay when it cannot fit inline without violating the feed floor.
+  const [leftOverlayOpen, setLeftOverlayOpen] = useState(false)
+  const [rightOverlayOpen, setRightOverlayOpen] = useState(false)
+
+  // Mobile (<768) overlay open states.
   const [leftMobileOpen, setLeftMobileOpen] = useState(false)
   const [rightMobileOpen, setRightMobileOpen] = useState(false)
 
-  const [isMobile, setIsMobile] = useState(false)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const viewport = useVisualViewport()
+  const isMobile = viewportWidth < 768
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
-    }
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   }, [])
 
   const [location] = useLocation()
@@ -360,27 +382,62 @@ function App() {
     }
   }, [isSplit])
 
-  const effectiveLeftOpen = isMobile ? leftMobileOpen : isProjectPage ? true : leftSidebarOpen
-  const effectiveRightOpen = isMobile ? rightMobileOpen : rightSidebarOpen
+  const leftWidth = useSidebarStore((state) => state.leftWidth)
+  const rightWidth = useSidebarStore((state) => state.rightWidth)
+
+  const visibility = useMemo(
+    () =>
+      computeSidebarVisibility({
+        availableWidth: viewportWidth,
+        leftWidth,
+        rightWidth,
+        feedMinWidth: FEED_MIN_WIDTH,
+        preferred: { left: leftSidebarOpen, right: rightSidebarOpen },
+        overlayOpen: { left: leftOverlayOpen, right: rightOverlayOpen },
+      }),
+    [viewportWidth, leftWidth, rightWidth, leftSidebarOpen, rightSidebarOpen, leftOverlayOpen, rightOverlayOpen],
+  )
+
+  const effectiveLeftOpen = isMobile ? leftMobileOpen : isProjectPage ? true : visibility.left !== 'closed'
+  const effectiveRightOpen = isMobile ? rightMobileOpen : visibility.right !== 'closed'
+  const leftOverlay = isMobile || (!isProjectPage && visibility.left === 'overlay')
+  const rightOverlay = isMobile || visibility.right === 'overlay'
   // On the split route with no panes open, the control sidebar must stay
   // visible so the user can pick a session to open; once a pane exists the
   // regular toggle takes over.
   const openPaneCount = useSessionStore((state) => state.openSessionIds.length)
   const splitControlOpen = isSplit && openPaneCount === 0 ? true : effectiveLeftOpen
 
+  // An explicitly-opened desktop overlay is transient: once its sidebar can be
+  // inline again (or the window drops below the mobile threshold where mobile
+  // states take over), the overlay no longer applies. Drop it so a stale flag
+  // cannot silently pop the sidebar back open on a later resize.
+  useEffect(() => {
+    if (leftOverlayOpen && (isMobile || visibility.left !== 'overlay')) {
+      setLeftOverlayOpen(false)
+    }
+    if (rightOverlayOpen && (isMobile || visibility.right !== 'overlay')) {
+      setRightOverlayOpen(false)
+    }
+  }, [isMobile, visibility.left, visibility.right, leftOverlayOpen, rightOverlayOpen])
+
   const handleLeftToggle = () => {
     if (isMobile) {
       setLeftMobileOpen(!leftMobileOpen)
-    } else {
+    } else if (isProjectPage || visibility.leftFits) {
       setLeftSidebarOpen(!leftSidebarOpen)
+    } else {
+      setLeftOverlayOpen(visibility.left !== 'overlay')
     }
   }
 
   const handleRightToggle = () => {
     if (isMobile) {
       setRightMobileOpen(!rightMobileOpen)
-    } else {
+    } else if (visibility.rightFits) {
       setRightSidebarOpen(!rightSidebarOpen)
+    } else {
+      setRightOverlayOpen(visibility.right !== 'overlay')
     }
   }
 
@@ -447,8 +504,10 @@ function App() {
             <Route path="/p/:projectId/s/:sessionId">
               <ProjectSessionView
                 sidebarOpen={effectiveLeftOpen}
+                sidebarOverlay={leftOverlay}
                 onSidebarToggle={handleLeftToggle}
                 rightSidebarOpen={effectiveRightOpen}
+                rightSidebarOverlay={rightOverlay}
                 onRightSidebarToggle={handleRightToggle}
               />
             </Route>
@@ -456,7 +515,11 @@ function App() {
               <NewSessionHandler />
             </Route>
             <Route path="/p/:projectId">
-              <ProjectView sidebarOpen={effectiveLeftOpen} onSidebarToggle={handleLeftToggle} />
+              <ProjectView
+                sidebarOpen={effectiveLeftOpen}
+                sidebarOverlay={leftOverlay}
+                onSidebarToggle={handleLeftToggle}
+              />
             </Route>
             <Route path="/">
               <HomePage />

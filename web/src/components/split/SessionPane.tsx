@@ -27,6 +27,7 @@ export function SessionPane({ sessionId, focused, onFocus, onClose, className }:
   // panes, closed (mobile-like overlay) on narrow ones so the chat input stays
   // usable. Manual toggles win until the pane crosses the width threshold.
   const [criteriaOpen, setCriteriaOpen] = useState(false)
+  const [wide, setWide] = useState(false)
   const overrideRef = useRef(false)
   const wideRef = useRef<boolean | null>(null)
   useEffect(() => {
@@ -38,6 +39,7 @@ export function SessionPane({ sessionId, focused, onFocus, onClose, className }:
         overrideRef.current = false
       }
       wideRef.current = wide
+      setWide(wide)
       if (!overrideRef.current) {
         setCriteriaOpen(wide)
       }
@@ -167,6 +169,7 @@ export function SessionPane({ sessionId, focused, onFocus, onClose, className }:
         <PlanPanel
           sessionId={sessionId}
           criteriaSidebarOpen={criteriaOpen}
+          criteriaSidebarOverlay={!wide}
           onCriteriaSidebarToggle={() => {
             overrideRef.current = true
             setCriteriaOpen((o) => !o)

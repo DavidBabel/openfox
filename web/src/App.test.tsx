@@ -45,6 +45,15 @@ const sessionState = vi.hoisted(() => ({
   passwordModalRetry: false,
 }))
 
+const layoutProps = vi.hoisted(() => ({
+  sidebar: { isOpen: undefined as boolean | undefined, overlay: undefined as boolean | undefined },
+  rightSidebar: { open: undefined as boolean | undefined, overlay: undefined as boolean | undefined },
+  header: {
+    onMenuClick: undefined as (() => void) | undefined,
+    onCriteriaToggle: undefined as (() => void) | undefined,
+  },
+}))
+
 vi.mock('./hooks/useWebSocket', () => ({
   useWebSocket: () => ({
     connectionStatus: sessionState.connectionStatus,
@@ -92,17 +101,22 @@ vi.mock('./stores/config', () => ({
       providers: [],
       activeProviderId: null,
       configFetched: true,
-      fetchConfig: vi.fn(),
-      refreshProviderModels: vi.fn(),
+      fetchConfig: vi.fn(async () => {}),
+      refreshProviderModels: vi.fn(async () => {}),
     }
     return selector ? selector(state) : state
   },
 }))
 
 vi.mock('./stores/mcp', () => ({
-  useMcpStore: (selector?: any) => {
-    return selector ? selector({}) : {}
-  },
+  useMcpStore: Object.assign(
+    (selector?: any) => {
+      return selector ? selector({}) : {}
+    },
+    {
+      getState: () => ({ fetchServers: vi.fn() }),
+    },
+  ),
 }))
 
 const themeStoreState = vi.hoisted(() => ({
@@ -131,8 +145,8 @@ vi.mock('./stores/theme', () => ({
 }))
 
 vi.mock('./stores/settings', () => ({
-  SETTINGS_KEYS: {},
-  DISPLAY_SETTINGS_KEYS: {},
+  SETTINGS_KEYS: [],
+  DISPLAY_SETTINGS_KEYS: [],
   useSettingsStore: Object.assign(
     (selector?: any) => {
       const state = {
@@ -144,6 +158,7 @@ vi.mock('./stores/settings', () => ({
     {
       getState: () => ({
         settings: {},
+        getSettings: vi.fn(),
       }),
       setState: vi.fn(),
     },
@@ -163,17 +178,31 @@ vi.mock('./hooks/useVisualViewport', () => ({
 }))
 
 vi.mock('./components/layout/Header', () => ({
-  Header: () => <header data-testid="header">Header</header>,
+  Header: (props: { onMenuClick?: () => void; onCriteriaToggle?: () => void }) => {
+    layoutProps.header.onMenuClick = props.onMenuClick
+    layoutProps.header.onCriteriaToggle = props.onCriteriaToggle
+    return <header data-testid="header">Header</header>
+  },
 }))
 
 vi.mock('./components/layout/Sidebar', () => ({
-  Sidebar: ({ projectId }: { projectId: string }) => <aside data-project-id={projectId}>Sidebar</aside>,
+  Sidebar: (props: { isOpen?: boolean; overlay?: boolean }) => {
+    layoutProps.sidebar.isOpen = props.isOpen
+    layoutProps.sidebar.overlay = props.overlay
+    return <aside data-testid="sidebar">Sidebar</aside>
+  },
 }))
 
 const noop = () => null
 vi.mock('./components/HomePage', () => ({ HomePage: noop }))
 vi.mock('./components/EmptyProjectView', () => ({ EmptyProjectView: noop }))
-vi.mock('./components/plan/PlanPanel', () => ({ PlanPanel: noop }))
+vi.mock('./components/plan/PlanPanel', () => ({
+  PlanPanel: (props: { criteriaSidebarOpen?: boolean; criteriaSidebarOverlay?: boolean }) => {
+    layoutProps.rightSidebar.open = props.criteriaSidebarOpen
+    layoutProps.rightSidebar.overlay = props.criteriaSidebarOverlay
+    return null
+  },
+}))
 vi.mock('./components/plan/ReadonlySessionView', () => ({ ReadonlySessionView: noop }))
 vi.mock('./components/shared/CrossSessionConfirmationBanner', () => ({ CrossSessionConfirmationBanner: noop }))
 vi.mock('./components/UpdateBanner', () => ({ UpdateBanner: noop }))
@@ -206,12 +235,31 @@ async function renderAppAsync(): Promise<HTMLElement> {
   return container
 }
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, 'innerWidth', { value: width, configurable: true, writable: true })
+}
+
+async function renderAppAt(width: number): Promise<HTMLElement> {
+  setViewportWidth(width)
+  localStorage.removeItem('openfox:leftSidebar')
+  localStorage.removeItem('openfox:rightSidebar')
+  return renderAppAsync()
+}
+
 beforeEach(() => {
   sessionState.connectionStatus = 'connected'
   sessionState.showPasswordModal = false
   sessionState.passwordModalRetry = false
   localStorage.removeItem('openfox_token')
+  localStorage.removeItem('openfox:leftSidebar')
+  localStorage.removeItem('openfox:rightSidebar')
   document.body.innerHTML = ''
+  layoutProps.sidebar.isOpen = undefined
+  layoutProps.sidebar.overlay = undefined
+  layoutProps.rightSidebar.open = undefined
+  layoutProps.rightSidebar.overlay = undefined
+  layoutProps.header.onMenuClick = undefined
+  layoutProps.header.onCriteriaToggle = undefined
 })
 
 describe('App - imports', () => {
@@ -243,5 +291,75 @@ describe('App - Password modal rendering', () => {
 
     expect(container.querySelector('[data-testid="password-modal"]')).not.toBeNull()
     expect(container.textContent).toContain('Password Required')
+  })
+})
+
+describe('App - responsive sidebar visibility', () => {
+  it('keeps both sidebars inline on a wide desktop window', async () => {
+    await renderAppAt(1400)
+
+    expect(layoutProps.sidebar.isOpen).toBe(true)
+    expect(layoutProps.sidebar.overlay).toBe(false)
+    expect(layoutProps.rightSidebar.open).toBe(true)
+    expect(layoutProps.rightSidebar.overlay).toBe(false)
+  })
+
+  it('auto-collapses the left sidebar before the right one on a narrow desktop window', async () => {
+    await renderAppAt(900)
+
+    expect(layoutProps.sidebar.isOpen).toBe(false)
+    expect(layoutProps.rightSidebar.open).toBe(true)
+  })
+
+  it('opens the left sidebar as an overlay on manual toggle when it cannot fit inline', async () => {
+    await renderAppAt(900)
+    expect(layoutProps.sidebar.isOpen).toBe(false)
+
+    act(() => layoutProps.header.onMenuClick?.())
+
+    expect(layoutProps.sidebar.isOpen).toBe(true)
+    expect(layoutProps.sidebar.overlay).toBe(true)
+  })
+
+  it('drops the transient overlay flag once the sidebar can be inline again', async () => {
+    await renderAppAt(900)
+    act(() => layoutProps.header.onMenuClick?.())
+    expect(layoutProps.sidebar.overlay).toBe(true)
+
+    // Widen: the sidebar becomes inline and the transient overlay is cleared.
+    act(() => {
+      setViewportWidth(1400)
+      window.dispatchEvent(new Event('resize'))
+    })
+    expect(layoutProps.sidebar.isOpen).toBe(true)
+    expect(layoutProps.sidebar.overlay).toBe(false)
+
+    // Narrow again: without the stale flag the sidebar stays collapsed.
+    act(() => {
+      setViewportWidth(900)
+      window.dispatchEvent(new Event('resize'))
+    })
+    expect(layoutProps.sidebar.isOpen).toBe(false)
+  })
+
+  it('does not leak a desktop overlay into the mobile layout', async () => {
+    await renderAppAt(900)
+    act(() => layoutProps.header.onMenuClick?.())
+    expect(layoutProps.sidebar.isOpen).toBe(true)
+
+    act(() => {
+      setViewportWidth(700)
+      window.dispatchEvent(new Event('resize'))
+    })
+    expect(layoutProps.sidebar.isOpen).toBe(false)
+  })
+
+  it('treats sub-768 widths as mobile overlays, closed by default', async () => {
+    await renderAppAt(700)
+
+    expect(layoutProps.sidebar.isOpen).toBe(false)
+    expect(layoutProps.sidebar.overlay).toBe(true)
+    expect(layoutProps.rightSidebar.open).toBe(false)
+    expect(layoutProps.rightSidebar.overlay).toBe(true)
   })
 })

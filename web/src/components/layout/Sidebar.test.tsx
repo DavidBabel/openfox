@@ -124,4 +124,31 @@ describe('Sidebar', () => {
     const html = renderToStaticMarkup(<Sidebar projectId="project-1" />)
     expect(html).toContain('5 messages')
   })
+
+  it('renders as a fixed overlay with a backdrop when overlay mode is on', () => {
+    const html = renderToStaticMarkup(<Sidebar projectId="project-1" isOpen overlay onClose={() => {}} />)
+
+    expect(html).toContain('fixed z-50')
+    expect(html).toContain('translate-x-0')
+    expect(html).toContain('bg-black/50')
+    expect(html).not.toContain('relative shrink-0')
+  })
+
+  it('slides the overlay off-screen when closed in overlay mode', () => {
+    const html = renderToStaticMarkup(<Sidebar projectId="project-1" isOpen={false} overlay onClose={() => {}} />)
+    expect(html).toContain('-translate-x-full')
+  })
+
+  it('renders as an inline flex item without a backdrop in inline mode', () => {
+    const html = renderToStaticMarkup(<Sidebar projectId="project-1" isOpen overlay={false} />)
+
+    expect(html).toContain('relative shrink-0')
+    expect(html).not.toContain('fixed z-50')
+    expect(html).not.toContain('bg-black/50')
+  })
+
+  it('collapses the inline sidebar to zero width when closed', () => {
+    const html = renderToStaticMarkup(<Sidebar projectId="project-1" isOpen={false} overlay={false} />)
+    expect(html).toContain('w-0')
+  })
 })

@@ -18,14 +18,17 @@ import { shouldAutofocus } from '../../lib/device'
 import { useBinding, useKeybindings } from '../../hooks/useKeybindings.js'
 import { useResizable } from '../../hooks/useResizable'
 import { ResizeHandle } from '../shared/ResizeHandle'
+import { useSidebarStore } from '../../stores/sidebar'
 
 interface SidebarProps {
   projectId: string
   isOpen?: boolean
+  /** When true, render as a fixed overlay (mobile / narrow desktop). When false, an inline flex item. */
+  overlay?: boolean
   onClose?: () => void
 }
 
-export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
+export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: SidebarProps) {
   const [, navigate] = useLocation()
   const [showSettings, setShowSettings] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
@@ -58,6 +61,10 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
     maxWidth: 600,
     direction: 'left',
   })
+
+  useEffect(() => {
+    useSidebarStore.getState().setLeftWidth(sidebarWidth)
+  }, [sidebarWidth])
 
   const wasAutoOpenedRef = useRef(false)
 
@@ -233,8 +240,8 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile/tablet backdrop */}
-      {isOpen && onClose && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={onClose} />}
+      {/* Overlay backdrop (mobile / narrow desktop) */}
+      {overlay && isOpen && onClose && <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />}
 
       {/* Sidebar content — shared between desktop and mobile variants */}
       {(() => {
@@ -269,8 +276,8 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
                   </button>
                 }
               />
-              {/* Mobile close button */}
-              {onClose && <CloseButton onClick={onClose} className="md:hidden" variant="sidebar" size="md" />}
+              {/* Overlay close button */}
+              {onClose && overlay && <CloseButton onClick={onClose} variant="sidebar" size="md" />}
             </div>
 
             {/* Search bar */}
@@ -400,21 +407,23 @@ export function Sidebar({ projectId, isOpen = true, onClose }: SidebarProps) {
           </>
         )
 
-        return (
+        return overlay ? (
           <aside
-            className={`
-            ${isOpen ? 'md:w-[var(--sidebar-w)] md:shrink-0' : 'md:w-0 md:shrink-0 md:overflow-hidden md:border-r-0'}
-            md:relative md:h-auto md:translate-x-0
-
-            fixed z-50 h-[calc(100vh-32px)]
-            w-[300px] bg-secondary border-r border-border flex flex-col
-            transition-transform duration-300 ease-in-out
-            ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          `}
+            className={`fixed z-50 h-[calc(100vh-32px)] w-[300px] bg-secondary border-r border-border flex flex-col transition-transform duration-300 ease-in-out ${
+              isOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+          >
+            {sidebarContent}
+          </aside>
+        ) : (
+          <aside
+            className={`relative shrink-0 bg-secondary flex flex-col overflow-hidden ${
+              isOpen ? 'w-[var(--sidebar-w)] border-r border-border' : 'w-0 border-r-0'
+            }`}
             style={{ '--sidebar-w': `${sidebarWidth}px` } as React.CSSProperties}
           >
             {sidebarContent}
-            {isOpen && <ResizeHandle side="right" onMouseDown={handleResizeMouseDown} className="hidden md:block" />}
+            {isOpen && <ResizeHandle side="right" onMouseDown={handleResizeMouseDown} />}
           </aside>
         )
       })()}
