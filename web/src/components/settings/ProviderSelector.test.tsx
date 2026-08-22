@@ -598,6 +598,74 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-mini', null)
   })
 
+  it('[AUTOMATED] starring a model with an active session sets the default AND selects it for the session', async () => {
+    const user = userEvent.setup()
+    const mockSetDefaultModel = vi.fn().mockResolvedValue(true)
+    const mockSetSessionProvider = vi.fn().mockResolvedValue({ id: 'session-1' })
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [
+            { id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true },
+            { id: 'gpt-4-mini', name: 'GPT-4 Mini', contextWindow: 128000, selected: true },
+          ],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+      setDefaultModel: mockSetDefaultModel,
+    })
+    await setSessionState({
+      currentSession: { id: 'session-1', providerId: 'provider-1', providerModel: 'gpt-4' },
+      setSessionProvider: mockSetSessionProvider,
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const starBtn = screen.getByTitle('Set as default model')
+    await user.click(starBtn)
+
+    expect(mockSetDefaultModel).toHaveBeenCalledWith('provider-1', 'gpt-4-mini')
+    expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-mini', null)
+    // Starring behaves like picking a model: the picker closes
+    expect(screen.queryByPlaceholderText('Search models...')).toBeNull()
+  })
+
+  it('[AUTOMATED] no session renders no star button (default-only path is unreachable via UI)', async () => {
+    const user = userEvent.setup()
+    const mockSetDefaultModel = vi.fn()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+      setDefaultModel: mockSetDefaultModel,
+    })
+    await setSessionState({ currentSession: null })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    expect(screen.queryByTitle('Set as default model')).toBeNull()
+    expect(screen.queryByTitle('Default model')).toBeNull()
+  })
+
   it('[AUTOMATED] AC-3 selecting a model without session calls activateProvider', async () => {
     const user = userEvent.setup()
     const mockActivateProvider = vi.fn().mockResolvedValue(true)

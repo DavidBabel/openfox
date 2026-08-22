@@ -578,7 +578,13 @@ export function ProviderSelector() {
     e.stopPropagation()
     setSettingDefault(true)
     try {
-      await setDefaultModel(providerId, modelId)
+      const success = await setDefaultModel(providerId, modelId)
+      // Starring a model defaults it globally — select it for the current
+      // session too, since defaulting it implies we want it right now. Same
+      // close-the-picker behavior as picking a model.
+      if (success && currentSession && sessionId) {
+        await commitSessionPick(sessionId, providerId, modelId, null)
+      }
     } catch {
       // Silently fail
     } finally {
