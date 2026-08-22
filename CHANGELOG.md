@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.127 - 2026-08-22
+
+### Features
+
+- **Reorder providers with drag & drop or arrows** — Manage Providers list gains drag handles and arrows
+- **Workspace switch reminders include a commit recipe** — the exact git commands to commit and push
+
+### Enhancements
+
+- **Chat feed keeps a minimum width** — sidebars collapse left-first on narrow windows
+- **Manage providers opens in a modal** — no longer buried in the onboarding wizard
+- **Starring a model selects it** — the model picker now selects a starred model for the session
+
 ## 2.0.126 - 2026-08-21
 
 ### Bug Fixes
