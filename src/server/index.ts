@@ -2443,6 +2443,43 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     })
   })
 
+  // Reorder providers (drag & drop / up-down arrows in the Manage Providers UI).
+  // Only the array order changes — the active provider and default model
+  // selection are never touched. Registered before /api/providers/:id so the
+  // literal "order" segment is not captured as a provider id.
+  app.put('/api/providers/order', async (req, res) => {
+    const { providerIds } = req.body as { providerIds?: string[] }
+    if (!Array.isArray(providerIds) || providerIds.length === 0) {
+      return res.status(400).json({ error: 'providerIds must be a non-empty array' })
+    }
+
+    try {
+      const { loadGlobalConfig, saveGlobalConfig, reorderProviders } = await import('../cli/config.js')
+      const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
+
+      let updatedConfig: typeof globalConfig
+      try {
+        updatedConfig = reorderProviders(globalConfig, providerIds)
+      } catch {
+        // Validation failure: the id set is not a permutation of current providers.
+        return res.status(400).json({ error: 'providerIds must be a permutation of the current provider ids' })
+      }
+
+      await saveGlobalConfig(config.mode ?? 'production', updatedConfig, config.globalConfigPath)
+
+      providerManager.setProviders(updatedConfig.providers, updatedConfig.defaultModelSelection ?? undefined)
+      config.defaultModelSelection = updatedConfig.defaultModelSelection
+
+      res.json({
+        success: true,
+        providers: updatedConfig.providers,
+        activeProviderId: providerManager.getActiveProviderId(),
+      })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to reorder providers' })
+    }
+  })
+
   app.delete('/api/providers/:id', async (req, res) => {
     const { id } = req.params
     const { loadGlobalConfig, saveGlobalConfig, removeProvider } = await import('../cli/config.js')

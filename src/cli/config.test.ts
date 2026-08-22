@@ -743,3 +743,74 @@ describe('resolveVisionFallback', () => {
     expect(result).toBeUndefined()
   })
 })
+
+describe('reorderProviders', () => {
+  let reorderProviders: (typeof import('./config.js'))['reorderProviders']
+
+  beforeEach(async () => {
+    vi.resetModules()
+    const configModule = await import('./config.js')
+    reorderProviders = configModule.reorderProviders
+  })
+
+  function makeProviderConfig(): any {
+    return {
+      providers: ['a', 'b', 'c'].map((id) => ({
+        id,
+        name: `Provider ${id.toUpperCase()}`,
+        url: `http://localhost/${id}`,
+        backend: 'vllm' as const,
+        models: [],
+        isActive: id === 'b',
+        createdAt: new Date().toISOString(),
+      })),
+      defaultModelSelection: 'b/some-model',
+      activeProviderId: 'b',
+      server: { port: 10369, host: '127.0.0.1', openBrowser: true },
+      logging: { level: 'info' as const },
+      database: { path: '' },
+      workspace: { workdir: process.cwd() },
+    }
+  }
+
+  it('reorders providers to match orderedIds', () => {
+    const config = makeProviderConfig()
+    const result = reorderProviders(config, ['c', 'a', 'b'])
+
+    expect(result.providers.map((p) => p.id)).toEqual(['c', 'a', 'b'])
+    expect(result.providers.map((p) => p.name)).toEqual(['Provider C', 'Provider A', 'Provider B'])
+  })
+
+  it('preserves other config fields (defaultModelSelection, activeProviderId, server)', () => {
+    const config = makeProviderConfig()
+    const result = reorderProviders(config, ['b', 'c', 'a'])
+
+    expect(result.defaultModelSelection).toBe('b/some-model')
+    expect(result.activeProviderId).toBe(config.activeProviderId)
+    expect(result.server).toEqual(config.server)
+  })
+
+  it('returns a new config object and does not mutate the input', () => {
+    const config = makeProviderConfig()
+    const originalIds = config.providers.map((p: any) => p.id)
+    const result = reorderProviders(config, ['c', 'b', 'a'])
+
+    expect(result).not.toBe(config)
+    expect(config.providers.map((p: any) => p.id)).toEqual(originalIds)
+  })
+
+  it('throws when orderedIds misses a provider', () => {
+    const config = makeProviderConfig()
+    expect(() => reorderProviders(config, ['a', 'b'])).toThrow()
+  })
+
+  it('throws when orderedIds contains an unknown provider id', () => {
+    const config = makeProviderConfig()
+    expect(() => reorderProviders(config, ['a', 'b', 'c', 'zzz'])).toThrow()
+  })
+
+  it('throws when orderedIds contains duplicates', () => {
+    const config = makeProviderConfig()
+    expect(() => reorderProviders(config, ['a', 'b', 'b'])).toThrow()
+  })
+})

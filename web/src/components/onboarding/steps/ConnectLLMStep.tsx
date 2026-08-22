@@ -1,6 +1,6 @@
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { authFetch } from '../../../lib/api'
-import { PlusLgIcon, TrashIcon } from '../../shared/icons'
+import { PlusLgIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, GripVerticalIcon } from '../../shared/icons'
 import { ProviderModal, providerFormPayload, type ProviderFormData } from '../../shared/ProviderModal'
 import { getBackendDisplayName, type ProviderInfo } from '../types'
 
@@ -25,6 +25,16 @@ export const ConnectLLMStep = forwardRef<ConnectLLMStepHandle, ConnectLLMStepPro
   const [editingProvider, setEditingProvider] = useState<ProviderInfo | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [reorderError, setReorderError] = useState(false)
+  const orderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (orderTimeoutRef.current) clearTimeout(orderTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     fetchExistingProviders()
@@ -161,6 +171,84 @@ export const ConnectLLMStep = forwardRef<ConnectLLMStepHandle, ConnectLLMStepPro
     onNext({ providers: validProviders })
   }
 
+  // Apply a new order optimistically and persist it. Rapid reorders are
+  // debounced into a single request so the last action always wins; on failure,
+  // surface feedback and restore the authoritative order from the server.
+  function persistOrder(ordered: ProviderInfo[]) {
+    setProviders(ordered)
+    if (orderTimeoutRef.current) clearTimeout(orderTimeoutRef.current)
+    orderTimeoutRef.current = setTimeout(() => {
+      orderTimeoutRef.current = null
+      authFetch('/api/providers/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerIds: ordered.map((p) => p.id) }),
+      })
+        .then((response) => {
+          if (response.ok) {
+            setReorderError(false)
+          } else {
+            setReorderError(true)
+            void restoreProviderOrder()
+          }
+        })
+        .catch(() => {
+          setReorderError(true)
+          void restoreProviderOrder()
+        })
+    }, 300)
+  }
+
+  async function restoreProviderOrder() {
+    try {
+      const response = await authFetch('/api/providers')
+      if (!response.ok) return
+      const data = (await response.json()) as { providers: Array<{ id: string }> }
+      const serverIds = data.providers.map((p) => p.id)
+      setProviders((current) => {
+        const serverIdSet = new Set(serverIds)
+        const sameSet = current.length === serverIds.length && current.every((p) => serverIdSet.has(p.id))
+        if (!sameSet) return current
+        return serverIds.map((id) => current.find((p) => p.id === id)).filter((p): p is ProviderInfo => p !== undefined)
+      })
+    } catch {
+      // Keep the optimistic local order; a later reorder will retry persistence.
+    }
+  }
+
+  function moveProvider(index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= providers.length) return
+    const next = [...providers]
+    const [moved] = next.splice(index, 1)
+    next.splice(target, 0, moved!)
+    persistOrder(next)
+  }
+
+  function handleDragStart(providerId: string) {
+    setDraggingId(providerId)
+  }
+
+  function handleDragOver(providerId: string) {
+    setDragOverId(providerId)
+  }
+
+  function handleDrop(targetId: string) {
+    if (!draggingId || draggingId === targetId) return
+    const from = providers.findIndex((p) => p.id === draggingId)
+    const to = providers.findIndex((p) => p.id === targetId)
+    if (from === -1 || to === -1) return
+    const next = [...providers]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved!)
+    persistOrder(next)
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null)
+    setDragOverId(null)
+  }
+
   useImperativeHandle(
     ref,
     () => ({
@@ -184,11 +272,37 @@ export const ConnectLLMStep = forwardRef<ConnectLLMStepHandle, ConnectLLMStepPro
       <div className="space-y-4">
         {providers.length > 0 ? (
           <div className="space-y-2">
-            {providers.map((provider) => (
+            {providers.map((provider, index) => (
               <div
                 key={provider.id}
-                className="flex items-center justify-between bg-bg-secondary rounded-lg p-4 border border-border"
+                data-testid={`provider-row-${provider.id}`}
+                onDragOver={(e) => {
+                  if (!draggingId) return
+                  e.preventDefault()
+                  handleDragOver(provider.id)
+                }}
+                onDrop={(e) => {
+                  if (!draggingId) return
+                  e.preventDefault()
+                  handleDrop(provider.id)
+                }}
+                className={`flex items-center justify-between bg-bg-secondary rounded-lg p-4 border ${
+                  dragOverId === provider.id ? 'border-accent-primary' : 'border-border'
+                }`}
               >
+                {embedded && (
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={() => handleDragStart(provider.id)}
+                    onDragEnd={handleDragEnd}
+                    className="p-1.5 mr-1 text-text-muted hover:text-text-secondary cursor-grab active:cursor-grabbing transition-colors"
+                    title="Drag to reorder"
+                    aria-label="Drag to reorder"
+                  >
+                    <GripVerticalIcon className="w-4 h-4" />
+                  </button>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 bg-accent-primary/25 text-accent-primary rounded text-xs font-medium">
@@ -239,6 +353,30 @@ export const ConnectLLMStep = forwardRef<ConnectLLMStepHandle, ConnectLLMStepPro
                     </>
                   )}
                 </div>
+                {embedded && (
+                  <div className="flex flex-col ml-1">
+                    <button
+                      type="button"
+                      onClick={() => moveProvider(index, -1)}
+                      disabled={index === 0}
+                      className="p-0.5 text-text-muted hover:text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Move up"
+                      aria-label="Move up"
+                    >
+                      <ChevronUpIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveProvider(index, 1)}
+                      disabled={index === providers.length - 1}
+                      className="p-0.5 text-text-muted hover:text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Move down"
+                      aria-label="Move down"
+                    >
+                      <ChevronDownIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -246,6 +384,12 @@ export const ConnectLLMStep = forwardRef<ConnectLLMStepHandle, ConnectLLMStepPro
           <div className="bg-bg-secondary rounded-lg p-8 text-center border border-border">
             <p className="text-text-muted">No providers configured yet</p>
           </div>
+        )}
+
+        {embedded && reorderError && (
+          <p className="text-xs text-red-500 mt-1">
+            Couldn't save the new provider order. Showing the last saved order.
+          </p>
         )}
 
         {!embedded && (

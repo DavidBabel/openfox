@@ -412,6 +412,27 @@ export function removeProvider(config: Partial<GlobalConfig>, providerId: string
   }
 }
 
+export function reorderProviders(config: GlobalConfig, orderedIds: string[]): GlobalConfig {
+  const currentProviders = config.providers ?? []
+  const currentIds = currentProviders.map((p) => p.id)
+  const orderedSet = new Set(orderedIds)
+
+  const isPermutation =
+    orderedSet.size === orderedIds.length &&
+    orderedIds.length === currentIds.length &&
+    orderedIds.every((id) => currentIds.includes(id))
+
+  if (!isPermutation) {
+    throw new Error('orderedIds must be a permutation of the current provider ids')
+  }
+
+  const idToProvider = new Map(currentProviders.map((p) => [p.id, p]))
+  return {
+    ...config,
+    providers: orderedIds.map((id) => idToProvider.get(id)!),
+  }
+}
+
 export function activateProvider(config: Partial<GlobalConfig>, providerId: string): GlobalConfig {
   const provider = config.providers?.find((p) => p.id === providerId)
   if (!provider) {
