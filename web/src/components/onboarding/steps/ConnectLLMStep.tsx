@@ -1,14 +1,24 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { authFetch } from '../../../lib/api'
 import { PlusLgIcon, TrashIcon } from '../../shared/icons'
 import { ProviderModal, providerFormPayload, type ProviderFormData } from '../../shared/ProviderModal'
 import { getBackendDisplayName, type ProviderInfo } from '../types'
 
-interface ConnectLLMStepProps {
-  onNext: (data: { providers: ProviderInfo[] }) => void
+export interface ConnectLLMStepHandle {
+  addProvider: () => void
+  submit: () => void
 }
 
-export function ConnectLLMStep({ onNext }: ConnectLLMStepProps) {
+interface ConnectLLMStepProps {
+  onNext: (data: { providers: ProviderInfo[] }) => void
+  /** Embed the step in a hosting surface (e.g. a manage-providers modal) instead of a wizard: no auto-advance and no onboarding chrome. */
+  embedded?: boolean
+}
+
+export const ConnectLLMStep = forwardRef<ConnectLLMStepHandle, ConnectLLMStepProps>(function ConnectLLMStep(
+  { onNext, embedded = false },
+  ref,
+) {
   const [existingProviders, setExistingProviders] = useState<ProviderInfo[]>([])
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [showModal, setShowModal] = useState(false)
@@ -102,7 +112,7 @@ export function ConnectLLMStep({ onNext }: ConnectLLMStepProps) {
 
       // An authenticated provider can create a real provider ID before the final save.
       // It was not previously present in local state, so proceed with the saved provider directly.
-      if (shouldAdvance && !wasListed) {
+      if (!embedded && shouldAdvance && !wasListed) {
         onNext({ providers: [saved] })
       }
     } catch {
@@ -151,12 +161,25 @@ export function ConnectLLMStep({ onNext }: ConnectLLMStepProps) {
     onNext({ providers: validProviders })
   }
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      addProvider: openAddModal,
+      submit: handleSubmit,
+    }),
+    [handleSubmit],
+  )
+
   const hasProviders = providers.length > 0
 
   return (
     <div className="max-w-xl mx-auto">
-      <h2 className="text-2xl font-bold text-text-primary mb-2">LLM Providers</h2>
-      <p className="text-text-secondary mb-8">Manage your LLM server connections</p>
+      {!embedded && (
+        <>
+          <h2 className="text-2xl font-bold text-text-primary mb-2">LLM Providers</h2>
+          <p className="text-text-secondary mb-8">Manage your LLM server connections</p>
+        </>
+      )}
 
       <div className="space-y-4">
         {providers.length > 0 ? (
@@ -225,23 +248,27 @@ export function ConnectLLMStep({ onNext }: ConnectLLMStepProps) {
           </div>
         )}
 
-        <button
-          onClick={openAddModal}
-          data-testid="onboarding-add-provider-button"
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-bg-secondary border border-dashed border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-text-muted transition-colors"
-        >
-          <PlusLgIcon className="w-4 h-4" />
-          Add Provider
-        </button>
+        {!embedded && (
+          <>
+            <button
+              onClick={openAddModal}
+              data-testid="onboarding-add-provider-button"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-bg-secondary border border-dashed border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-text-muted transition-colors"
+            >
+              <PlusLgIcon className="w-4 h-4" />
+              Add Provider
+            </button>
 
-        <button
-          onClick={handleSubmit}
-          disabled={!hasProviders}
-          data-testid="onboarding-continue-button"
-          className="w-full mt-6 px-6 py-3 bg-accent-primary text-text-primary rounded-lg font-medium hover:bg-accent-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Continue
-        </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!hasProviders}
+              data-testid="onboarding-continue-button"
+              className="w-full mt-6 px-6 py-3 bg-accent-primary text-text-primary rounded-lg font-medium hover:bg-accent-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {embedded ? 'Done' : 'Continue'}
+            </button>
+          </>
+        )}
       </div>
 
       <ProviderModal
@@ -253,4 +280,4 @@ export function ConnectLLMStep({ onNext }: ConnectLLMStepProps) {
       />
     </div>
   )
-}
+})

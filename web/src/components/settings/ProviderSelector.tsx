@@ -1,6 +1,5 @@
 import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect } from 'react'
-import { useLocation } from 'wouter'
 import { useConfigStore, getBackendDisplayName, type Provider } from '../../stores/config'
 import { useSessionStore } from '../../stores/session'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
@@ -9,6 +8,7 @@ import { agentsResource } from '../../lib/resources'
 import { getAgentColor } from '../../stores/agents'
 import { ProviderModal, providerFormPayload, type ProviderFormData } from '../shared/ProviderModal'
 import { Modal } from '../shared/Modal'
+import { ManageProvidersModal } from './ManageProvidersModal'
 import { authFetch } from '../../lib/api'
 import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon, PinIcon } from '../shared/icons'
 import { useKeybindings, useBinding } from '../../hooks/useKeybindings'
@@ -84,7 +84,6 @@ function ProviderLabel({
 }
 
 export function ProviderSelector() {
-  const [, navigate] = useLocation()
   const sessionId = useSessionScope()
   const currentSession = useScopedPaneState(
     sessionId,
@@ -103,6 +102,7 @@ export function ProviderSelector() {
   const resetSessionProvider = useSessionStore((state) => state.resetSessionProvider)
   const clearSessionEffortPin = useSessionStore((state) => state.clearSessionEffortPin)
   const [isOpen, setIsOpen] = useState(false)
+  const [showManageProviders, setShowManageProviders] = useState(false)
   const [expandedProviderIds, setExpandedProviderIds] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -614,8 +614,8 @@ export function ProviderSelector() {
   const handleProviderSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && highlightedIndex === flatItems.length) {
       e.preventDefault()
-      navigate('/onboarding')
       setIsOpen(false)
+      setShowManageProviders(true)
       return
     }
     handleSearchKeyDown(e)
@@ -854,7 +854,13 @@ export function ProviderSelector() {
                 Reset to default
               </button>
             )}
-            <button onClick={() => navigate('/onboarding')} className="text-xs text-accent-primary hover:underline">
+            <button
+              onClick={() => {
+                setIsOpen(false)
+                setShowManageProviders(true)
+              }}
+              className="text-xs text-accent-primary hover:underline"
+            >
               Manage providers
             </button>
           </div>
@@ -944,6 +950,14 @@ export function ProviderSelector() {
           editModelId={editingModel.model.id}
         />
       )}
+
+      <ManageProvidersModal
+        isOpen={showManageProviders}
+        onClose={() => {
+          setShowManageProviders(false)
+          void fetchConfig()
+        }}
+      />
     </div>
   )
 }

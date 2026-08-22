@@ -94,12 +94,26 @@ vi.mock('../shared/icons', () => ({
   StarFilledIcon: ({ className }: any) => `<svg class="${className}">★</svg>`,
   SearchIcon: ({ className }: any) => `<svg class="${className}">🔍</svg>`,
   PinIcon: ({ className }: any) => `<svg class="${className}">📍</svg>`,
+  PlusLgIcon: ({ className }: any) => `<svg class="${className}">+</svg>`,
 }))
 
 vi.mock('../shared/ProviderModal', () => ({
   ProviderModal: () => '<div>ProviderModal</div>',
   providerFormPayload: (data: any) => data,
 }))
+
+vi.mock('../onboarding/steps/ConnectLLMStep', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react')
+  return {
+    ConnectLLMStep: ({ onNext }: any) =>
+      React.createElement(
+        'div',
+        { 'data-testid': 'connect-llm-step' },
+        React.createElement('button', { onClick: () => onNext({ providers: [] }) }, 'mock next'),
+      ),
+  }
+})
 
 const { mockAgentsData } = vi.hoisted(() => ({
   mockAgentsData: {
@@ -933,6 +947,98 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mockSetSessionProvider).toHaveBeenCalledWith('session-1', 'provider-1', 'gpt-4-turbo', null)
+  })
+
+  it('[AUTOMATED] Manage providers opens a modal instead of navigating to /onboarding', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByText('Manage providers'))
+
+    expect(mockNavigate).not.toHaveBeenCalledWith('/onboarding')
+    expect(screen.queryByTestId('connect-llm-step')).not.toBeNull()
+    expect(screen.getByRole('button', { name: /Add Provider/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeDefined()
+  })
+
+  it('[AUTOMATED] Enter on the highlighted Manage providers entry opens the modal, not onboarding', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const input = screen.getByPlaceholderText('Search models...') as HTMLInputElement
+    await user.clear(input)
+    await user.type(input, 'gpt')
+
+    // ArrowUp wraps from the first model to Manage providers, Enter activates it
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockNavigate).not.toHaveBeenCalledWith('/onboarding')
+    expect(screen.queryByTestId('connect-llm-step')).not.toBeNull()
+  })
+
+  it('[AUTOMATED] Manage providers modal closes and refreshes the provider list', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByText('Manage providers'))
+    expect(screen.queryByTestId('connect-llm-step')).not.toBeNull()
+
+    await user.click(screen.getByText('mock next'))
+
+    expect(screen.queryByTestId('connect-llm-step')).toBeNull()
+    const { useConfigStore } = await import('../../stores/config')
+    const state = (useConfigStore as unknown as MockStore)((s: any) => s)
+    expect(state.fetchConfig).toHaveBeenCalled()
   })
 
   it('[AUTOMATED] highlights the effective override model as active, not the session preference', async () => {
