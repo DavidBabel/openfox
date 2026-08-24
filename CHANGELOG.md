@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.128 - 2026-08-24
+
+### Enhancements
+
+- **Qwen3.8 defaults match its model card** — temperature 1.0, top_p 0.95, top_k 20, and vision support
+- **Qwen3.8's default output budget is now 50k** — up from 16k, clamped to the context window
+
+### Bug Fixes
+
+- **"Time since last prompt" hidden in terminal states** — no counter on completed or blocked sessions
+
 ## 2.0.127 - 2026-08-22
 
 ### Features
