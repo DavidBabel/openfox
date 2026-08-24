@@ -317,6 +317,99 @@ describe('RunningIndicator — factually-derived state from existing client data
     vi.useRealTimers()
   })
 
+  it('hides the "time since last user prompt" counter in the completed state', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'done', isRunning: false }),
+      messages: [{ id: 'u1', role: 'user', content: 'Fix the bug', timestamp: '2024-06-15T12:34:53.000Z' }],
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(el?.getAttribute('data-state')).toBe('completed')
+    // Terminal state: the counter must be hidden, not frozen.
+    expect(el?.querySelector('[aria-label="time since last prompt"]')).toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+    })
+    expect(el?.querySelector('[aria-label="time since last prompt"]')).toBeNull()
+
+    vi.useRealTimers()
+  })
+
+  it('hides the "time since last user prompt" counter in the blocked state', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'blocked', isRunning: false }),
+      messages: [{ id: 'u1', role: 'user', content: 'Fix the bug', timestamp: '2024-06-15T12:34:53.000Z' }],
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(el?.getAttribute('data-state')).toBe('blocked')
+    expect(el?.querySelector('[aria-label="time since last prompt"]')).toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+    })
+    expect(el?.querySelector('[aria-label="time since last prompt"]')).toBeNull()
+
+    vi.useRealTimers()
+  })
+
+  it('shows and ticks the "time since last user prompt" counter in the waiting state', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'build' }),
+      pendingQuestions: [{ callId: 'q1', question: 'Pick?', type: 'choice', options: undefined }],
+      messages: [{ id: 'u1', role: 'user', content: 'Fix the bug', timestamp: '2024-06-15T12:34:53.000Z' }],
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(el?.getAttribute('data-state')).toBe('waiting')
+    expect(el?.textContent).toContain('3s')
+
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(el?.textContent).toContain('7s')
+
+    vi.useRealTimers()
+  })
+
+  it('re-syncs the counter when the session resumes after a terminal-state idle', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'done', isRunning: false }),
+      messages: [{ id: 'u1', role: 'user', content: 'Fix the bug', timestamp: '2024-06-15T12:34:53.000Z' }],
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(el?.getAttribute('data-state')).toBe('completed')
+    expect(el?.querySelector('[aria-label="time since last prompt"]')).toBeNull()
+
+    // The session sat idle in a terminal state for 10 minutes.
+    act(() => {
+      vi.advanceTimersByTime(600_000)
+    })
+
+    // A new action resumes the session — the counter must show the full
+    // elapsed time immediately, not a stale mount-time value.
+    act(() => {
+      useSessionStore.setState({
+        currentSession: makeSession({ phase: 'done', isRunning: true }),
+      })
+    })
+    const resumed = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(resumed?.getAttribute('data-state')).toBe('running')
+    expect(resumed?.textContent).toContain('10m 3s')
+
+    vi.useRealTimers()
+  })
+
   it('resets the counter on workflow launch (workflow-started anchor)', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'))

@@ -34,11 +34,14 @@ export function RunningIndicator() {
   const lastPromptAt = view.lastPromptAt
   const [now, setNow] = useState(() => Date.now())
 
+  const timerActive = lastPromptAt !== null && (state === 'running' || state === 'waiting')
+
   useEffect(() => {
-    if (!lastPromptAt) return
+    if (!timerActive) return
+    setNow(Date.now())
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(interval)
-  }, [lastPromptAt])
+  }, [timerActive])
 
   if (state === null) return null
 
@@ -75,7 +78,7 @@ export function RunningIndicator() {
         </span>
       </div>
       {!aborting && state === 'running' && <span className="text-text-muted hidden sm:inline">esc to interrupt</span>}
-      {lastPromptAtText && (
+      {timerActive && lastPromptAtText && (
         <span className="text-text-muted hidden sm:inline" aria-label="time since last prompt">
           {lastPromptAtText}
         </span>
