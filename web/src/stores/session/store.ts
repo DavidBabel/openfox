@@ -351,6 +351,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     error: null,
     activeWorkflowExecution: null,
     llmRetry: null,
+    liveTurnStats: null,
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
     pendingSessionCreate: false as boolean | string,

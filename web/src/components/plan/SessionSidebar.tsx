@@ -1,8 +1,9 @@
 import { ScrollArea } from '../shared/ScrollArea'
 import { useState } from 'react'
 import { useSessionStats } from '../../hooks/useSessionStats'
+import { computeSessionStats } from '@shared/stats.js'
 import { useGitStatus } from '../../hooks/useGitStatus'
-import { useScopedContext } from '../../stores/session/session-scope'
+import { useScopedContext, useScopedPaneState } from '../../stores/session/session-scope'
 import { useConfigStore } from '../../stores/config'
 import { useSettingsStore, SETTINGS_KEYS } from '../../stores/settings'
 import { useUpdateStore } from '../../stores/update'
@@ -32,10 +33,28 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
   const [showUpdateModal, setShowUpdateModal] = useState(false)
   const [activeMetadataKey, setActiveMetadataKey] = useState<string | null>(null)
 
-  const stats = useSessionStats(messages)
+  const aggregateStats = useSessionStats(messages)
   const { branch } = useGitStatus()
   const version = useConfigStore((state) => state.version)
-  const { currentSession: session } = useScopedContext()
+  const { currentSession: session, sessionId } = useScopedContext()
+  const liveTurnStats = useScopedPaneState(
+    sessionId,
+    (pane) => pane.liveTurnStats,
+    (state) => state.liveTurnStats,
+    null,
+  )
+  // While a turn is running the server streams the current turn's cumulative
+  // stats after each LLM call. Merge them into the aggregate of already-finished
+  // messages — mid-turn the in-flight messages carry no stats, and when a
+  // message gains stats (turn finalize) the live channel is cleared in the same
+  // frame, so the live value is never counted twice. The sidebar therefore
+  // grows live and lands on the exact final numbers when the turn ends.
+  const stats = liveTurnStats
+    ? computeSessionStats([
+        ...messages,
+        { id: 'live', role: 'assistant', content: '', timestamp: new Date().toISOString(), stats: liveTurnStats },
+      ])
+    : aggregateStats
 
   const workspaceName = pathBasename(session?.workspace ?? '') || null
 

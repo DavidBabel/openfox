@@ -7,6 +7,7 @@ import type {
   ToolMode,
   Criterion,
   Message,
+  MessageStats,
   Todo,
   MetadataEntry,
   Diagnostic,
@@ -101,6 +102,7 @@ export type ServerMessageType =
   | 'chat.format_retry' // Model used wrong format (XML tools), retrying
   | 'chat.message' // Full message added (system-generated, etc.)
   | 'chat.message_updated' // Message updated (e.g., isStreaming changed)
+  | 'chat.stats' // Live cumulative turn stats while a turn is running
   | 'chat.done' // Current generation complete
   // Vision fallback events
   | 'chat.vision_fallback' // Vision model is describing an image
@@ -324,6 +326,11 @@ export interface ChatDonePayload {
     generationTokens: number
     generationSpeed: number
   }
+}
+
+export interface ChatStatsPayload {
+  /** Cumulative turn stats so far, streamed as each LLM call completes. */
+  stats: MessageStats
 }
 
 export interface ChatErrorPayload {

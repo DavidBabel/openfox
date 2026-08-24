@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { Mock } from 'vitest'
 import { SessionSidebar } from './SessionSidebar'
 import { SessionScopeProvider } from '../../stores/session/session-scope'
+import type { Message } from '@shared/types.js'
 
 /* ------------------------------------------------------------------ */
 /*  Store mocks — shared across all tests                             */
@@ -47,7 +48,7 @@ vi.mock('../../hooks/useSessionStats', () => ({
 /*  Child component mocks                                             */
 /* ------------------------------------------------------------------ */
 
-vi.mock('./StatsModal', () => ({ default: () => null }))
+vi.mock('./StatsModal', () => ({ StatsModal: () => null }))
 vi.mock('./CriteriaEditor', () => ({ CriteriaEditor: () => null }))
 vi.mock('../shared/MetadataEntries', () => ({
   MetadataEntries: () => null,
@@ -162,5 +163,65 @@ describe('SessionSidebar — split view pane isolation', () => {
 
     expect(html).toContain('workspace-a')
     expect(html).not.toContain('workspace-b')
+  })
+})
+
+describe('SessionSidebar — live turn stats', () => {
+  it('merges live cumulative stats into the aggregate while a turn is running', () => {
+    mockUseGitStatus.mockReturnValue({ branch: null, diff: { files: [], loading: false, error: null } })
+    mockSessionStore.mockReturnValue({
+      currentSession: { id: 's1', projectId: 'p1', metadataEntries: {}, workdir: '/tmp/project' },
+      panes: {
+        s1: {
+          session: { id: 's1', projectId: 'p1', metadataEntries: {}, workdir: '/tmp/project' },
+          liveTurnStats: {
+            providerId: 'p',
+            providerName: 'P',
+            backend: 'ollama',
+            model: 'm',
+            mode: 'builder',
+            totalTime: 12,
+            toolTime: 2,
+            prefillTokens: 60000,
+            prefillSpeed: 20000,
+            generationTokens: 600,
+            generationSpeed: 150,
+          },
+        },
+      },
+    })
+
+    // One already-finished response (aiTime 7) plus the live turn (aiTime 10)
+    // → merged aiTime 17s, shown live while the turn is running.
+    const previousMessage: Message = {
+      id: 'prev',
+      role: 'assistant',
+      content: 'done',
+      timestamp: '2024-01-01T10:00:00Z',
+      stats: {
+        providerId: 'p',
+        providerName: 'P',
+        backend: 'ollama',
+        model: 'm',
+        mode: 'planner',
+        totalTime: 8,
+        toolTime: 1,
+        prefillTokens: 40000,
+        prefillSpeed: 10000,
+        generationTokens: 400,
+        generationSpeed: 100,
+      },
+    }
+
+    const html = renderToStaticMarkup(
+      <SessionScopeProvider value="s1">
+        <SessionSidebar messages={[previousMessage]} />
+      </SessionScopeProvider>,
+    )
+
+    expect(html).toContain('17s')
+    // Weighted averages across both responses: prefill 100k/7s ≈ 14.3k, gen 1000/8s = 125
+    expect(html).toContain('14.3k')
+    expect(html).toContain('125.0')
   })
 })

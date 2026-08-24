@@ -23,6 +23,7 @@ import type {
   ChatMessagePayload,
   ChatMessageUpdatedPayload,
   ChatDonePayload,
+  ChatStatsPayload,
   ChatErrorPayload,
   ChatLLMRetryPayload,
   ChatLLMRetryFailedPayload,
@@ -284,6 +285,10 @@ export function createChatDoneMessage(
     ...(stats ? { stats } : {}),
     ...(agentType ? { agentType } : {}),
   })
+}
+
+export function createChatStatsMessage(stats: ChatStatsPayload['stats']): ServerMessage<ChatStatsPayload> {
+  return createServerMessage('chat.stats', { stats })
 }
 
 export function createChatErrorMessage(error: string, recoverable: boolean): ServerMessage<ChatErrorPayload> {

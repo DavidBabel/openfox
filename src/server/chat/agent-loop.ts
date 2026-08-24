@@ -40,6 +40,7 @@ import {
   createChatDoneMessage,
   createChatLLMRetryMessage,
   createChatLLMRetryFailedMessage,
+  createChatStatsMessage,
 } from '../ws/protocol.js'
 import { executeTools, type ToolBatchContext } from './execute-tools.js'
 import { estimateToolResultTokens, isContextLengthError } from './token-budget.js'
@@ -98,6 +99,20 @@ function emitDoneAndBreak(
     )
     onMessage(createChatDoneMessage(assistantMsgId, reason, stats, agentType))
   }
+}
+
+/**
+ * Broadcast the cumulative turn stats to the client as an LLM call completes,
+ * so the sidebar can render live numbers while the turn is still running.
+ */
+function emitLiveTurnStats(
+  turnMetrics: TurnMetrics,
+  statsIdentity: import('../../shared/types.js').StatsIdentity,
+  mode: import('../../shared/types.js').ToolMode,
+  onMessage: ((msg: ServerMessage) => void) | undefined,
+): void {
+  if (!onMessage) return
+  onMessage(createChatStatsMessage(turnMetrics.buildStats(statsIdentity, mode)))
 }
 
 // ============================================================================
@@ -505,6 +520,13 @@ export async function runTopLevelAgentLoop(
       previousContextTokens,
       result.modelParams,
     )
+    // Stream the running turn totals to the client so the sidebar can build
+    // dynamically as each LLM call completes. Sub-agent turns run inside the
+    // parent turn — their stats would clobber the parent's live numbers, so
+    // only top-level turns broadcast.
+    if (!config.subAgentMetadata) {
+      emitLiveTurnStats(turnMetrics, statsIdentity, mode, config.onMessage)
+    }
     sessionManager.setCurrentContextSize(
       sessionId,
       result.usage.promptTokens,

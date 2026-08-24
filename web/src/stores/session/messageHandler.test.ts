@@ -544,3 +544,199 @@ describe('chat.ask_user handler', () => {
     expect(state.pendingQuestions[0]?.type).toBe('choice')
   })
 })
+
+describe('chat.stats handler', () => {
+  const liveStats = {
+    providerId: 'p',
+    providerName: 'P',
+    backend: 'ollama',
+    model: 'm',
+    mode: 'builder',
+    totalTime: 5,
+    toolTime: 1,
+    prefillTokens: 100,
+    prefillSpeed: 50,
+    generationTokens: 10,
+    generationSpeed: 5,
+  } as any
+
+  beforeEach(() => {
+    wsSendMock.mockClear()
+    wsSubscribeMock.mockClear()
+    wsConnectMock.mockClear()
+    wsDisconnectMock.mockClear()
+    wsStatusMock.mockClear()
+    playNotificationMock.mockClear()
+    playAchievementMock.mockClear()
+    playInterventionMock.mockClear()
+    playWaitingForUserMock.mockClear()
+    playNewMessageMock.mockClear()
+    fetchMock.mockClear()
+  })
+
+  it('stores live turn stats on the focused session', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+
+    const state = useSessionStore.getState()
+    expect(state.liveTurnStats).toEqual(liveStats)
+    expect(state.panes['session-1']?.liveTurnStats).toEqual(liveStats)
+  })
+
+  it('clears live turn stats when the turn completes', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.done',
+      sessionId: 'session-1',
+      payload: { messageId: 'm1', reason: 'complete', stats: liveStats },
+    })
+
+    expect(useSessionStore.getState().liveTurnStats).toBeNull()
+  })
+
+  it('does not clear live turn stats on a sub-agent completion mid-turn', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.done',
+      sessionId: 'session-1',
+      payload: { messageId: 'm1', reason: 'complete', stats: liveStats, agentType: 'sub-agent' },
+    })
+
+    expect(useSessionStore.getState().liveTurnStats).toEqual(liveStats)
+  })
+
+  it('ignores chat.stats for sessions that are not open', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+
+    expect(useSessionStore.getState().liveTurnStats).toBeNull()
+  })
+
+  it('clears live turn stats when the turn stops running', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'session.running',
+      sessionId: 'session-1',
+      payload: { isRunning: false },
+    })
+
+    expect(useSessionStore.getState().liveTurnStats).toBeNull()
+  })
+
+  it('clears stale live turn stats when a new turn starts running', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'session.running',
+      sessionId: 'session-1',
+      payload: { isRunning: true },
+    })
+
+    expect(useSessionStore.getState().liveTurnStats).toBeNull()
+  })
+
+  it('clears live turn stats when a message_updated finalizes with stats', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+
+    // The turn-finalize broadcast attaches stats to the message; the live
+    // channel must not be merged on top of it (would double-count).
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.message_updated',
+      sessionId: 'session-1',
+      payload: { messageId: 'm1', updates: { isStreaming: false, stats: liveStats } },
+    })
+
+    expect(useSessionStore.getState().liveTurnStats).toBeNull()
+  })
+
+  it('keeps live turn stats when a message_updated carries no stats', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.stats',
+      sessionId: 'session-1',
+      payload: { stats: liveStats },
+    })
+
+    // Mid-turn message updates (e.g. isStreaming) must not wipe the live stats.
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.message_updated',
+      sessionId: 'session-1',
+      payload: { messageId: 'm1', updates: { isStreaming: true } },
+    })
+
+    expect(useSessionStore.getState().liveTurnStats).toEqual(liveStats)
+  })
+})

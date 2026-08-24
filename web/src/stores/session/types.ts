@@ -5,6 +5,7 @@ import type {
   Criterion,
   Todo,
   Message,
+  MessageStats,
   ContextState,
   Attachment,
   WorkflowLaunchScope,
@@ -77,6 +78,8 @@ export interface SessionPane {
   error: { code: string; message: string } | null
   /** Live status of an LLM failure: backing off before a retry, or the window exhausted. */
   llmRetry: LLMRetryState | null
+  /** Cumulative turn stats streamed while a turn is running; null when idle. */
+  liveTurnStats: MessageStats | null
 }
 
 export interface SessionState {
@@ -105,6 +108,8 @@ export interface SessionState {
   error: { code: string; message: string } | null
   /** Live status of an LLM failure: backing off before a retry, or the window exhausted. */
   llmRetry: LLMRetryState | null
+  /** Cumulative turn stats streamed while a turn is running; null when idle. */
+  liveTurnStats: MessageStats | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
   pendingSessionCreate: boolean | string

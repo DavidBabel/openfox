@@ -371,6 +371,7 @@ describe('runTopLevelAgentLoop assembleRequest', () => {
       }),
       getCurrentModelContext: vi.fn().mockReturnValue(200000),
       getCurrentModelSettings: vi.fn().mockReturnValue({}),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(undefined),
       setCurrentContextSize: vi.fn(),
       getDynamicContextChanged: vi.fn().mockReturnValue(false),
       setDynamicContextChanged: vi.fn(),
@@ -1600,6 +1601,134 @@ describe('maxTokens clamping', () => {
     expect(calls[1]?.[0].modelSettings?.maxTokens).toBe(24576)
     // After iteration 2 succeeded, the override is reset → user maxTokens (clamped).
     expect(calls[2]?.[0].modelSettings?.maxTokens).toBe(16384)
+  })
+})
+
+// ============================================================================
+// Live turn stats — chat.stats streamed to the client as each LLM call completes
+// ============================================================================
+
+describe('runTopLevelAgentLoop live stats', () => {
+  let mockEventStore: EventStore
+  let mockSessionManager: SessionManager
+  let mockLLMClient: any
+  let mockTurnMetrics: TurnMetrics
+  let assembleRequestMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    mockEventStore = {
+      append: vi.fn(),
+      getEvents: vi.fn().mockReturnValue([]),
+      getLatestSeq: vi.fn().mockReturnValue(0),
+      cleanupOldEvents: vi.fn().mockReturnValue(0),
+    } as unknown as EventStore
+    ;(getEventStore as any).mockReturnValue(mockEventStore)
+
+    mockLLMClient = {
+      getModel: vi.fn().mockReturnValue('test-model'),
+    }
+
+    mockTurnMetrics = {
+      addToolTime: vi.fn(),
+      addLLMCall: vi.fn(),
+      buildStats: vi.fn().mockReturnValue({}),
+    } as unknown as TurnMetrics
+
+    assembleRequestMock = vi.fn().mockReturnValue({
+      systemPrompt: 'test-system-prompt',
+      messages: [],
+    })
+    ;(getAllInstructions as any).mockResolvedValue({ content: 'test instructions', files: [] })
+    ;(getEnabledSkillMetadata as any).mockResolvedValue([])
+    ;(consumeStreamGenerator as any).mockResolvedValue({
+      content: 'done',
+      toolCalls: [],
+      segments: [],
+      usage: { promptTokens: 10, completionTokens: 5 },
+      timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+      aborted: false,
+      finishReason: 'stop',
+      modelParams: {},
+    })
+
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({}),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(undefined),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+  })
+
+  function makeConfig(overrides?: Partial<TopLevelLoopConfig>): TopLevelLoopConfig {
+    return {
+      mode: 'planner',
+      append: vi.fn(),
+      sessionManager: mockSessionManager,
+      sessionId: 'test-session',
+      llmClient: mockLLMClient,
+      statsIdentity: { providerId: 'test', providerName: 'Test', backend: 'unknown' as const, model: 'test-model' },
+      assembleRequest: assembleRequestMock as any,
+      getToolRegistry: () => ({ tools: [], definitions: [], execute: vi.fn() }) as any,
+      getConversationMessages: vi.fn().mockResolvedValue([]),
+      ...overrides,
+    }
+  }
+
+  function chatStatsCount(onMessage: ReturnType<typeof vi.fn>): number {
+    return onMessage.mock.calls.filter((args: unknown[]) => (args[0] as { type?: string }).type === 'chat.stats').length
+  }
+
+  it('emits chat.stats with cumulative stats after a successful LLM call', async () => {
+    const onMessage = vi.fn()
+
+    await runTopLevelAgentLoop(makeConfig({ onMessage }), mockTurnMetrics)
+
+    expect(chatStatsCount(onMessage)).toBeGreaterThanOrEqual(1)
+    const statsMessage = onMessage.mock.calls
+      .map((args: unknown[]) => args[0] as { type: string; payload: { stats: unknown } })
+      .find((msg) => msg.type === 'chat.stats')
+    expect(statsMessage?.payload.stats).toBeDefined()
+  })
+
+  it('does not emit chat.stats for sub-agent runs', async () => {
+    const onMessage = vi.fn()
+
+    await runTopLevelAgentLoop(
+      makeConfig({
+        onMessage,
+        subAgentMetadata: { subAgentId: 'sub-1', subAgentType: 'verifier' },
+      }),
+      mockTurnMetrics,
+    )
+
+    expect(chatStatsCount(onMessage)).toBe(0)
   })
 })
 

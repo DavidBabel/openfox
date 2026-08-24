@@ -15,6 +15,7 @@ import type {
   ChatTodoPayload,
   ChatMessagePayload,
   ChatMessageUpdatedPayload,
+  ChatStatsPayload,
   ChatLLMRetryPayload,
   ChatLLMRetryFailedPayload,
   ChatDonePayload,
@@ -270,6 +271,7 @@ export function handleServerMessage(
             (payload.activeWorkflowExecution as import('@shared/types.js').WorkflowExecution | undefined) ?? null,
           queuedMessages: prior.queuedMessages,
           llmRetry: null,
+          liveTurnStats: null,
         }
         const base = replacePane(state, sessionId, nextPane)
         return {
@@ -335,10 +337,17 @@ export function handleServerMessage(
         break
       }
       if (!payload.isRunning) {
-        set((state) => updatePane(state, eventSessionId, (p) => ({ ...p, abortInProgress: false, queuedMessages: [] })))
+        set((state) =>
+          updatePane(state, eventSessionId, (p) => ({
+            ...p,
+            abortInProgress: false,
+            queuedMessages: [],
+            liveTurnStats: null,
+          })),
+        )
       }
       if (payload.isRunning) {
-        set((state) => updatePane(state, eventSessionId, (p) => ({ ...p, restoredInput: null })))
+        set((state) => updatePane(state, eventSessionId, (p) => ({ ...p, restoredInput: null, liveTurnStats: null })))
       }
       break
     }
@@ -407,6 +416,12 @@ export function handleServerMessage(
               }
               return merged
             }),
+            // A message_updated carrying stats is a turn-finalize broadcast: the
+            // message now holds the whole turn's cumulative stats, so the live
+            // channel must not be merged on top of it (would double-count).
+            // Cleared here rather than waiting for chat.done to avoid a
+            // one-frame ~2x flicker in the sidebar between the two frames.
+            ...(payload.updates.stats ? { liveTurnStats: null } : {}),
           }
         })
       ) {
@@ -671,9 +686,23 @@ export function handleServerMessage(
               : m,
           ),
           visionFallbackByMessage: {},
+          // Sub-agent completions arrive mid-turn — don't wipe the parent turn's
+          // live stats; they are replaced by the next top-level chat.stats.
+          ...(payload.agentType !== 'sub-agent' ? { liveTurnStats: null } : {}),
           ...(payload.reason !== 'error' ? { llmRetry: null } : {}),
         })),
       )
+      break
+    }
+
+    case 'chat.stats': {
+      const sessionId = message.sessionId
+      const payload = message.payload as ChatStatsPayload
+      // Live turn stats are only meaningful for open panes; background sessions
+      // get them via the aggregate once their turn lands in the snapshot.
+      if (!applyChat(set, get, sessionId, (pane) => ({ ...pane, liveTurnStats: payload.stats }))) {
+        break
+      }
       break
     }
 
