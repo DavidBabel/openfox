@@ -498,6 +498,95 @@ describe('maxTokens clamping', () => {
     expect(callArgs.modelSettings?.maxTokens).toBe(2952)
   })
 
+  it('uses the profile defaultMaxTokens when no user maxTokens is configured', async () => {
+    mockLLMClient = {
+      getModel: vi.fn().mockReturnValue('qwen3.8-27b'),
+    }
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      // No user-configured maxTokens → the profile default (50000) should apply
+      getCurrentModelSettings: vi.fn().mockReturnValue({}),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+
+    // availableForOutput = 200000 - 0 - 2048 reserve = 197952; requested 50000 → stays 50000
+    const callArgs = (streamLLMPure as any).mock.calls[0]?.[0]
+    expect(callArgs).toBeDefined()
+    expect(callArgs.modelSettings?.maxTokens).toBe(50000)
+  })
+
+  it('clamps a large profile default to a smaller context window', async () => {
+    mockLLMClient = {
+      getModel: vi.fn().mockReturnValue('qwen3.8-27b'),
+    }
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 1000,
+        maxTokens: 8192,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(8192),
+      // No user-configured maxTokens → the profile default (50000) should apply,
+      // but be clamped down to what fits in the small window.
+      getCurrentModelSettings: vi.fn().mockReturnValue({}),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+
+    await runTopLevelAgentLoop(makeConfig(), mockTurnMetrics).catch(() => {})
+
+    // availableForOutput = 8192 - 1000 - 2048 reserve = 5144; requested 50000 → clamped to 5144
+    const callArgs = (streamLLMPure as any).mock.calls[0]?.[0]
+    expect(callArgs).toBeDefined()
+    expect(callArgs.modelSettings?.maxTokens).toBe(5144)
+  })
+
   it('clamps maxTokens when user-configured maxTokens exceeds available space', async () => {
     mockSessionManager = {
       requireSession: vi.fn().mockReturnValue({

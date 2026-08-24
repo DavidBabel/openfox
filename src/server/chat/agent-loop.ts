@@ -11,6 +11,7 @@
 import type { InjectedFile, StatsIdentity, ToolCall, ToolMode, ToolResult } from '../../shared/types.js'
 import type { ServerMessage } from '../../shared/protocol.js'
 import type { LLMClientWithModel } from '../llm/client.js'
+import { getModelProfile } from '../llm/profiles.js'
 import type { LLMToolDefinition } from '../llm/types.js'
 import type { ProviderManager } from '../provider-manager.js'
 import type { SessionManager } from '../session/index.js'
@@ -278,6 +279,13 @@ export async function runTopLevelAgentLoop(
     let assistantMessageStarted = false
 
     for (;;) {
+      // Resolve fresh per attempt: resolveClient() supports provider switches
+      // mid-turn (retries/truncation use a re-resolved client). The same client
+      // backs the profile default (used by the maxTokens fallback sites below)
+      // and the actual LLM call.
+      const attemptClient = resolveClient()
+      const profileDefaultMaxTokens = getModelProfile(attemptClient.getModel()).defaultMaxTokens
+
       const requestMessages = await config.getConversationMessages()
 
       // The format-retry continuation is appended once per round (not on
@@ -344,7 +352,7 @@ export async function runTopLevelAgentLoop(
       }
 
       if (modelSettings) {
-        const requestedMaxTokens = modelSettings.maxTokens ?? 16384
+        const requestedMaxTokens = modelSettings.maxTokens ?? profileDefaultMaxTokens
         modelSettings = { ...modelSettings, maxTokens: Math.min(requestedMaxTokens, availableForOutput) }
       }
 
@@ -356,7 +364,7 @@ export async function runTopLevelAgentLoop(
       const streamGen = streamLLMPure({
         messageId: assistantMsgId,
         systemPrompt: assembledRequest.systemPrompt,
-        llmClient: resolveClient(),
+        llmClient: attemptClient,
         messages: assembledRequest.messages,
         tools: assembledRequest.tools,
         toolChoice: 'auto',
@@ -402,7 +410,7 @@ export async function runTopLevelAgentLoop(
       // retry immediately with a reduced maxTokens instead of waiting out backoff.
       if (isContextLengthError(attemptResult.error) && contextRetryCount < MAX_CONTEXT_LENGTH_RETRIES) {
         contextRetryCount += 1
-        const currentMax = modelSettings?.maxTokens ?? currentMaxTokensOverride ?? 16384
+        const currentMax = modelSettings?.maxTokens ?? currentMaxTokensOverride ?? profileDefaultMaxTokens
         currentMaxTokensOverride = Math.max(256, Math.floor(currentMax / 2))
         continue
       }
@@ -529,7 +537,8 @@ export async function runTopLevelAgentLoop(
     if (!compacting && result.finishReason === 'length' && result.toolCalls.length === 0) {
       if (truncationRetryCount < MAX_TRUNCATION_RETRIES) {
         truncationRetryCount += 1
-        const currentMaxTokens = result.modelParams?.maxTokens ?? 16384
+        const currentMaxTokens =
+          result.modelParams?.maxTokens ?? getModelProfile(resolveClient().getModel()).defaultMaxTokens
         const promptTokens = result.usage.promptTokens
         const contextWindow = sessionManager.getCurrentModelContext(sessionId, config.mode)
         const newMaxTokens = Math.min(

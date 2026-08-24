@@ -66,6 +66,21 @@ const MODEL_PROFILES: Array<{ pattern: string; profile: ModelProfile }> = [
     },
   },
   {
+    pattern: 'qwen3.8',
+    profile: {
+      name: 'Qwen3.8',
+      // Per Qwen3.8-27B model card (thinking mode — the default for coding
+      // sessions): "temperature=1.0, top_p=0.95, top_k=20"
+      temperature: 1.0,
+      topP: 0.95,
+      topK: 20,
+      // Qwen3.8 over-thinks; keep a large output budget (clamped to the
+      // model's context window at request time).
+      defaultMaxTokens: 50000,
+      supportsVision: true,
+    },
+  },
+  {
     pattern: 'qwen3',
     profile: {
       name: 'Qwen3',
