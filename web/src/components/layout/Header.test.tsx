@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 
@@ -115,6 +115,9 @@ vi.mock('../../stores/terminal', () => ({
     toggleOpen: vi.fn(),
     setWorkdir: vi.fn(),
     executeCommand: vi.fn(),
+    createSession: vi.fn(),
+    killSession: vi.fn(),
+    fetchSessions: vi.fn(async () => {}),
   }),
 }))
 
@@ -127,15 +130,68 @@ vi.mock('../../hooks/useWorkdir', () => ({
   useWorkdir: vi.fn(() => '/tmp'),
 }))
 
+vi.mock('../../lib/api', () => ({
+  authFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })),
+}))
+
+vi.mock('../../hooks/useAgents', () => ({
+  useAgents: vi.fn(() => ({ agents: [], refresh: vi.fn() })),
+}))
+
+vi.mock('../../stores/settings', () => ({
+  SETTINGS_KEYS: { GLOBAL_INSTRUCTIONS: 'global_instructions' },
+  useSettingsStore: mockStore({
+    settings: {},
+    loading: {},
+    getSetting: vi.fn(async () => null),
+    getSettings: vi.fn(async () => {}),
+    setSetting: vi.fn(async () => {}),
+  }),
+}))
+
+vi.mock('../../stores/tasks', () => ({
+  useTasksStore: mockStore({
+    tasks: [],
+    settings: { slotLimit: 1, queuePaused: false },
+    counts: { open: 0, todo: 0, inProgress: 0, running: 0, queued: 0, done: 0 },
+    gates: [],
+    loading: false,
+    activeProjectId: null,
+    lastError: null,
+    lastAutoLaunch: null,
+    summaries: {},
+    loadBoard: vi.fn(async () => {}),
+    loadCounts: vi.fn(async () => {}),
+    loadGates: vi.fn(async () => {}),
+    moveTask: vi.fn(async () => ({})),
+    reorderTask: vi.fn(async () => {}),
+    deleteTask: vi.fn(async () => {}),
+    duplicateTask: vi.fn(async () => {}),
+    setSettings: vi.fn(async () => {}),
+    clearAutoLaunch: vi.fn(),
+  }),
+}))
+
+const mountedRoots: Array<{ root: ReturnType<typeof createRoot>; container: HTMLElement }> = []
+
 function render(ui: React.ReactElement): HTMLElement {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
+  mountedRoots.push({ root, container })
   act(() => {
     root.render(ui)
   })
   return container
 }
+
+afterEach(() => {
+  for (const { root } of mountedRoots.splice(0)) {
+    act(() => {
+      root.unmount()
+    })
+  }
+})
 
 describe('Header', () => {
   beforeEach(() => {
@@ -361,5 +417,199 @@ describe('Header', () => {
     expect(setLocation).toHaveBeenCalledWith('/')
     const { exitSplitView } = useSessionStore.getState()
     expect(exitSplitView).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Header mobile menu', () => {
+  beforeEach(async () => {
+    const { useTerminalStore } = await import('../../stores/terminal')
+    useTerminalStore.setState({ isOpen: false })
+    const storage = new Map<string, string>()
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => storage.set(k, String(v)),
+        removeItem: (k: string) => storage.delete(k),
+        clear: () => storage.clear(),
+      },
+      configurable: true,
+      writable: true,
+    })
+  })
+
+  function openMobileMenu(container: HTMLElement) {
+    const trigger = container.querySelector('[aria-label="Open header menu"]')
+    if (!trigger) throw new Error('Mobile menu trigger not found')
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+  }
+
+  function clickMenuItem(label: string) {
+    const menu = document.querySelector('[data-testid="session-dropdown-menu"]')
+    const button = Array.from(menu?.querySelectorAll('button') ?? []).find((b) => b.textContent?.includes(label))
+    if (!button) throw new Error(`Menu item "${label}" not found`)
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+  }
+
+  it('renders a single chevron trigger on mobile', async () => {
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    expect(container.querySelector('[aria-label="Open header menu"]')).toBeTruthy()
+  })
+
+  it('lists all actions on a project session page', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({
+      currentProject: { id: 'p1', name: 'P', workdir: '/tmp' },
+      projects: [{ id: 'p1', name: 'P', workdir: '/tmp' }],
+    })
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/s/s1', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    const menu = document.querySelector('[data-testid="session-dropdown-menu"]')
+    expect(menu).toBeTruthy()
+    expect(menu!.textContent).toContain('Tasks')
+    expect(menu!.textContent).toContain('Terminal')
+    expect(menu!.textContent).toContain('Open Folder')
+    expect(menu!.textContent).toContain('Settings')
+    expect(menu!.textContent).toContain('Logout')
+    expect(menu!.textContent).toContain('Fullscreen')
+  })
+
+  it('shows only global actions outside a project page', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({ currentProject: null, projects: [] })
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    const menu = document.querySelector('[data-testid="session-dropdown-menu"]')
+    expect(menu).toBeTruthy()
+    expect(menu!.textContent).toContain('Settings')
+    expect(menu!.textContent).toContain('Logout')
+    expect(menu!.textContent).toContain('Fullscreen')
+    expect(menu!.textContent).not.toContain('Tasks')
+    expect(menu!.textContent).not.toContain('Terminal')
+    expect(menu!.textContent).not.toContain('Open Folder')
+  })
+
+  it('toggles the terminal from the menu', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({
+      currentProject: { id: 'p1', name: 'P', workdir: '/tmp' },
+      projects: [{ id: 'p1', name: 'P', workdir: '/tmp' }],
+    })
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    clickMenuItem('Terminal')
+    const { useTerminalStore } = await import('../../stores/terminal')
+    const { setOpen } = useTerminalStore.getState()
+    expect(setOpen).toHaveBeenCalledWith(true)
+  })
+
+  it('highlights the terminal item when the terminal is open', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({
+      currentProject: { id: 'p1', name: 'P', workdir: '/tmp' },
+      projects: [{ id: 'p1', name: 'P', workdir: '/tmp' }],
+    })
+    const { useTerminalStore } = await import('../../stores/terminal')
+    useTerminalStore.setState({ isOpen: true })
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    const menu = document.querySelector('[data-testid="session-dropdown-menu"]')
+    const terminalItem = Array.from(menu!.querySelectorAll('button')).find((b) => b.textContent?.includes('Terminal'))
+    expect(terminalItem?.querySelector('svg')?.getAttribute('class')).toContain('text-accent-primary')
+  })
+
+  it('opens settings from the menu', async () => {
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    clickMenuItem('Settings')
+    expect(document.querySelector('[data-global-settings]')).toBeTruthy()
+  })
+
+  it('opens tasks from the menu', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({
+      currentProject: { id: 'p1', name: 'P', workdir: '/tmp' },
+      projects: [{ id: 'p1', name: 'P', workdir: '/tmp' }],
+    })
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    clickMenuItem('Tasks')
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog).toBeTruthy()
+    expect(dialog!.textContent).toContain('Tasks')
+  })
+
+  it('logs out from the menu', async () => {
+    localStorage.setItem('openfox_token', 'abc')
+    const { useLocation } = await import('wouter')
+    const setLocation = vi.fn()
+    vi.mocked(useLocation).mockReturnValue(['/', setLocation])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    clickMenuItem('Logout')
+    expect(localStorage.getItem('openfox_token')).toBeNull()
+    expect(setLocation).toHaveBeenCalledWith('/')
+  })
+
+  it('toggles fullscreen from the menu', async () => {
+    const requestFullscreen = vi.fn()
+    Object.defineProperty(document.documentElement, 'requestFullscreen', {
+      value: requestFullscreen,
+      configurable: true,
+      writable: true,
+    })
+    Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true })
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    clickMenuItem('Fullscreen')
+    expect(requestFullscreen).toHaveBeenCalled()
+  })
+
+  it('shows the running task count badge on the Tasks item', async () => {
+    const { useProjectStore } = await import('../../stores/project')
+    ;(useProjectStore as unknown as MockStore).setState({
+      currentProject: { id: 'p1', name: 'P', workdir: '/tmp' },
+      projects: [{ id: 'p1', name: 'P', workdir: '/tmp' }],
+    })
+    const { useTasksStore } = await import('../../stores/tasks')
+    useTasksStore.setState({ counts: { open: 0, todo: 0, inProgress: 0, running: 3, queued: 0, done: 0 } })
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    openMobileMenu(container)
+    const menu = document.querySelector('[data-testid="session-dropdown-menu"]')
+    const tasksItem = Array.from(menu!.querySelectorAll('button')).find((b) => b.textContent?.includes('Tasks'))
+    expect(tasksItem?.textContent).toContain('3')
   })
 })

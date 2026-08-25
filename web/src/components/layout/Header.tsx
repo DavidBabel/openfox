@@ -9,6 +9,7 @@ import {
   FolderIcon,
   ColumnsIcon,
   XCloseIcon,
+  ChevronDownIcon,
 } from '../shared/icons'
 import { Link, useLocation } from 'wouter'
 import { useSessionStore } from '../../stores/session'
@@ -28,6 +29,7 @@ import { TasksModal } from '../tasks/TasksModal'
 import { useTasksStore } from '../../stores/tasks'
 import { TasksIcon, ArrowRightIcon } from '../shared/icons'
 import { useIsSplit } from '../../lib/splitPersistence'
+import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -98,6 +100,66 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     return () => stopAutoRefresh()
   }, [startAutoRefresh, stopAutoRefresh])
 
+  const mobileMenuItems: DropdownMenuItem[] = []
+  if (isProjectPage) {
+    mobileMenuItems.push({
+      label: (
+        <span className="flex items-center gap-2">
+          Tasks
+          {runningTaskCount > 0 && (
+            <span className="min-w-3.5 h-3.5 px-0.5 rounded-full bg-accent-success text-white text-[9px] font-semibold flex items-center justify-center">
+              {runningTaskCount > 99 ? '99+' : runningTaskCount}
+            </span>
+          )}
+        </span>
+      ),
+      icon: <TasksIcon className="w-4 h-4" />,
+      onClick: () => setTasksModalOpen(true),
+    })
+    mobileMenuItems.push({
+      label: 'Terminal',
+      icon: <TerminalIcon className={`w-4 h-4 ${terminalIsOpen ? 'text-accent-primary' : ''}`} />,
+      onClick: () => setTerminalOpen(!terminalIsOpen),
+    })
+    if (project) {
+      mobileMenuItems.push({
+        label: 'Open Folder',
+        icon: <FolderIcon className="w-4 h-4" />,
+        onClick: () => authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {}),
+      })
+    }
+  }
+  mobileMenuItems.push({
+    label: (
+      <span className="flex items-center gap-2">
+        Settings
+        {updateAvailable && <span className="w-1.5 h-1.5 rounded-full bg-accent-primary" />}
+      </span>
+    ),
+    icon: <SettingsIcon />,
+    onClick: () => setShowSettings(true),
+  })
+  mobileMenuItems.push({
+    label: isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen',
+    icon: isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />,
+    onClick: () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.()
+      } else {
+        document.documentElement.requestFullscreen?.()
+      }
+    },
+  })
+  mobileMenuItems.push({
+    label: 'Logout',
+    icon: <LogoutIcon />,
+    danger: true,
+    onClick: () => {
+      localStorage.removeItem('openfox_token')
+      setLocation('/')
+    },
+  })
+
   return (
     <header className="h-8 bg-secondary border-b border-border flex items-center justify-between px-2">
       <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -156,120 +218,123 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        {!isSplit && (
-          <button
-            onClick={() => {
-              const sid = session?.id
-              if (isSessionPage && sid) {
-                void useSessionStore.getState().openPane(sid, { focus: true })
-              }
-              setLocation('/split-view')
-            }}
-            className="p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
-            title="Open split view"
-            aria-label="Open split view"
-          >
-            <ColumnsIcon className="w-4 h-4" />
-          </button>
-        )}
-
-        {isSplit && (
-          <>
-            <span
-              className="flex items-center gap-1 text-xs text-text-muted px-1.5"
-              title="Split view active"
-              data-testid="split-indicator"
-            >
-              <ColumnsIcon className="w-3.5 h-3.5" />
-              {openSessionCount}
-            </span>
+        <div className="hidden md:flex items-center gap-2">
+          {!isSplit && (
             <button
               onClick={() => {
-                useSessionStore.getState().exitSplitView()
-                setLocation('/')
+                const sid = session?.id
+                if (isSessionPage && sid) {
+                  void useSessionStore.getState().openPane(sid, { focus: true })
+                }
+                setLocation('/split-view')
               }}
               className="p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
-              title="Exit split view"
-              aria-label="Exit split view"
+              title="Open split view"
+              aria-label="Open split view"
             >
-              <XCloseIcon className="w-4 h-4" />
+              <ColumnsIcon className="w-4 h-4" />
             </button>
-          </>
-        )}
+          )}
 
-        {isSessionPage && (
+          {isSplit && (
+            <>
+              <span
+                className="flex items-center gap-1 text-xs text-text-muted px-1.5"
+                title="Split view active"
+                data-testid="split-indicator"
+              >
+                <ColumnsIcon className="w-3.5 h-3.5" />
+                {openSessionCount}
+              </span>
+              <button
+                onClick={() => {
+                  useSessionStore.getState().exitSplitView()
+                  setLocation('/')
+                }}
+                className="p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
+                title="Exit split view"
+                aria-label="Exit split view"
+              >
+                <XCloseIcon className="w-4 h-4" />
+              </button>
+            </>
+          )}
+
+          {isProjectPage && (
+            <button
+              onClick={() => setTasksModalOpen(true)}
+              className="relative p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
+              title="Project tasks"
+              aria-label="Open project tasks"
+            >
+              <TasksIcon className="w-4 h-4" />
+              {runningTaskCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-accent-success text-white text-[9px] font-semibold flex items-center justify-center">
+                  {runningTaskCount > 99 ? '99+' : runningTaskCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {isProjectPage && (
+            <button
+              onClick={() => setTerminalOpen(!terminalIsOpen)}
+              className={`p-2.5 rounded hover:bg-bg-tertiary transition-colors ${
+                terminalIsOpen ? 'text-accent-primary' : 'text-text-muted hover:text-text-primary'
+              }`}
+              title="Toggle terminal (double Ctrl)"
+            >
+              <TerminalIcon />
+            </button>
+          )}
+
+          {isProjectPage && project && (
+            <button
+              onClick={() => authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {})}
+              className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+              title="Open project folder"
+            >
+              <FolderIcon className="w-4 h-4" />
+            </button>
+          )}
+
+          <button
+            onClick={() => setShowSettings(true)}
+            className="relative p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+            title={updateAvailable ? 'Settings — update available' : 'Settings'}
+          >
+            <SettingsIcon />
+            {updateAvailable && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent-primary" />}
+          </button>
+
           <button
             onClick={() => {
-              if (document.fullscreenElement) {
-                document.exitFullscreen?.()
-              } else {
-                document.documentElement.requestFullscreen?.()
-              }
+              localStorage.removeItem('openfox_token')
+              setLocation('/')
             }}
-            className="max-sm:block hidden p-2 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-          >
-            {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-          </button>
-        )}
-
-        {isProjectPage && (
-          <button
-            onClick={() => setTasksModalOpen(true)}
-            className="relative p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
-            title="Project tasks"
-            aria-label="Open project tasks"
-          >
-            <TasksIcon className="w-4 h-4" />
-            {runningTaskCount > 0 && (
-              <span className="absolute top-0.5 right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-accent-success text-white text-[9px] font-semibold flex items-center justify-center">
-                {runningTaskCount > 99 ? '99+' : runningTaskCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {isProjectPage && (
-          <button
-            onClick={() => setTerminalOpen(!terminalIsOpen)}
-            className={`p-2.5 rounded hover:bg-bg-tertiary transition-colors ${
-              terminalIsOpen ? 'text-accent-primary' : 'text-text-muted hover:text-text-primary'
-            }`}
-            title="Toggle terminal (double Ctrl)"
-          >
-            <TerminalIcon />
-          </button>
-        )}
-
-        {isProjectPage && project && (
-          <button
-            onClick={() => authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {})}
             className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-            title="Open project folder"
+            title="Logout"
           >
-            <FolderIcon className="w-4 h-4" />
+            <LogoutIcon />
           </button>
-        )}
+        </div>
 
-        <button
-          onClick={() => setShowSettings(true)}
-          className="relative p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-          title={updateAvailable ? 'Settings — update available' : 'Settings'}
-        >
-          <SettingsIcon />
-          {updateAvailable && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent-primary" />}
-        </button>
-
-        <button
-          onClick={() => {
-            localStorage.removeItem('openfox_token')
-            setLocation('/')
-          }}
-          className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-          title="Logout"
-        >
-          <LogoutIcon />
-        </button>
+        <div className="md:hidden">
+          <DropdownMenu
+            items={mobileMenuItems}
+            align="right"
+            minWidth="200px"
+            trigger={
+              <button
+                className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+                title="Menu"
+                aria-label="Open header menu"
+              >
+                <ChevronDownIcon className="w-4 h-4" />
+              </button>
+            }
+          />
+        </div>
 
         {onCriteriaToggle && isSessionPage && (
           <button
