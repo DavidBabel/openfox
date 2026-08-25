@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { McpManager } from '../mcp/manager.js'
-import { setMcpManagerForTools, resetMcpManagerForTools } from './mcp-config.js'
+import {
+  setMcpManagerForTools,
+  resetMcpManagerForTools,
+  setMcpBootstrapForTools,
+  resetMcpBootstrapForTools,
+} from './mcp-config.js'
 
 const mockSetToolEnabled = vi.fn().mockResolvedValue(undefined)
 
@@ -69,6 +74,7 @@ describe('mcpConfigTool', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetMcpManagerForTools()
+    resetMcpBootstrapForTools()
   })
 
   describe('action: list', () => {
@@ -418,6 +424,67 @@ describe('mcpConfigTool', () => {
         { workdir: '/tmp', sessionId: 's1', sessionManager: mockSessionManager() },
       )
       expect(noEnabled.success).toBe(false)
+    })
+  })
+
+  describe('action: bootstrap', () => {
+    it('returns a ready-to-paste client config for the running server', async () => {
+      setMcpManagerForTools(mockManager)
+      const bootstrapFn = vi.fn(async () => ({
+        name: 'openfox',
+        transport: 'http',
+        url: 'http://127.0.0.1:10469/mcp',
+        headers: { Authorization: 'Bearer tok-abc' },
+      }))
+      setMcpBootstrapForTools(bootstrapFn)
+
+      const { mcpConfigTool } = await import('./mcp-config.js')
+
+      const result = await mcpConfigTool.execute(
+        { action: 'bootstrap' },
+        { workdir: '/tmp', sessionId: 's1', sessionManager: mockSessionManager() },
+      )
+
+      expect(result.success).toBe(true)
+      expect(bootstrapFn).toHaveBeenCalledTimes(1)
+      expect(result.output).toContain('"url": "http://127.0.0.1:10469/mcp"')
+      expect(result.output).toContain('"Authorization": "Bearer tok-abc"')
+      expect(result.output).toContain('"name": "openfox"')
+    })
+
+    it('omits the auth header in local mode', async () => {
+      setMcpManagerForTools(mockManager)
+      setMcpBootstrapForTools(
+        vi.fn(async () => ({
+          name: 'openfox',
+          transport: 'http',
+          url: 'http://127.0.0.1:10469/mcp',
+        })),
+      )
+
+      const { mcpConfigTool } = await import('./mcp-config.js')
+
+      const result = await mcpConfigTool.execute(
+        { action: 'bootstrap' },
+        { workdir: '/tmp', sessionId: 's1', sessionManager: mockSessionManager() },
+      )
+
+      expect(result.success).toBe(true)
+      expect(result.output).not.toContain('Authorization')
+    })
+
+    it('returns an error when no bootstrap source is wired', async () => {
+      setMcpManagerForTools(mockManager)
+
+      const { mcpConfigTool } = await import('./mcp-config.js')
+
+      const result = await mcpConfigTool.execute(
+        { action: 'bootstrap' },
+        { workdir: '/tmp', sessionId: 's1', sessionManager: mockSessionManager() },
+      )
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('bootstrap')
     })
   })
 

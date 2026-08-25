@@ -8,7 +8,7 @@ import { createMcpTools } from '../mcp/tool-adapter.js'
 import { applyMcpServerUpdate } from '../mcp/update-server.js'
 
 interface McpConfigArgs {
-  action: 'list' | 'add' | 'update' | 'remove' | 'toggle-tool'
+  action: 'list' | 'add' | 'update' | 'remove' | 'toggle-tool' | 'bootstrap'
   name?: string
   transport?: 'stdio' | 'http'
   command?: string
@@ -21,10 +21,13 @@ interface McpConfigArgs {
   timeout?: number
 }
 
+export type McpBootstrapProvider = () => Promise<unknown>
+
 let mcpManagerForTools: McpManager | null = null
 let mcpConfigMode: Mode = 'production'
 let mcpConfigPath: string | undefined
 let mcpNotifyChanged: ((sessionId: string) => void) | null = null
+let mcpBootstrapForTools: McpBootstrapProvider | null = null
 
 export function setMcpManagerForTools(manager: McpManager): void {
   mcpManagerForTools = manager
@@ -42,6 +45,14 @@ export function setNotifyMcpServersChanged(fn: (sessionId: string) => void): voi
   mcpNotifyChanged = fn
 }
 
+export function setMcpBootstrapForTools(fn: McpBootstrapProvider): void {
+  mcpBootstrapForTools = fn
+}
+
+export function resetMcpBootstrapForTools(): void {
+  mcpBootstrapForTools = null
+}
+
 export function resetMcpManagerForTools(): void {
   mcpManagerForTools = null
   mcpNotifyChanged = null
@@ -54,15 +65,15 @@ export const mcpConfigTool: Tool = createTool<McpConfigArgs>(
     function: {
       name: 'mcp_config',
       description:
-        'Configure MCP servers (Model Context Protocol). Actions: list (show all servers and tools), add (add a server), update (modify an existing server — all fields are optional and merged with the current config, transport-incompatible fields are cleared on transport change), remove (delete a server), toggle-tool (enable/disable a tool). Use this when the user asks to add, remove, update, or configure MCP servers or tools.',
+        'Configure MCP servers (Model Context Protocol). Actions: list (show all servers and tools), add (add a server), update (modify an existing server — all fields are optional and merged with the current config, transport-incompatible fields are cleared on transport change), remove (delete a server), toggle-tool (enable/disable a tool), bootstrap (get a ready-to-paste client config for this OpenFox server itself, so the session can connect to it as an MCP client). Use this when the user asks to add, remove, update, or configure MCP servers or tools.',
       parameters: {
         type: 'object',
         properties: {
           action: {
             type: 'string',
-            enum: ['list', 'add', 'update', 'remove', 'toggle-tool'],
+            enum: ['list', 'add', 'update', 'remove', 'toggle-tool', 'bootstrap'],
             description:
-              'Action: list (show servers), add (add new server), update (modify existing server), remove (delete a server), toggle-tool (enable/disable a tool)',
+              'Action: list (show servers), add (add new server), update (modify existing server), remove (delete a server), toggle-tool (enable/disable a tool), bootstrap (client config for this server)',
           },
           name: {
             type: 'string',
@@ -116,11 +127,19 @@ export const mcpConfigTool: Tool = createTool<McpConfigArgs>(
   async (args, context, helpers) => {
     const actionError = validateActionWithPermission(
       args.action,
-      ['list', 'add', 'update', 'remove', 'toggle-tool'],
+      ['list', 'add', 'update', 'remove', 'toggle-tool', 'bootstrap'],
       'mcp_config',
       context.permittedActions,
     )
     if (actionError) return actionError
+
+    if (args.action === 'bootstrap') {
+      if (!mcpBootstrapForTools) {
+        return helpers.error('MCP bootstrap is not available for this server')
+      }
+      const config = await mcpBootstrapForTools()
+      return helpers.success(JSON.stringify(config, null, 2))
+    }
 
     if (!mcpManagerForTools) {
       return helpers.error('MCP manager not available')

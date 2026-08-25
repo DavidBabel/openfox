@@ -21,6 +21,7 @@ Commands:
   provider remove  Remove a provider
   service          Manage the systemd service (install, start, stop, status, logs, uninstall)
   pwa              Manage the PWA installation (install, uninstall, launch, update, status)
+  mcp              Print a paste-ready MCP client config for this server (asks for the password if set)
   install          Install a persistent OpenFox launcher (use --check to inspect)
   update           Update OpenFox to the latest version
 
@@ -150,6 +151,7 @@ export async function runCli(options: { mode: Mode }): Promise<void> {
   const { values, positionals } = parseArgs({
     options: {
       port: { type: 'string', short: 'p' },
+      password: { type: 'string' },
       'no-browser': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
@@ -212,6 +214,14 @@ export async function runCli(options: { mode: Mode }): Promise<void> {
       } else {
         await runPwaCommand(mode, subcommand)
       }
+      break
+    }
+    case 'mcp': {
+      const { runMcpCommand } = await import('./mcp.js')
+      const mcpOptions: { password?: string; port?: number } = {}
+      if (values.password) mcpOptions.password = values.password
+      if (values.port) mcpOptions.port = parseInt(values.port)
+      await runMcpCommand(mode, mcpOptions)
       break
     }
     case 'install': {

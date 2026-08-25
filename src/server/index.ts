@@ -10,7 +10,11 @@ import type { Config, ModelConfig, ProviderBackend } from '../shared/types.js'
 import type { ServerHandle } from './context.js'
 import type { VisionBackend } from './llm/vision-fallback.js'
 import { initDatabase } from './db/index.js'
-import { initEventStore } from './events/index.js'
+import { getProject, deleteProject } from './db/projects.js'
+import { initEventStore, getEventStore, combineEventsWithSnapshot } from './events/index.js'
+import { buildMessagesFromStoredEvents } from './events/folding.js'
+import { provideAnswer, getPendingQuestionsForSession } from './tools/ask.js'
+import { providePathConfirmation, getPendingConfirmationsBySession } from './tools/path-security.js'
 import './llm/proxy.js'
 import { detectModel, getLlmStatus, getBackendDisplayName } from './llm/index.js'
 import { buildModelsUrl } from './llm/url-utils.js'
@@ -26,6 +30,7 @@ import {
   setMcpConfigMode,
   setMcpConfigPath,
   setNotifyMcpServersChanged,
+  setMcpBootstrapForTools,
 } from './tools/mcp-config.js'
 import { getSessionDisabledServers, setSessionDisabledServers } from './mcp/session-overrides.js'
 import { setMcpOAuthStoreMode, setMcpOAuthStorePath } from './mcp/oauth-store.js'
@@ -41,6 +46,10 @@ import { createCommandRoutes } from './routes/commands.js'
 import { createAgentRoutes } from './routes/agents.js'
 import { loadAllAgentsDefault, getTopLevelAgents } from './agents/registry.js'
 import { createWorkflowRoutes } from './routes/workflows.js'
+import { listAvailableWorkflows } from './workflows/registry.js'
+import { createOpenFoxMcpRouter, extractSessionToken } from './mcp/server/endpoint.js'
+import { buildOpenFoxMcpBootstrap } from './mcp/server/bootstrap.js'
+import type { OpenFoxMcpToolDeps } from './mcp/server/types.js'
 import { createDevServerRoutes } from './routes/dev-server.js'
 import { createWorkspaceConfigRoutes } from './routes/workspace-config.js'
 import { createTerminalRoutes } from './routes/terminals.js'
@@ -64,6 +73,7 @@ import {
   verifyPassword,
   isValidToken,
   tokenFromPassword,
+  currentSessionToken,
 } from './auth.js'
 import { detectWsl, type WslInfo } from './utils/wsl.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -99,17 +109,12 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     payload: import('../shared/protocol.js').TasksUpdatePayload,
   ) => void = () => {}
 
-  // Deferred workflow launcher for slash-workflow tasks. Same rationale: the
-  // launcher needs the WebSocket broadcaster + LLM client, which only exist
-  // after createWebSocketServer below.
+  // Deferred workflow launcher for slash-workflow tasks and the MCP server.
+  // Same rationale: the launcher needs the WebSocket broadcaster + LLM
+  // client, which only exist after createWebSocketServer below.
   let deferTasksLaunchWorkflow: (
     sessionId: string,
-    launch: {
-      workflowId: string
-      params?: Record<string, string>
-      scope?: import('../shared/types.js').WorkflowLaunchScope
-      attachments?: import('../shared/types.js').Attachment[]
-    },
+    launch: import('./runner/launch.js').WorkflowLaunchPayload,
   ) => void = () => {}
 
   // Get config directory for loading user items
@@ -267,6 +272,29 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   app.use('/api', authMiddleware)
   app.use(express.json({ limit: '75mb' }))
+
+  // Streamable HTTP MCP endpoint. Mounted before the SPA catch-all so /mcp is
+  // never swallowed; tool deps are resolved lazily per request and filled in
+  // once the WebSocket/queue plumbing exists below (requests only flow after start()).
+  let mcpToolDeps: OpenFoxMcpToolDeps | null = null
+  const mcpAuth = {
+    isAuthRequired: (): boolean => {
+      const cfg = getAuthConfig()
+      return cfg?.strategy === 'network' && cfg.encryptedPassword != null
+    },
+    isAuthorized: async (req: express.Request): Promise<boolean> => {
+      const token = extractSessionToken(req)
+      return token ? isValidToken(token) : false
+    },
+  }
+  app.use(
+    '/mcp',
+    createOpenFoxMcpRouter({
+      resolveDeps: () => mcpToolDeps,
+      isAuthRequired: mcpAuth.isAuthRequired,
+      isAuthorized: mcpAuth.isAuthorized,
+    }),
+  )
 
   // Health check (public)
   app.get('/api/health', (_req, res) => {
@@ -3428,9 +3456,14 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         broadcastForSession: wssExports.broadcastForSession,
       },
       {
-        workflowId: launch.workflowId,
+        ...(launch.workflowId ? { workflowId: launch.workflowId } : {}),
         ...(launch.params && Object.keys(launch.params).length > 0 ? { params: launch.params } : {}),
+        ...(launch.subGroup ? { subGroup: launch.subGroup } : {}),
         ...(launch.scope ? { scope: launch.scope } : {}),
+        ...(launch.resumeFrom ? { resumeFrom: launch.resumeFrom } : {}),
+        ...(launch.stepOutput ? { stepOutput: launch.stepOutput } : {}),
+        ...(launch.userChoice ? { userChoice: launch.userChoice } : {}),
+        ...(launch.content ? { content: launch.content } : {}),
         ...(launch.attachments && launch.attachments.length > 0 ? { attachments: launch.attachments } : {}),
       },
     )
@@ -3470,6 +3503,67 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   // Note: /stop endpoint uses abortSession below
 
+  mcpToolDeps = {
+    sessionManager,
+    listProjects: () => listProjects(),
+    createProject: async (name, workdir) => {
+      const { createDirectoryWithGit } = await import('./utils/project-creator.js')
+      return createDirectoryWithGit(name, workdir)
+    },
+    deleteProject: (projectId) => {
+      const project = getProject(projectId)
+      if (!project) return false
+      deleteProject(projectId)
+      return true
+    },
+    listWorkflows: (projectDir) => listAvailableWorkflows(getGlobalConfigDir(config.mode ?? 'production'), projectDir),
+    topLevelAgentIds: async (workdir) => {
+      const agents = await loadAllAgentsDefault(workdir)
+      return getTopLevelAgents(agents).map((a) => a.metadata.id)
+    },
+    launchWorkflow: (sessionId, launch) => deferTasksLaunchWorkflow(sessionId, launch),
+    stopSession: (sessionId) => {
+      void (async () => {
+        const { stopSessionExecution } = await import('./session/chat-handler.js')
+        const { cancelQuestionsForSession, cancelPathConfirmationsForSession } = await import('./tools/index.js')
+        sessionManager.clearMessageQueue(sessionId)
+        stopSessionExecution(sessionId, sessionManager)
+        abortSession(sessionId)
+        cancelQuestionsForSession(sessionId, 'Session stopped by user')
+        cancelPathConfirmationsForSession(sessionId, 'Session stopped by user')
+        getEventStore().append(sessionId, { type: 'running.changed', data: { isRunning: false } })
+      })().catch((error) => {
+        logger.error(`MCP stopSession failed for ${sessionId}`, {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    },
+    stopWorkflow: (sessionId) => abortRunnerRun(sessionId),
+    answerQuestion: (callId, answer, skip) => provideAnswer(callId, answer, skip),
+    pendingQuestions: (sessionId) => getPendingQuestionsForSession(sessionId),
+    confirmPath: (callId, approved, alwaysAllow) => providePathConfirmation(callId, approved, alwaysAllow).found,
+    pendingConfirmations: (sessionId) => getPendingConfirmationsBySession()[sessionId] ?? [],
+    setMetadataEntries: (sessionId, key, entries) => sessionManager.setMetadataEntries(sessionId, key, entries),
+    recentMessages: (sessionId, limit) => {
+      const eventStore = getEventStore()
+      const { snapshot, events } = eventStore.getEventsSinceSnapshot(sessionId)
+      const combined = combineEventsWithSnapshot(sessionId, snapshot, events)
+      return buildMessagesFromStoredEvents(combined, Math.max(1, Math.min(limit, 50)))
+    },
+  }
+
+  let mcpActualPort: number | null = null
+  setMcpBootstrapForTools(async () => {
+    const authRequired = mcpAuth.isAuthRequired()
+    const sessionToken = authRequired ? await currentSessionToken() : null
+    return buildOpenFoxMcpBootstrap({
+      host: config.server.host ?? '127.0.0.1',
+      port: mcpActualPort ?? config.server.port,
+      authRequired,
+      sessionToken,
+    })
+  })
+
   // Return the handle with start/close methods
   return {
     httpServer,
@@ -3484,9 +3578,13 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
           const addr = httpServer.address()
           const actualPort = typeof addr === 'object' && addr ? addr.port : listenPort
           setMcpOAuthServerPort(actualPort)
+          mcpActualPort = actualPort
           const client = getLLMClient()
           logger.info(`OpenFox server running at http://${host}:${actualPort}`)
           logger.info(`WebSocket available at ws://${host}:${actualPort}/ws`)
+          logger.info(
+            `MCP endpoint available at http://${host}:${actualPort}/mcp — run 'openfox mcp' for a paste-ready client config`,
+          )
           logger.info(`LLM backend: ${client.getBackend()}, model: ${client.getModel()}, url: ${config.llm.baseUrl}`)
           resolve({ port: actualPort })
         })

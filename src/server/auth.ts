@@ -137,6 +137,28 @@ export async function tokenFromPassword(password: string): Promise<string> {
   return sign
 }
 
+/**
+ * Compute a fresh valid session token for the currently configured password,
+ * or null when no password is configured (local mode). Used by the MCP
+ * self-bootstrap so a session can connect to this very server.
+ */
+export async function currentSessionToken(): Promise<string | null> {
+  const auth = getAuthConfig()
+  if (!auth?.encryptedPassword) return null
+
+  const privateKey = await loadPrivateKey()
+
+  try {
+    const password = privateDecrypt(
+      { key: privateKey, padding: 1 },
+      Buffer.from(auth.encryptedPassword, 'base64'),
+    ).toString()
+    return await tokenFromPassword(password)
+  } catch {
+    return null
+  }
+}
+
 export async function isValidToken(token: string): Promise<boolean> {
   if (!cachedAuth?.encryptedPassword) return false
 
