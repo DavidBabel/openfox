@@ -36,7 +36,7 @@ function makeDeps(): OpenFoxMcpToolDeps {
     listWorkflows: vi.fn(async () => []),
     launchWorkflow: vi.fn(),
     stopSession: vi.fn(),
-    stopWorkflow: vi.fn(() => false),
+    stopWorkflow: vi.fn(() => null),
     answerQuestion: vi.fn(() => false),
     pendingQuestions: vi.fn(() => []),
     confirmPath: vi.fn(() => false),

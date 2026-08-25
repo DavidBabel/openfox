@@ -220,11 +220,11 @@ describe('MCP server endpoint', () => {
     expect(rewait.json.settled).toBe(true)
     expect(rewait.json.outcome).toBe(settled.json.outcome)
 
-    // 11. A stop on a settled session reports no active run; the abort of a
-    // live run is covered deterministically in the unit tests
-    const stopped = await call('openfox_stop_workflow', { sessionId })
-    expect(stopped.json.stopped).toBe(false)
-    expect(stopped.json).toEqual({ stopped: false })
+    // 11. A stop on a settled session reports no active run with a clear
+    // reason; the abort of a live run is covered deterministically in the unit tests
+    const stoppedRaw = await client.callTool({ name: 'openfox_stop_workflow', arguments: { sessionId } })
+    expect(stoppedRaw.isError).toBe(true)
+    expect(mcpText(stoppedRaw)).toContain('No active workflow run to stop')
 
     await client.close()
   }, 120000)

@@ -28,8 +28,8 @@ export interface OpenFoxMcpToolDeps {
   launchWorkflow(sessionId: string, payload: WorkflowLaunchPayload): void
   /** Full session stop: drain queue, abort execution, cancel pending interactions. */
   stopSession(sessionId: string): void
-  /** Abort the active workflow run only (task/MCP-launched runs). */
-  stopWorkflow(sessionId: string): boolean
+  /** Abort the active workflow run only (task/MCP-launched runs): a live run is aborted, a paused (waiting) user-step execution is cancelled. Returns what was stopped, or null when nothing is active. */
+  stopWorkflow(sessionId: string): { aborted: 'running' | 'paused' } | null
   answerQuestion(callId: string, answer: string, skip?: boolean): boolean
   pendingQuestions(sessionId: string): PendingQuestionPayload[]
   confirmPath(callId: string, approved: boolean, alwaysAllow?: boolean): boolean

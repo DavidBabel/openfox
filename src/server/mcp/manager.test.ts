@@ -312,6 +312,26 @@ describe('McpManager', () => {
       expect(result.error).toContain('not found')
     })
 
+    it('should surface isError results as the error field, not output', async () => {
+      mockClientInstance.callTool.mockImplementation(async () => ({
+        content: [{ type: 'text', text: '{"error": "Something broke"}' }],
+        isError: true,
+      }))
+      try {
+        await manager.addServer('err-server', { transport: 'stdio', command: 'node' })
+
+        const result = await manager.callTool('err-server', 'get_weather', {})
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('{"error": "Something broke"}')
+        expect(result.output).toBeUndefined()
+      } finally {
+        mockClientInstance.callTool.mockImplementation(async () => ({
+          content: [{ type: 'text', text: 'Sunny, 72°F' }],
+          isError: false,
+        }))
+      }
+    })
+
     it('should time out if the tool call takes longer than the configured timeout', async () => {
       mockClientInstance.callTool.mockImplementation(
         () =>

@@ -311,14 +311,16 @@ export function createOpenFoxMcpTools(deps: OpenFoxMcpToolDeps): OpenFoxMcpTool[
       inputSchema: {
         projectId: z.string().optional().describe('Scope the listing to a project'),
         limit: z.number().int().positive().optional().describe('Maximum sessions to return (default 20)'),
+        offset: z.number().int().nonnegative().optional().describe('Number of sessions to skip (default 0)'),
       },
       handler: async (args) => {
         const limit = typeof args['limit'] === 'number' ? args['limit'] : 20
+        const offset = typeof args['offset'] === 'number' ? args['offset'] : 0
         const projectId = args['projectId']
         const result =
           typeof projectId === 'string' && projectId.length > 0
-            ? sessionManager.listSessionsByProject(projectId, limit, 0)
-            : sessionManager.listSessionsLimited(limit, 0)
+            ? sessionManager.listSessionsByProject(projectId, limit, offset)
+            : sessionManager.listSessionsLimited(limit, offset)
 
         const sessions = result.sessions.map((s) => ({
           id: s.id,
@@ -646,6 +648,14 @@ export function createOpenFoxMcpTools(deps: OpenFoxMcpToolDeps): OpenFoxMcpTool[
           ...(typeof args['content'] === 'string' ? { content: args['content'] as string } : {}),
         }
 
+        if (payload.workflowId && !payload.resumeFrom) {
+          const workflows = await deps.listWorkflows(session.workdir)
+          const known = workflows.some((w) => w.id === payload.workflowId)
+          if (!known) {
+            return fail(`Workflow "${payload.workflowId}" not found for project ${session.workdir}`)
+          }
+        }
+
         if (session.isRunning) {
           let fullContent = payload.content ?? ''
           if (payload.workflowId) {
@@ -712,7 +722,7 @@ export function createOpenFoxMcpTools(deps: OpenFoxMcpToolDeps): OpenFoxMcpTool[
     {
       name: 'openfox_stop_workflow',
       description:
-        'Abort the active workflow run of a session (task/MCP-launched runs). Does not stop plain chat turns.',
+        'Abort the active workflow run of a session (task/MCP-launched runs): aborts a live run or cancels a paused user-step execution, and errors when nothing is active. Does not stop plain chat turns.',
       inputSchema: {
         sessionId: z.string().describe('Session whose workflow run should be aborted'),
       },
@@ -720,7 +730,8 @@ export function createOpenFoxMcpTools(deps: OpenFoxMcpToolDeps): OpenFoxMcpTool[
         const check = requireSession(args['sessionId'])
         if (!check.ok) return fail(check.error)
         const stopped = deps.stopWorkflow(check.session.id)
-        return ok({ stopped })
+        if (!stopped) return fail('No active workflow run to stop')
+        return ok({ stopped: true, aborted: stopped.aborted })
       },
     },
     {

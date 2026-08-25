@@ -277,7 +277,11 @@ export class McpManager {
       }
       const content = result.content as Array<{ type: string; text?: string }>
       const textParts = content.filter((c) => c.type === 'text').map((c) => c.text)
-      return { success: !result.isError, output: textParts.join('\n') }
+      const text = textParts.join('\n')
+      if (result.isError) {
+        return { success: false, error: text || 'MCP tool call failed' }
+      }
+      return { success: true, output: text }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }
     }

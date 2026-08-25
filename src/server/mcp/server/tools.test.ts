@@ -99,7 +99,7 @@ function makeDeps(overrides: Partial<OpenFoxMcpToolDeps> = {}): OpenFoxMcpToolDe
     ]),
     launchWorkflow: vi.fn(),
     stopSession: vi.fn(),
-    stopWorkflow: vi.fn(() => true),
+    stopWorkflow: vi.fn(() => ({ aborted: 'running' as const })),
     answerQuestion: vi.fn(() => true),
     pendingQuestions: vi.fn(() => []),
     confirmPath: vi.fn(() => true),
@@ -262,6 +262,18 @@ describe('openfx MCP tools', () => {
       const deps = makeDeps()
       await call(createOpenFoxMcpTools(deps), 'openfox_sessions', {})
       expect(deps.sessionManager.listSessionsLimited).toHaveBeenCalledWith(20, 0)
+    })
+
+    it('forwards an offset for project-scoped pagination', async () => {
+      const deps = makeDeps()
+      await call(createOpenFoxMcpTools(deps), 'openfox_sessions', { projectId: 'p-1', limit: 5, offset: 2 })
+      expect(deps.sessionManager.listSessionsByProject).toHaveBeenCalledWith('p-1', 5, 2)
+    })
+
+    it('forwards an offset for global pagination', async () => {
+      const deps = makeDeps()
+      await call(createOpenFoxMcpTools(deps), 'openfox_sessions', { limit: 10, offset: 3 })
+      expect(deps.sessionManager.listSessionsLimited).toHaveBeenCalledWith(10, 3)
     })
 
     it('errors for unknown sessions in status lookups', async () => {
@@ -993,6 +1005,30 @@ describe('openfx MCP tools', () => {
       expect(json(result).launched).toBe(true)
     })
 
+    it('rejects an unknown workflowId synchronously without launching', async () => {
+      const deps = makeDeps()
+      const result = await call(createOpenFoxMcpTools(deps), 'openfox_launch_workflow', {
+        sessionId: 's-1',
+        workflowId: 'does-not-exist',
+      })
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('does-not-exist')
+      expect(deps.listWorkflows).toHaveBeenCalledWith('/tmp/proj')
+      expect(deps.launchWorkflow).not.toHaveBeenCalled()
+    })
+
+    it('resolves workflows across scopes like the orchestrator fallback', async () => {
+      const deps = makeDeps()
+      const result = await call(createOpenFoxMcpTools(deps), 'openfox_launch_workflow', {
+        sessionId: 's-1',
+        workflowId: 'custom',
+        scope: 'builtin',
+      })
+      expect(result.isError).not.toBe(true)
+      expect(json(result).launched).toBe(true)
+      expect(deps.launchWorkflow).toHaveBeenCalledWith('s-1', { workflowId: 'custom', scope: 'builtin' })
+    })
+
     it('resets a blocked phase before launching', async () => {
       const deps = makeDeps({
         sessionManager: {
@@ -1187,11 +1223,24 @@ describe('openfx MCP tools', () => {
   })
 
   describe('openfox_stop_workflow', () => {
-    it('reports whether a run was aborted', async () => {
+    it('reports a running run was aborted', async () => {
       const deps = makeDeps()
       const result = await call(createOpenFoxMcpTools(deps), 'openfox_stop_workflow', { sessionId: 's-1' })
       expect(deps.stopWorkflow).toHaveBeenCalledWith('s-1')
-      expect(json(result).stopped).toBe(true)
+      expect(json(result)).toEqual({ stopped: true, aborted: 'running' })
+    })
+
+    it('reports a paused workflow was cancelled', async () => {
+      const deps = makeDeps({ stopWorkflow: vi.fn(() => ({ aborted: 'paused' as const })) })
+      const result = await call(createOpenFoxMcpTools(deps), 'openfox_stop_workflow', { sessionId: 's-1' })
+      expect(json(result)).toEqual({ stopped: true, aborted: 'paused' })
+    })
+
+    it('fails with a reason when there is nothing to stop', async () => {
+      const deps = makeDeps({ stopWorkflow: vi.fn(() => null) })
+      const result = await call(createOpenFoxMcpTools(deps), 'openfox_stop_workflow', { sessionId: 's-1' })
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('No active workflow')
     })
 
     it('errors for unknown sessions', async () => {

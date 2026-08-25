@@ -3538,7 +3538,22 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         })
       })
     },
-    stopWorkflow: (sessionId) => abortRunnerRun(sessionId),
+    stopWorkflow: (sessionId) => {
+      const runningAborted = abortRunnerRun(sessionId)
+      if (runningAborted) return { aborted: 'running' }
+      const execution = sessionManager.getActiveWorkflowExecution(sessionId)
+      if (execution && execution.status === 'waiting') {
+        sessionManager.cancelWorkflow(
+          sessionId,
+          execution.id,
+          execution.workflowId,
+          execution.workflowName,
+          execution.workflowColor,
+        )
+        return { aborted: 'paused' }
+      }
+      return null
+    },
     answerQuestion: (callId, answer, skip) => provideAnswer(callId, answer, skip),
     pendingQuestions: (sessionId) => getPendingQuestionsForSession(sessionId),
     confirmPath: (callId, approved, alwaysAllow) => providePathConfirmation(callId, approved, alwaysAllow).found,
