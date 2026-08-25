@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.129 - 2026-08-25
+
+### Features
+
+- **Live AI stats in the right sidebar** — time, prefill and generation speed update live while a turn runs
+
+### Bug Fixes
+
+- **Strict providers no longer reject requests** — `top_p` is omitted from the request when unset instead of sent as undefined
+- **project_tasks tool works on strict providers** — the attachments schema now includes the required items field
+
 ## 2.0.128 - 2026-08-24
 
 ### Enhancements
