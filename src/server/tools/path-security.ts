@@ -601,15 +601,70 @@ export function resolveRelativeTraversals(command: string, workdir: string): str
 }
 
 /**
+ * Blank out heredoc bodies (`<<DELIM` … `DELIM`) so path extraction ignores
+ * literal file content written by a command. Heredoc bodies are stdin data,
+ * not shell commands: relative `..`, absolute, and sensitive paths inside
+ * them must never trigger a path confirmation. Handles unquoted (`<<EOF`),
+ * quoted (`<<'EOF'`, `<<"EOF"`), tab-stripped (`<<-EOF`), whitespace-separated
+ * (`<< 'EOF'`) delimiters, and multiple heredocs in one command. Body lines
+ * are replaced with spaces (newlines preserved) so line-based logic still
+ * sees the original line structure. Unterminated heredocs are left untouched.
+ */
+function maskHeredocs(command: string): string {
+  if (!command.includes('<<')) return command
+
+  const lines = command.split('\n')
+  const starts: Array<{ line: number; delimiter: string; stripTabs: boolean }> = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i]!.match(/<<\s*(-?)(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/)
+    if (m) {
+      starts.push({ line: i, delimiter: m[3]!, stripTabs: m[1] === '-' })
+    }
+  }
+
+  // Mask the [bodyStart, closeLine) span of each heredoc whose closing
+  // delimiter exists later. A `<<` found inside an already-masked body is
+  // literal data, not another heredoc.
+  const maskSpans: Array<[number, number]> = []
+  let searchFrom = 0
+  for (const start of starts) {
+    if (start.line < searchFrom) continue
+    let end = -1
+    for (let j = start.line + 1; j < lines.length; j++) {
+      const candidate = start.stripTabs ? lines[j]!.replace(/^\t+/, '') : lines[j]!
+      if (candidate === start.delimiter) {
+        end = j
+        break
+      }
+    }
+    if (end !== -1) {
+      maskSpans.push([start.line + 1, end])
+      searchFrom = end + 1
+    }
+  }
+
+  if (maskSpans.length === 0) return command
+
+  return lines
+    .map((line, idx) => (maskSpans.some(([s, e]) => idx >= s && idx < e) ? ' '.repeat(line.length) : line))
+    .join('\n')
+}
+
+/**
  * Mask non-path content in a shell command so path extraction ignores it:
- * URL schemes, sed substitution patterns, sed/awk/perl/ruby regex addresses,
- * and git commit -m/--message bodies (which may contain slashes that look
- * like absolute paths).
+ * heredoc bodies, URL schemes, sed substitution patterns, sed/awk/perl/ruby
+ * regex addresses, and git commit -m/--message bodies (which may contain
+ * slashes that look like absolute paths).
  */
 function maskCommandForPathScan(command: string): string {
+  // Blank out heredoc bodies first so none of the masks below ever see the
+  // literal file/script content they are fed (e.g. a `../` import or an
+  // absolute path written into a file via `cat > file <<'EOF'`).
+  let sanitized = maskHeredocs(command)
+
   // Remove URL schemes to avoid false positives
   // Replace http://, https://, ftp:// with markers
-  let sanitized = command.replace(/https?:\/\/[^\s'"]+/g, ' __URL__ ').replace(/ftp:\/\/[^\s'"]+/g, ' __URL__ ')
+  sanitized = sanitized.replace(/https?:\/\/[^\s'"]+/g, ' __URL__ ').replace(/ftp:\/\/[^\s'"]+/g, ' __URL__ ')
 
   // Strip sed substitution patterns to avoid false positives from regex replacements
   // Handles: s/pattern/replacement/flags and s|pattern|replacement|flags etc.
@@ -786,6 +841,9 @@ export function extractSensitivePathsFromCommand(command: string): string[] {
   }
 
   const paths: string[] = []
+  // Heredoc bodies are literal data (e.g. `.env` written into a script), not
+  // files the command touches — skip them before scanning.
+  const scanCommand = maskHeredocs(command)
 
   // Pattern to match potential file paths (relative or in subdirectories)
   // Matches: .env, config/.env, "./file", 'file', paths with common extensions
@@ -794,7 +852,7 @@ export function extractSensitivePathsFromCommand(command: string): string[] {
   // Pattern 1: Quoted strings that might contain sensitive paths
   const quotedPattern = /["']([^"']+)["']/g
   let match
-  while ((match = quotedPattern.exec(command)) !== null) {
+  while ((match = quotedPattern.exec(scanCommand)) !== null) {
     const content = match[1]!
     if (isSensitivePath(content)) {
       paths.push(content)
@@ -804,7 +862,7 @@ export function extractSensitivePathsFromCommand(command: string): string[] {
   // Pattern 2: Unquoted paths - look for tokens that could be file paths
   // Split by common shell delimiters and check each token
   // Remove quoted sections first to avoid double-matching
-  const unquoted = command
+  const unquoted = scanCommand
     .replace(/["'][^"']*["']/g, ' ') // Remove quoted strings
     .replace(/[|&;><]/g, ' ') // Replace shell operators with spaces
 

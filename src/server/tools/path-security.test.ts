@@ -1604,6 +1604,30 @@ describe('path-security', () => {
       expect(result.deniedPaths).toEqual([])
       expect(result.sensitivePaths).toEqual([])
     })
+
+    it('does not extract absolute paths from heredoc bodies', () => {
+      const command = [
+        "cat > /tmp/script.sh <<'EOF'",
+        'rm /etc/passwd /home/conrad/secrets.key',
+        'EOF',
+        'npx tsx /tmp/script.sh',
+      ].join('\n')
+
+      const paths = extractAbsolutePathsFromCommand(command)
+
+      // Legitimate path on the command line itself is still extracted
+      expect(paths).toContain('/tmp/script.sh')
+      // Paths that only appear inside the heredoc body are not
+      expect(paths).not.toContain('/etc/passwd')
+      expect(paths).not.toContain('/home/conrad/secrets.key')
+    })
+
+    it('does not extract sensitive file paths from heredoc bodies', () => {
+      const command = ["cat > /tmp/script.sh <<'EOF'", 'export FOO=secrets.key', '.env', 'EOF'].join('\n')
+
+      const sensitivePaths = extractSensitivePathsFromCommand(command)
+      expect(sensitivePaths).toEqual([])
+    })
   })
 
   // ===========================================================================
@@ -2320,6 +2344,62 @@ describe('resolveRelativeTraversals', () => {
     it('returns empty for commands with no traversals', () => {
       expect(resolveRelativeTraversals('npx vite build --outDir dist/web', ws)).toEqual([])
       expect(resolveRelativeTraversals('', ws)).toEqual([])
+    })
+  })
+
+  describe('heredoc handling', () => {
+    it('does not extract .. traversals from heredoc bodies', () => {
+      const command = [
+        "cd /home/conrad/dev/openfox && cat > tmp/extract-test.ts <<'EOF'",
+        'import {',
+        '  extractAbsolutePathsFromCommand,',
+        "} from '../src/server/tools/path-security.js'",
+        'EOF',
+        'npx tsx tmp/extract-test.ts',
+      ].join('\n')
+      const paths = resolveRelativeTraversals(command, ws)
+      expect(paths).toEqual([])
+    })
+
+    it('does not extract .. from quoted, tab-stripped, or multiple heredocs', () => {
+      const command = [
+        "cat <<'A' > /tmp/one",
+        'cd ../outside && echo hi',
+        'A',
+        'cat <<-B > /tmp/two',
+        '\tcd ../../x',
+        'B',
+        'cat <<EOF',
+        'ls /../tmp',
+        'EOF',
+      ].join('\n')
+      const paths = resolveRelativeTraversals(command, ws)
+      expect(paths).toEqual([])
+    })
+
+    it('still resolves real traversals outside heredocs', () => {
+      const command = ["cat > /tmp/x <<'EOF'", 'cd ../inside-heredoc', 'EOF', 'cd web && cat ../dist/x'].join('\n')
+      const paths = resolveRelativeTraversals(command, ws)
+      expect(paths).toEqual([resolve(join(ws, 'web'), '../dist/x')])
+    })
+
+    it('does not trigger path confirmation for a heredoc writing a file with a ../ import', async () => {
+      const command = [
+        `cd ${ws} && cat > tmp/extract-test.ts <<'EOF'`,
+        "import { extractAbsolutePathsFromCommand } from '../src/server/tools/path-security.js'",
+        'EOF',
+        'npx tsx tmp/extract-test.ts',
+      ].join('\n')
+      const pathsToCheck = [
+        ws,
+        ...extractAbsolutePathsFromCommand(command),
+        ...resolveRelativeTraversals(command, ws),
+        ...extractSensitivePathsFromCommand(command),
+      ]
+      const result = await checkPathsAccess(pathsToCheck, ws)
+      expect(result.needsConfirmation).toBe(false)
+      expect(result.deniedPaths).toEqual([])
+      expect(result.sensitivePaths).toEqual([])
     })
   })
 })
