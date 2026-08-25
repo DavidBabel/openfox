@@ -1234,7 +1234,9 @@ export class SessionManager {
     const state = getSessionState(sessionId, this.getCurrentModelContext(sessionId))
     const maxTokens = this.getCurrentModelContext(sessionId)
     const currentTokens = promptTokens + completionTokens
-    const compactionCount = state?.contextState.compactionCount ?? 0
+    // Sub-agent runs happen in a fresh, never-compacted scoped context, so
+    // their context.state must never inherit the main session's count.
+    const compactionCount = subAgentId ? 0 : (state?.contextState.compactionCount ?? 0)
     const dynamicContextChanged = this.getDynamicContextChanged(sessionId)
 
     emitContextState(

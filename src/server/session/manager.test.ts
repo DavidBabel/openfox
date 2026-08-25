@@ -378,6 +378,28 @@ describe('SessionManager', () => {
     expect(contextState.canCompact).toBe(true)
   })
 
+  it('sub-agent context.state events do not inherit the main session compaction count', () => {
+    const session = manager.createSession(projectId)
+
+    // Main agent's context gets compacted a few times
+    for (let i = 0; i < 3; i++) {
+      const closedWindowId = getCurrentContextWindowId(session.id) ?? ''
+      emitContextCompacted(session.id, closedWindowId, crypto.randomUUID(), 150000, 20000, `summary ${i + 1}`)
+    }
+    expect(manager.getContextState(session.id).compactionCount).toBe(3)
+
+    // Sub-agent turns run in a fresh, never-compacted scoped context, so
+    // their context.state event must report a compaction count of 0
+    manager.setCurrentContextSize(session.id, 42511, 0, 'code-reviewer-run-1')
+
+    const events = getEventStore().getEvents(session.id)
+    const subAgentCtxEvents = events.filter((e) => e.type === 'context.state')
+    expect(subAgentCtxEvents).toHaveLength(1)
+    const subAgentCtx = subAgentCtxEvents[0]!.data as { subAgentId?: string; compactionCount: number }
+    expect(subAgentCtx.subAgentId).toBe('code-reviewer-run-1')
+    expect(subAgentCtx.compactionCount).toBe(0)
+  })
+
   it('getContextState uses latest context.state event value', () => {
     const session = manager.createSession(projectId)
 

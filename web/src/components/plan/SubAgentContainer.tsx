@@ -96,12 +96,23 @@ export const SubAgentContainer = memo(function SubAgentContainer({
 
   return (
     <div ref={containerRef} className="feed-item border border-border rounded overflow-hidden bg-secondary">
-      <div className="w-full flex items-center justify-between px-2 py-1 border-b relative" style={hStyle}>
-        <span className="text-xs font-medium">{label}</span>
-        <div className="absolute left-1/2 -translate-x-1/2">
-          {contextState && <SubAgentContextBar contextState={contextState} />}
+      <div
+        data-testid="subagent-header"
+        className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-2 py-1 border-b"
+        style={hStyle}
+      >
+        <div className="order-1 flex items-center gap-2 min-w-0 flex-1 basis-0 @sm:basis-auto @sm:flex-none">
+          <span className="text-xs font-medium truncate">{label}</span>
         </div>
-        <div className="flex items-center gap-2">
+        {contextState && (
+          <div
+            data-testid="subagent-context-bar-slot"
+            className="order-3 w-full flex justify-center @sm:order-2 @sm:w-auto @sm:flex-1 @sm:min-w-0"
+          >
+            <SubAgentContextBar contextState={contextState} />
+          </div>
+        )}
+        <div className="order-2 flex items-center gap-2 shrink-0 @sm:order-3">
           <button
             type="button"
             className="text-sm text-text-muted hover:text-text-primary flex items-center gap-1.5"
