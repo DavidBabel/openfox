@@ -135,6 +135,7 @@ export class SessionManager {
   private providerManager: import('../provider-manager.js').ProviderManager
   private dynamicContextChangedStore = new Map<string, boolean>()
   private debugDumpStore = new Map<string, { cachedPrompt: string; cachedTools: string[]; liveTools: string[] }>()
+  private announcedPromptHashStore = new Map<string, string>()
   private warmedUpSessions = new Set<string>()
   private switchLocks = new Map<string, Promise<unknown>>()
   private workspaceCreationLocks = new Map<string, Promise<void>>()
@@ -1570,6 +1571,18 @@ export class SessionManager {
 
   getDynamicContextChanged(sessionId: string): boolean {
     return this.dynamicContextChangedStore.get(sessionId) ?? false
+  }
+
+  /**
+   * The instructions/skills/model hash last announced to the model via a
+   * system-prompt-change reminder. Drives exactly-once prompt-drift reminders.
+   */
+  getAnnouncedPromptHash(sessionId: string): string | undefined {
+    return this.announcedPromptHashStore.get(sessionId)
+  }
+
+  setAnnouncedPromptHash(sessionId: string, hash: string): void {
+    this.announcedPromptHashStore.set(sessionId, hash)
   }
 
   /**

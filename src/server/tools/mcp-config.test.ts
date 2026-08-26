@@ -6,6 +6,7 @@ import {
   setMcpBootstrapForTools,
   resetMcpBootstrapForTools,
 } from './mcp-config.js'
+import { injectContextDriftReminders } from '../chat/dynamic-context.js'
 
 const mockSetToolEnabled = vi.fn().mockResolvedValue(undefined)
 
@@ -60,6 +61,13 @@ vi.mock('./index.js', () => ({
 
 vi.mock('../mcp/session-overrides.js', () => ({
   getSessionDisabledServers: (sessionId: string) => (sessionId === 's2' ? ['filesystem'] : []),
+}))
+
+vi.mock('../chat/dynamic-context.js', () => ({
+  injectContextDriftReminders: vi.fn(async () => ({
+    injectedToolReminder: false,
+    injectedPromptReminder: false,
+  })),
 }))
 
 vi.mock('../utils/logger.js', () => ({
@@ -271,8 +279,10 @@ describe('mcpConfigTool', () => {
       expect(result.success).toBe(true)
       expect(result.error).toBeUndefined()
       expect(result.output).toContain('new-server')
-      expect(result.output).toContain('Update system prompt')
+      expect(result.output).toContain('announced automatically')
+      expect(result.output).not.toContain('Update system prompt')
       expect(sm.setDynamicContextChanged).toHaveBeenCalledWith('s1', true)
+      expect(vi.mocked(injectContextDriftReminders)).toHaveBeenCalledWith(sm, 's1')
       expect(mockManager.addServer).toHaveBeenCalledWith(
         'new-server',
         expect.objectContaining({
@@ -359,8 +369,10 @@ describe('mcpConfigTool', () => {
       expect(result.success).toBe(true)
       expect(result.error).toBeUndefined()
       expect(result.output).toContain('filesystem')
-      expect(result.output).toContain('Update system prompt')
+      expect(result.output).toContain('announced automatically')
+      expect(result.output).not.toContain('Update system prompt')
       expect(sm.setDynamicContextChanged).toHaveBeenCalledWith('s1', true)
+      expect(vi.mocked(injectContextDriftReminders)).toHaveBeenCalledWith(sm, 's1')
       expect(mockManager.removeServer).toHaveBeenCalledWith('filesystem')
       expect(mockSaveGlobalConfig).toHaveBeenCalled()
     })
@@ -394,8 +406,10 @@ describe('mcpConfigTool', () => {
 
       expect(result.success).toBe(true)
       expect(result.error).toBeUndefined()
-      expect(result.output).toContain('Update system prompt')
+      expect(result.output).toContain('announced automatically')
+      expect(result.output).not.toContain('Update system prompt')
       expect(sm.setDynamicContextChanged).toHaveBeenCalledWith('s1', true)
+      expect(vi.mocked(injectContextDriftReminders)).toHaveBeenCalledWith(sm, 's1')
       expect(mockSetToolEnabled).toHaveBeenCalledWith('filesystem', 'read_file', false)
       expect(mockSaveGlobalConfig).toHaveBeenCalled()
       expect(mockCreateMcpTools).toHaveBeenCalled()

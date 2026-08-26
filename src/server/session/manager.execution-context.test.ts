@@ -718,17 +718,23 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
         expect(secondCall.systemPrompt).toBe(oldSystemPrompt)
         expect(secondCall.systemPrompt).toBe(firstCall.systemPrompt)
 
-        // Tool list reuse (deep equality).
+        // Tool list reuse (deep equality). The turn-start tool check synced the
+        // cached tools to the live registry, so both calls share the same set
+        // and it contains the originally cached tool names.
         expect(secondCall.tools).toEqual(firstCall.tools)
-        expect(firstCall.tools).toEqual(cachedTools)
+        const firstToolNames = new Set(
+          (firstCall.tools as Array<{ function: { name: string } }>).map((t) => t.function.name),
+        )
+        expect(Array.from(firstToolNames)).toEqual(expect.arrayContaining(cachedTools.map((t) => t.function.name)))
 
-        // Cache state after both calls — hash, system prompt, no rebuild helpers.
+        // Cache state after both calls — the system prompt text is untouched
+        // (prefix-cache sacred); only tools + hash were synced to the live set.
         const cachedAfter = manager.getCachedPrompt(session.id)
         expect(cachedAfter).toBeDefined()
-        expect(cachedAfter?.hash).toBe(oldHash)
+        expect(cachedAfter?.hash).not.toBe(oldHash)
         expect(cachedAfter?.systemPrompt).toBe(oldSystemPrompt)
-        expect(setCachedSpy).not.toHaveBeenCalled()
-        expect(resetWarmupSpy).not.toHaveBeenCalled()
+        expect(setCachedSpy).toHaveBeenCalledTimes(1)
+        expect(resetWarmupSpy).toHaveBeenCalledTimes(1)
 
         // The workspace reminder reaches the second LLM call with the
         // authoritatively-read workspace, path, and branch — not the requested one.

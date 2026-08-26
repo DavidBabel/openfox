@@ -79,6 +79,16 @@ import { detectWsl, type WslInfo } from './utils/wsl.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /**
+ * Inject tool/system-prompt change <system-reminder>s immediately at the point
+ * of contention (after a UI-side MCP change, model pick, etc.) so the agent
+ * sees what changed on its next model call. Best-effort — never throws.
+ */
+async function announceContextDrift(sessionManager: SessionManager, sessionIds: string[]): Promise<void> {
+  const { injectContextDriftRemindersForSessions } = await import('./chat/dynamic-context.js')
+  await injectContextDriftRemindersForSessions(sessionManager, sessionIds)
+}
+
+/**
  * Create a server handle that can be started on any port.
  * Returns a ServerHandle with start() and close() methods.
  *
@@ -1066,6 +1076,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     // any agent override for this session (agent config is never mutated).
     sessionManager.setSessionProvider(sessionId, providerId, resolvedModel, true, reasoningEffort)
     sessionManager.setSessionProviderActive(sessionId, true)
+    await announceContextDrift(sessionManager, [sessionId])
 
     // Get updated context state
     const contextState = sessionManager.getContextState(sessionId)
@@ -1096,6 +1107,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     sessionManager.setSessionProvider(sessionId, null, null, false, null)
     sessionManager.setSessionProviderActive(sessionId, true)
+    await announceContextDrift(sessionManager, [sessionId])
 
     const eventStore = getEventStore()
     const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(sessionId)
@@ -1337,6 +1349,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     } else {
       sessionManager.setDynamicContextChanged(sessionId, true)
     }
+    await announceContextDrift(sessionManager, [sessionId])
     const state = sessionManager.getContextState(sessionId)
     wssExports.broadcastForSession(sessionId, createContextStateMessage(state))
     res.json({ disabledServers: getSessionDisabledServers(sessionId) })
@@ -2820,6 +2833,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         for (const s of sessions) {
           sessionManager.setDynamicContextChanged(s.id, true)
         }
+        await announceContextDrift(
+          sessionManager,
+          sessions.map((s) => s.id),
+        )
       }
 
       const allServers = mcpManager.getAllServers()
@@ -2924,6 +2941,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       for (const s of sessions) {
         sessionManager.setDynamicContextChanged(s.id, true)
       }
+      await announceContextDrift(
+        sessionManager,
+        sessions.map((s) => s.id),
+      )
       wssExports.broadcastAll(createServerMessage('mcp.servers.changed', { servers: mcpManager.getAllServers() }))
       res.json({ server: mcpManager.getServer(name) })
     } catch (error) {
@@ -2964,6 +2985,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     for (const s of sessions) {
       sessionManager.setDynamicContextChanged(s.id, true)
     }
+    await announceContextDrift(
+      sessionManager,
+      sessions.map((s) => s.id),
+    )
 
     wssExports.broadcastAll(createServerMessage('mcp.servers.changed', { servers: mcpManager.getAllServers() }))
 
@@ -2992,9 +3017,14 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   async function applyMcpOAuthResult(name: string): Promise<void> {
     await mcpManager.connectServer(name)
     await rebuildMcpTools()
-    for (const s of sessionManager.listSessions()) {
+    const sessions = sessionManager.listSessions()
+    for (const s of sessions) {
       sessionManager.setDynamicContextChanged(s.id, true)
     }
+    await announceContextDrift(
+      sessionManager,
+      sessions.map((s) => s.id),
+    )
     wssExports.broadcastAll(createServerMessage('mcp.servers.changed', { servers: mcpManager.getAllServers() }))
   }
 
@@ -3163,6 +3193,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       for (const s of sessions) {
         sessionManager.setDynamicContextChanged(s.id, true)
       }
+      await announceContextDrift(
+        sessionManager,
+        sessions.map((s) => s.id),
+      )
 
       wssExports.broadcastAll(createServerMessage('mcp.servers.changed', { servers: mcpManager.getAllServers() }))
 

@@ -76,9 +76,8 @@ vi.mock('./ChatFeedItems', () => ({
   ChatFeedItems: () => <div>ChatFeedItems</div>,
 }))
 
-vi.mock('./SessionHeader', () => ({
-  default: () => <div>SessionHeader</div>,
-  SessionHeader: () => <div>SessionHeader</div>,
+vi.mock('./useQueuedRebaseTrigger', () => ({
+  useQueuedRebaseTrigger: () => undefined,
 }))
 
 let capturedMsgSearchOnClose: (() => void) | null = null

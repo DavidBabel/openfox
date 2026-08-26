@@ -4,7 +4,25 @@ import {
   computeDynamicContextHash,
   computeToolDiff,
   computePreviewToolDiff,
+  detectToolChanges,
+  renderToolChangeReminder,
+  renderSystemPromptDiff,
 } from './dynamic-context.js'
+import type { LLMToolDefinition } from '../llm/types.js'
+
+function tool(name: string, opts: { description?: string; parameters?: unknown } = {}): LLMToolDefinition {
+  return {
+    type: 'function',
+    function: {
+      name,
+      description: opts.description ?? `desc ${name}`,
+      parameters: (opts.parameters ?? {
+        type: 'object',
+        properties: {},
+      }) as LLMToolDefinition['function']['parameters'],
+    },
+  }
+}
 
 describe('computeUnifiedDiff', () => {
   it('returns unchanged lines when texts are identical', () => {
@@ -305,5 +323,144 @@ describe('computeDynamicContextHash', () => {
     const a = computeDynamicContextHash('do foo', skills, 'tool-fp')
     const b = computeDynamicContextHash('do foo', skills, 'tool-fp', undefined)
     expect(a).toBe(b)
+  })
+})
+
+describe('detectToolChanges', () => {
+  it('returns empty changes when tool sets are identical', () => {
+    const tools = [tool('read_file'), tool('write_file')]
+    expect(detectToolChanges(tools, [...tools])).toEqual({ added: [], removed: [], changed: [] })
+  })
+
+  it('detects added tools with description and param names', () => {
+    const live = [
+      tool('read_file'),
+      tool('write_file', { description: 'Writes a file', parameters: { type: 'object', properties: { path: {} } } }),
+    ]
+    const cached = [tool('read_file')]
+    expect(detectToolChanges(live, cached)).toEqual({
+      added: [{ name: 'write_file', description: 'Writes a file', params: ['path'] }],
+      removed: [],
+      changed: [],
+    })
+  })
+
+  it('detects removed tools by name', () => {
+    const live = [tool('read_file')]
+    const cached = [tool('read_file'), tool('write_file')]
+    expect(detectToolChanges(live, cached)).toEqual({
+      added: [],
+      removed: ['write_file'],
+      changed: [],
+    })
+  })
+
+  it('detects changed tools when description differs but name matches', () => {
+    const live = [tool('read_file', { description: 'Read a file completely' })]
+    const cached = [tool('read_file', { description: 'Read a file' })]
+    expect(detectToolChanges(live, cached)).toEqual({
+      added: [],
+      removed: [],
+      changed: ['read_file'],
+    })
+  })
+
+  it('detects changed tools when parameters differ but name and description match', () => {
+    const live = [tool('run_command', { parameters: { type: 'object', properties: { cwd: {} } } })]
+    const cached = [tool('run_command', { parameters: { type: 'object', properties: {} } })]
+    expect(detectToolChanges(live, cached)).toEqual({
+      added: [],
+      removed: [],
+      changed: ['run_command'],
+    })
+  })
+
+  it('does not flag a tool as changed when only order differs', () => {
+    const live = [tool('a'), tool('b')]
+    const cached = [tool('b'), tool('a')]
+    expect(detectToolChanges(live, cached)).toEqual({ added: [], removed: [], changed: [] })
+  })
+
+  it('detects a mix of added, removed and changed tools', () => {
+    const live = [tool('read_file'), tool('write_file', { description: 'New description' }), tool('glob')]
+    const cached = [tool('read_file'), tool('write_file', { description: 'Old description' }), tool('web_fetch')]
+    expect(detectToolChanges(live, cached)).toEqual({
+      added: [{ name: 'glob', description: 'desc glob', params: [] }],
+      removed: ['web_fetch'],
+      changed: ['write_file'],
+    })
+  })
+})
+
+describe('renderToolChangeReminder', () => {
+  it('returns null when the diff is empty', () => {
+    expect(renderToolChangeReminder({ added: [], removed: [], changed: [] })).toBeNull()
+  })
+
+  it('renders added tools with truncated description and param names', () => {
+    const longDescription = `A tool that does a very long thing `.repeat(10).trim()
+    const reminder = renderToolChangeReminder({
+      added: [
+        { name: 'mcp_notes_search', description: longDescription, params: ['query', 'limit'] },
+        { name: 'mcp_notes_add', description: undefined, params: [] },
+      ],
+      removed: [],
+      changed: [],
+    })
+    expect(reminder).toContain('<system-reminder>')
+    expect(reminder).toContain('Added:')
+    expect(reminder).toContain('mcp_notes_search')
+    expect(reminder).toContain('(params: query, limit)')
+    expect(reminder).toContain('…')
+    expect(reminder).toContain('mcp_notes_add')
+  })
+
+  it('renders removed tool names', () => {
+    const reminder = renderToolChangeReminder({ added: [], removed: ['mcp_notes_delete'], changed: [] })
+    expect(reminder).toContain('Removed:')
+    expect(reminder).toContain('mcp_notes_delete')
+  })
+
+  it('renders changed tool names', () => {
+    const reminder = renderToolChangeReminder({ added: [], removed: [], changed: ['mcp_notes_update'] })
+    expect(reminder).toContain('Changed:')
+    expect(reminder).toContain('mcp_notes_update')
+  })
+
+  it('omits sections that have no entries', () => {
+    const reminder = renderToolChangeReminder({ added: [], removed: ['mcp_notes_delete'], changed: [] })
+    expect(reminder).not.toContain('Added:')
+    expect(reminder).not.toContain('Changed:')
+  })
+})
+
+describe('renderSystemPromptDiff', () => {
+  it('returns null when prompts are identical', () => {
+    expect(renderSystemPromptDiff('same text', 'same text')).toBeNull()
+  })
+
+  it('renders a system-reminder with added and removed lines', () => {
+    const reminder = renderSystemPromptDiff('line one\nold line', 'line one\nnew line')
+    expect(reminder).toContain('<system-reminder>')
+    expect(reminder).toContain('- old line')
+    expect(reminder).toContain('+ new line')
+    expect(reminder).not.toContain('line one')
+  })
+
+  it('caps the number of diff lines and truncates long lines', () => {
+    const manyOld = Array.from({ length: 60 }, (_, i) => `old line ${i}`).join('\n')
+    const manyNew = Array.from({ length: 60 }, (_, i) => `new line ${i}`).join('\n')
+    const reminder = renderSystemPromptDiff(manyOld, manyNew)!
+
+    const minusCount = (reminder.match(/- old line/g) ?? []).length
+    const plusCount = (reminder.match(/\+ new line/g) ?? []).length
+    // 120 changed lines (60 removed + 60 added) capped to 40 visible;
+    // the remaining 80 are folded into the "omitted" note.
+    expect(minusCount + plusCount).toBe(40)
+    expect(reminder).toContain('80 more lines omitted')
+
+    const longLine = 'x'.repeat(500)
+    const longReminder = renderSystemPromptDiff(longLine, 'y'.repeat(500))!
+    expect(longReminder).toContain('…')
   })
 })

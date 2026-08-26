@@ -22,7 +22,7 @@ export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: Co
 
   if (!contextState || !currentSession) return null
 
-  const { currentTokens, maxTokens, compactionCount, dangerZone, dynamicContextChanged } = contextState
+  const { currentTokens, maxTokens, compactionCount, dangerZone } = contextState
   const percent = Math.round((currentTokens / maxTokens) * 100)
   const isRunning = currentSession.isRunning
 
@@ -73,19 +73,17 @@ export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: Co
             >
               <span className={dangerZone ? 'text-accent-error' : ''}>Compact</span>
             </button>
-            {dynamicContextChanged && (
-              <button
-                onClick={() => {
-                  setMenuOpen(false)
-                  if (onUpdateSystemPrompt) onUpdateSystemPrompt()
-                  else setShowApplyModal(true)
-                }}
-                className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors"
-                title="Preview and apply system prompt changes"
-              >
-                <span className="text-accent-warning">Update system prompt</span>
-              </button>
-            )}
+            <button
+              onClick={() => {
+                setMenuOpen(false)
+                if (onUpdateSystemPrompt) onUpdateSystemPrompt()
+                else setShowApplyModal(true)
+              }}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors"
+              title="Preview and apply system prompt changes"
+            >
+              <span className="text-accent-warning">Rebase system prompt</span>
+            </button>
           </div>
         </>
       )}
@@ -134,18 +132,16 @@ export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: Co
         >
           <span className={dangerZone ? 'text-accent-error' : ''}>Compact</span>
         </button>
-        {dynamicContextChanged && (
-          <button
-            onClick={() => {
-              if (onUpdateSystemPrompt) onUpdateSystemPrompt()
-              else setShowApplyModal(true)
-            }}
-            className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors rounded"
-            title="Preview and apply system prompt changes"
-          >
-            <span className="text-accent-warning">Update system prompt</span>
-          </button>
-        )}
+        <button
+          onClick={() => {
+            if (onUpdateSystemPrompt) onUpdateSystemPrompt()
+            else setShowApplyModal(true)
+          }}
+          className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary transition-colors rounded"
+          title="Preview and apply system prompt changes"
+        >
+          <span className="text-accent-warning">Rebase system prompt</span>
+        </button>
       </div>
       {applyModal}
     </div>

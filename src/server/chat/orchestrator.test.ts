@@ -227,6 +227,9 @@ function createSessionManager(state: Record<string, any>) {
     setCachedPrompt: vi.fn(),
     getDynamicContextChanged: vi.fn(() => false),
     setDynamicContextChanged: vi.fn(),
+    getAnnouncedPromptHash: vi.fn(() => undefined),
+    setAnnouncedPromptHash: vi.fn(),
+    clearDebugDump: vi.fn(),
     updateCriterionStatus: vi.fn((_: string, criterionId: string, status: Record<string, unknown>) => {
       state['current'].criteria = state['current'].criteria.map((criterion: any) =>
         criterion.id === criterionId ? { ...criterion, status } : criterion,

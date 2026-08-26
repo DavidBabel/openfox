@@ -154,11 +154,15 @@ export const mcpConfigTool: Tool = createTool<McpConfigArgs>(
       await saveGlobalConfig(mcpConfigMode, { ...globalConfig, mcpServers: updated }, mcpConfigPath)
     }
 
-    const APPLY_PROMPT_MESSAGE = 'The user must click "Update system prompt" to apply changes.'
+    const APPLY_PROMPT_MESSAGE = 'Tool changes are announced automatically.'
 
-    function notifyContextChanged(sessionId: string): void {
+    async function notifyContextChanged(sessionId: string): Promise<void> {
       context.sessionManager.setDynamicContextChanged(sessionId, true)
       mcpNotifyChanged?.(sessionId)
+      // Instant announcement at the point of contention — the agent sees what
+      // changed in its tools immediately, not at the next turn start.
+      const { injectContextDriftReminders } = await import('../chat/dynamic-context.js')
+      await injectContextDriftReminders(context.sessionManager, sessionId)
     }
 
     async function rebuildTools(): Promise<void> {
@@ -235,7 +239,7 @@ export const mcpConfigTool: Tool = createTool<McpConfigArgs>(
       })
       await mcpManagerForTools.addServer(args.name, serverCfg)
       await rebuildTools()
-      notifyContextChanged(context.sessionId)
+      await notifyContextChanged(context.sessionId)
 
       const server = mcpManagerForTools.getServer(args.name)
       const toolCount = server?.tools.length ?? 0
@@ -274,7 +278,7 @@ export const mcpConfigTool: Tool = createTool<McpConfigArgs>(
 
       if (updateError) return helpers.error(updateError)
       await rebuildTools()
-      notifyContextChanged(context.sessionId)
+      await notifyContextChanged(context.sessionId)
 
       const server = mcpManagerForTools.getServer(args.name)
       const toolCount = server?.tools.length ?? 0
@@ -291,7 +295,7 @@ export const mcpConfigTool: Tool = createTool<McpConfigArgs>(
       })
       mcpManagerForTools.removeServer(args.name)
       await rebuildTools()
-      notifyContextChanged(context.sessionId)
+      await notifyContextChanged(context.sessionId)
       return helpers.success(`Removed MCP server "${args.name}". ${APPLY_PROMPT_MESSAGE}`)
     }
 
@@ -322,7 +326,7 @@ export const mcpConfigTool: Tool = createTool<McpConfigArgs>(
 
       await mcpManagerForTools.setToolEnabled(args.name, args.toolName, args.enabled)
       await rebuildTools()
-      notifyContextChanged(context.sessionId)
+      await notifyContextChanged(context.sessionId)
 
       return helpers.success(
         `Tool "${args.toolName}" ${args.enabled ? 'enabled' : 'disabled'} on server "${args.name}". ${APPLY_PROMPT_MESSAGE}`,

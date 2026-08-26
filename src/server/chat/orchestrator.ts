@@ -19,7 +19,7 @@ import { getEventStore, getCurrentContextWindowId, getCurrentWindowMessageOption
 import { buildSnapshotFromSessionState } from '../events/folding.js'
 import type { SessionManager } from '../session/index.js'
 import { getToolRegistryForAgent, PathAccessDeniedError } from '../tools/index.js'
-import { buildAgentReminder, buildAgentSmallReminder } from './prompts.js'
+import { buildAgentReminder, buildAgentSmallReminder, buildTopLevelSystemPrompt } from './prompts.js'
 import {
   TurnMetrics,
   createMessageStartEvent,
@@ -30,9 +30,14 @@ import {
 } from './stream-pure.js'
 import { createAssemblyResult } from './request-context.js'
 import type { RequestContextMessage } from './request-context.js'
-import { buildCachedPrompt, computeDynamicContextHash, getToolFingerprint } from './dynamic-context.js'
+import {
+  buildCachedPrompt,
+  checkToolChangesAndInject,
+  computeDynamicContextHash,
+  getToolFingerprint,
+} from './dynamic-context.js'
 import { runTopLevelAgentLoop } from './agent-loop.js'
-import { loadAllAgentsDefault, findAgentById, resolveDefaultAgentId } from '../agents/registry.js'
+import { loadAllAgentsDefault, findAgentById, resolveDefaultAgentId, getSubAgents } from '../agents/registry.js'
 import { getAllInstructions } from '../context/instructions.js'
 import { getEnabledSkillMetadata } from '../skills/registry.js'
 import { getRuntimeConfig } from '../runtime-config.js'
@@ -381,6 +386,29 @@ export async function runAgentTurn(
   const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
   const skills = await getEnabledSkillMetadata(configDir, options.sessionManager.getProjectWorkdir(options.sessionId))
 
+  if (!options.warmup) {
+    const modelName = agentLlmClient.getModel()
+    await checkToolChangesAndInject(
+      options.sessionManager,
+      options.sessionId,
+      agentDef,
+      {
+        modelName,
+        instructionContent: instructionContent ?? '',
+        skills,
+        buildNewSystemPrompt: () =>
+          buildTopLevelSystemPrompt(
+            session.workdir,
+            instructionContent || undefined,
+            skills,
+            getSubAgents(allAgents),
+            modelName,
+          ),
+      },
+      append,
+    )
+  }
+
   return runTopLevelAgentLoop(
     {
       mode: agentId,
@@ -428,6 +456,7 @@ export async function runAgentTurn(
           agentLlmClient.getModel(),
         )
         options.sessionManager.setCachedPrompt(options.sessionId, result.systemPrompt, result.tools, result.hash)
+        options.sessionManager.setAnnouncedPromptHash(options.sessionId, result.promptHash)
         return createAssemblyResult({
           systemPrompt: result.systemPrompt,
           messages: input.messages,
@@ -439,6 +468,10 @@ export async function runAgentTurn(
       getToolRegistry: () => getToolRegistryForAgent(agentDef, options.sessionId),
       getConversationMessages: buildGetConversationMessages(options.sessionId, resolveAgentClient, append),
       injectAgentReminder: () => injectAgentReminder(options.sessionId, agentDef),
+      rebuildCachedContext: async () => {
+        const { applyDynamicContext } = await import('./dynamic-context.js')
+        await applyDynamicContext(options.sessionManager, options.sessionId, agentLlmClient.getModel())
+      },
       ...(options.initialCompacting ? { initialCompacting: true } : {}),
       ...(callbacks?.injectKickoff ? { injectKickoff: callbacks.injectKickoff } : {}),
       ...(callbacks?.onToolExecuted ? { onToolExecuted: callbacks.onToolExecuted } : {}),

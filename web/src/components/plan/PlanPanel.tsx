@@ -5,7 +5,7 @@ import { type TurnStats } from '../../lib/types'
 import type { Message } from '@shared/types.js'
 
 import { SessionLayout } from '../layout/SessionLayout'
-import { SessionHeader } from './SessionHeader'
+import { useQueuedRebaseTrigger } from './useQueuedRebaseTrigger'
 import { TurnStatsModal } from './TurnStatsModal'
 import { MessageList } from './MessageList'
 import { ConnectionStatusBar } from '../shared/ConnectionStatusBar'
@@ -58,6 +58,8 @@ export function PlanPanel({
 }: PlanPanelProps = {}) {
   const criteriaSidebarOpen = externalCriteriaSidebarOpen ?? true
   const [input, setInput] = useState('')
+
+  useQueuedRebaseTrigger()
 
   const [attachments, setAttachments] = useState<import('@shared/types.js').Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
@@ -340,8 +342,6 @@ export function PlanPanel({
         sessionId={targetSessionId}
       >
         <SidebarSummaryHeader visible={!criteriaSidebarOpen} />
-
-        <SessionHeader />
 
         {turnStatsModal && <TurnStatsModal stats={turnStatsModal} onClose={() => setTurnStatsModal(null)} />}
         <ConnectionStatusBar />

@@ -167,6 +167,9 @@ export interface TopLevelLoopConfig {
   /** Called after auto-compaction completes within the loop, before the next iteration.
    *  Reinjects the agent definition reminder into the new context window. */
   injectAgentReminder?: (() => void) | undefined
+  /** Called after a compaction creates a new context window, so the fresh
+   *  system prompt + tools become canonical for that window. */
+  rebuildCachedContext?: (() => Promise<void> | void) | undefined
   /** When set, assistant messages are tagged with sub-agent metadata for scope isolation. */
   subAgentMetadata?: { subAgentId: string; subAgentType: string }
   /** When set and return_value tool is called, emit done events and break immediately. */
@@ -729,6 +732,18 @@ ${COMPACTION_PROMPT}`,
         compacting = false
         if (config.initialCompacting) break
         continue
+      }
+
+      // The new context window starts fresh — apply the current system prompt
+      // + tools so they are canonical and never stale there. Best-effort: a
+      // rebuild failure must not break the compaction itself.
+      try {
+        await config.rebuildCachedContext?.()
+      } catch (error) {
+        logger.error('Failed to rebuild cached context after compaction', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
 
       const closedWindowId = getCurrentContextWindowId(sessionId) ?? ''

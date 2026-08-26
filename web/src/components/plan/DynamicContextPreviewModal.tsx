@@ -64,7 +64,7 @@ export function DynamicContextPreviewModal({ isOpen, onClose, isRunning, onApply
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Update system prompt"
+      title="Rebase system prompt"
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
