@@ -120,6 +120,7 @@ export interface SessionState {
   connect: () => Promise<void>
   reconnect: () => void
   disconnect: () => void
+  logout: () => Promise<void>
   submitPassword: (password: string) => Promise<void>
   cancelPassword: () => void
   createSession: (projectId: string, title?: string) => Promise<Session | null>

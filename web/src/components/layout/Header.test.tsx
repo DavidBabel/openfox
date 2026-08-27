@@ -68,6 +68,7 @@ vi.mock('../../stores/session', () => ({
     handleServerMessage: vi.fn(),
     connect: vi.fn(),
     disconnect: vi.fn(),
+    logout: vi.fn(),
     connectionStatus: 'connected',
     unreadSessionIds: [],
     currentTodos: [],
@@ -565,16 +566,37 @@ describe('Header mobile menu', () => {
   })
 
   it('logs out from the menu', async () => {
-    localStorage.setItem('openfox_token', 'abc')
     const { useLocation } = await import('wouter')
     const setLocation = vi.fn()
     vi.mocked(useLocation).mockReturnValue(['/', setLocation])
+    const { useSessionStore } = await import('../../stores/session')
+    const logoutSpy = (useSessionStore as unknown as { getState: () => Record<string, any> }).getState().logout
 
     const { Header } = await import('./Header')
     const container = render(<Header />)
     openMobileMenu(container)
     clickMenuItem('Logout')
-    expect(localStorage.getItem('openfox_token')).toBeNull()
+    expect(logoutSpy).toHaveBeenCalled()
+    expect(setLocation).toHaveBeenCalledWith('/')
+  })
+
+  it('logs out from the desktop button', async () => {
+    const { useLocation } = await import('wouter')
+    const setLocation = vi.fn()
+    vi.mocked(useLocation).mockReturnValue(['/', setLocation])
+    const { useSessionStore } = await import('../../stores/session')
+    const logoutSpy = (useSessionStore as unknown as { getState: () => Record<string, any> }).getState().logout
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    const logoutButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.title === 'Logout',
+    ) as HTMLButtonElement
+    expect(logoutButton).toBeTruthy()
+    act(() => {
+      logoutButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    expect(logoutSpy).toHaveBeenCalled()
     expect(setLocation).toHaveBeenCalledWith('/')
   })
 

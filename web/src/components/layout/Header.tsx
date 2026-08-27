@@ -155,7 +155,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     icon: <LogoutIcon />,
     danger: true,
     onClick: () => {
-      localStorage.removeItem('openfox_token')
+      void useSessionStore.getState().logout()
       setLocation('/')
     },
   })
@@ -309,7 +309,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
 
           <button
             onClick={() => {
-              localStorage.removeItem('openfox_token')
+              void useSessionStore.getState().logout()
               setLocation('/')
             }}
             className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"

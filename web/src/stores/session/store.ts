@@ -464,6 +464,22 @@ export const useSessionStore = create<SessionState>((set, get) => {
       set({ connectionStatus: 'disconnected', showPasswordModal: false })
     },
 
+    logout: async () => {
+      wsClient.clearToken()
+      get().disconnect()
+
+      let requiresAuth = false
+      try {
+        const res = await authFetch('/api/auth')
+        const auth = await res.json()
+        requiresAuth = auth.requiresAuth === true
+      } catch {
+        /* server unreachable — stay disconnected without prompting */
+      }
+
+      set({ passwordModalRetry: false, showPasswordModal: requiresAuth })
+    },
+
     submitPassword: async (password: string) => {
       try {
         const res = await fetch(appUrl('/api/auth/login'), {
