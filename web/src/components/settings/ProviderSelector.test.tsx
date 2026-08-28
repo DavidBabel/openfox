@@ -97,10 +97,23 @@ vi.mock('../shared/icons', () => ({
   PlusLgIcon: ({ className }: any) => `<svg class="${className}">+</svg>`,
 }))
 
-vi.mock('../shared/ProviderModal', () => ({
-  ProviderModal: () => '<div>ProviderModal</div>',
-  providerFormPayload: (data: any) => data,
-}))
+vi.mock('../shared/ProviderModal', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react')
+  return {
+    ProviderModal: ({ editProvider }: any) =>
+      React.createElement(
+        'div',
+        {
+          'data-testid': 'provider-modal',
+          'data-provider-id': editProvider?.id ?? '',
+          'data-provider-name': editProvider?.name ?? '',
+        },
+        'ProviderModal',
+      ),
+    providerFormPayload: (data: any) => data,
+  }
+})
 
 vi.mock('../onboarding/steps/ConnectLLMStep', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1039,6 +1052,48 @@ describe('ProviderSelector search mode (AC 0-5)', () => {
     const { useConfigStore } = await import('../../stores/config')
     const state = (useConfigStore as unknown as MockStore)((s: any) => s)
     expect(state.fetchConfig).toHaveBeenCalled()
+  })
+
+  it('[AUTOMATED] provider header shows an edit button that opens the provider modal for that provider', async () => {
+    const user = userEvent.setup()
+    await setConfigState({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          url: 'https://api.openai.com/v1',
+          backend: 'openai',
+          isLocal: false,
+          models: [{ id: 'gpt-4', name: 'GPT-4', contextWindow: 128000, selected: true }],
+          isActive: true,
+        },
+        {
+          id: 'provider-2',
+          name: 'Anthropic',
+          url: 'https://api.anthropic.com',
+          backend: 'anthropic',
+          isLocal: false,
+          models: [{ id: 'claude-3-opus', name: 'Claude 3 Opus', contextWindow: 200000, selected: true }],
+          isActive: false,
+        },
+      ],
+      activeProviderId: 'provider-1',
+      defaultModelSelection: 'provider-1/gpt-4',
+    })
+    renderProviderSelector()
+
+    await user.click(screen.getByRole('button'))
+
+    const editButtons = screen.getAllByRole('button', { name: /Edit provider/i })
+    expect(editButtons).toHaveLength(2)
+
+    // Click the edit button for the Anthropic provider
+    await user.click(screen.getByRole('button', { name: /Edit provider Anthropic/ }))
+
+    const modal = screen.getByTestId('provider-modal')
+    expect(modal).toBeTruthy()
+    expect(modal.getAttribute('data-provider-id')).toBe('provider-2')
+    expect(modal.getAttribute('data-provider-name')).toBe('Anthropic')
   })
 
   it('[AUTOMATED] highlights the effective override model as active, not the session preference', async () => {

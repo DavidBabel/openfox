@@ -1,7 +1,10 @@
 import { ScrollArea } from './ScrollArea'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDownIcon, SearchIcon } from './icons'
+import { ChevronDownIcon, SearchIcon, EditSmallIcon } from './icons'
+import { ProviderModal, providerFormPayload, type ProviderFormData } from './ProviderModal'
+import { authFetch } from '../../lib/api'
+import { useConfigStore } from '../../stores/config'
 import { useModelSearch, ModelEntryRow } from '../settings/model-list'
 import type { Provider } from '../../stores/config'
 import { shouldAutofocus } from '../../lib/device'
@@ -17,9 +20,30 @@ export interface ModelPickerProps {
 
 export function ModelPicker({ providers, value, onChange, defaultLabel = 'Default (global model)' }: ModelPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
+  const [showProviderModal, setShowProviderModal] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
+
+  function handleEditProvider(provider: Provider) {
+    setEditingProvider(provider)
+    setIsOpen(false)
+    setShowProviderModal(true)
+  }
+
+  async function handleSaveProvider(formData: ProviderFormData) {
+    const response = await authFetch(`/api/providers/${formData.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(providerFormPayload(formData)),
+    })
+    if (response.ok) {
+      await useConfigStore.getState().fetchConfig()
+    }
+    setEditingProvider(null)
+    setShowProviderModal(false)
+  }
 
   const parsedValue = parseModelValue(value)
   const selectedModelId = parsedValue?.model
@@ -170,8 +194,17 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
 
                 {visibleGroups.map((group) => (
                   <div key={group.provider.id}>
-                    <div className="px-4 py-1.5 text-xs font-medium text-text-muted uppercase tracking-wider bg-bg-tertiary/50">
-                      {group.provider.name}
+                    <div className="px-4 py-1.5 text-xs font-medium text-text-muted uppercase tracking-wider bg-bg-tertiary/50 flex items-center justify-between gap-2">
+                      <span className="truncate">{group.provider.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleEditProvider(group.provider)}
+                        className="p-0.5 text-text-muted hover:text-text-primary rounded transition-colors flex-shrink-0"
+                        title="Edit provider"
+                        aria-label={`Edit provider ${group.provider.name}`}
+                      >
+                        <EditSmallIcon className="w-3 h-3" />
+                      </button>
                     </div>
                     {group.models.map((modelConfig) => {
                       const modelFlatIndex = flatItems.findIndex(
@@ -226,6 +259,19 @@ export function ModelPicker({ providers, value, onChange, defaultLabel = 'Defaul
           </div>,
           document.body,
         )}
+
+      {showProviderModal && editingProvider && (
+        <ProviderModal
+          isOpen
+          onClose={() => {
+            setEditingProvider(null)
+            setShowProviderModal(false)
+          }}
+          onSave={handleSaveProvider}
+          initialStep={2}
+          editProvider={editingProvider}
+        />
+      )}
     </div>
   )
 }

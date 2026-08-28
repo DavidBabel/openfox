@@ -10,7 +10,7 @@ import { ProviderModal, providerFormPayload, type ProviderFormData } from '../sh
 import { Modal } from '../shared/Modal'
 import { ManageProvidersModal } from './ManageProvidersModal'
 import { authFetch } from '../../lib/api'
-import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon, PinIcon } from '../shared/icons'
+import { ChevronDownIcon, ReloadIcon, CheckIcon, SearchIcon, PinIcon, EditSmallIcon } from '../shared/icons'
 import { useKeybindings, useBinding } from '../../hooks/useKeybindings'
 import { focusChatTextarea } from '../../lib/focusChatTextarea'
 import { shouldAutofocus } from '../../lib/device'
@@ -107,6 +107,7 @@ export function ProviderSelector() {
   const [loadingModels, setLoadingModels] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [editingModel, setEditingModel] = useState<{ providerId: string; model: ModelWithConfig } | null>(null)
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [showProviderModal, setShowProviderModal] = useState(false)
   const [authStates, setAuthStates] = useState<
     Record<string, 'disconnected' | 'pending' | 'connected' | 'expired' | 'error'>
@@ -459,13 +460,23 @@ export function ProviderSelector() {
 
   const handleEditModel = (providerId: string, model: ModelWithConfig) => {
     setEditingModel({ providerId, model })
+    setEditingProviderId(null)
     setShowProviderModal(true)
   }
 
-  const editingProvider = editingModel ? providers.find((p) => p.id === editingModel.providerId) : undefined
+  const handleEditProvider = (provider: Provider) => {
+    setEditingProviderId(provider.id)
+    setEditingModel(null)
+    setIsOpen(false)
+    setShowProviderModal(true)
+  }
+
+  const modalProviderId = editingModel?.providerId ?? editingProviderId
+  const modalProvider = modalProviderId ? providers.find((p) => p.id === modalProviderId) : undefined
 
   const handleCloseEditModal = () => {
     setEditingModel(null)
+    setEditingProviderId(null)
     setShowProviderModal(false)
   }
 
@@ -482,6 +493,7 @@ export function ProviderSelector() {
       // Silently fail
     }
     setEditingModel(null)
+    setEditingProviderId(null)
     setShowProviderModal(false)
   }
 
@@ -753,6 +765,18 @@ export function ProviderSelector() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation()
+                            handleEditProvider(group.provider)
+                          }}
+                          className="p-0.5 hover:bg-bg-tertiary rounded transition-colors"
+                          title="Edit provider"
+                          aria-label={`Edit provider ${group.provider.name}`}
+                        >
+                          <EditSmallIcon className="w-4 h-4 text-text-muted" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
                             handleRefreshClick(e, group.provider.id)
                           }}
                           className="p-0.5 hover:bg-bg-tertiary rounded transition-colors"
@@ -928,26 +952,26 @@ export function ProviderSelector() {
         </Modal>
       )}
 
-      {editingModel && showProviderModal && (
+      {showProviderModal && modalProvider && (
         <ProviderModal
           isOpen={true}
           onClose={handleCloseEditModal}
           onSave={handleProviderModalSave}
           initialStep={2}
           editProvider={{
-            id: editingModel.providerId,
-            name: editingProvider?.name ?? '',
-            url: editingProvider?.url ?? '',
-            backend: editingProvider?.backend ?? 'unknown',
-            apiKey: editingProvider?.apiKey,
-            isLocal: editingProvider?.isLocal,
-            thinkingField: editingProvider?.thinkingField,
-            sendReasoningInMessages: editingProvider?.sendReasoningInMessages,
-            authAdapter: editingProvider?.authAdapter,
-            transportAdapter: editingProvider?.transportAdapter,
-            models: editingProvider?.models,
+            id: modalProvider.id,
+            name: modalProvider.name ?? '',
+            url: modalProvider.url ?? '',
+            backend: modalProvider.backend ?? 'unknown',
+            apiKey: modalProvider.apiKey,
+            isLocal: modalProvider.isLocal,
+            thinkingField: modalProvider.thinkingField,
+            sendReasoningInMessages: modalProvider.sendReasoningInMessages,
+            authAdapter: modalProvider.authAdapter,
+            transportAdapter: modalProvider.transportAdapter,
+            models: modalProvider.models,
           }}
-          editModelId={editingModel.model.id}
+          editModelId={editingModel?.model.id}
         />
       )}
 
