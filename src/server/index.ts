@@ -2074,6 +2074,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
           return {
             id: m.id,
             contextWindow: m.contextWindow,
+            supportsVision: m.supportsVision ?? profile.supportsVision,
             defaultTemperature: profile.temperature,
             defaultTopP: profile.topP,
             defaultTopK: profile.topK,
