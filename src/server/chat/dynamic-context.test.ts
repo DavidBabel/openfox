@@ -332,14 +332,15 @@ describe('detectToolChanges', () => {
     expect(detectToolChanges(tools, [...tools])).toEqual({ added: [], removed: [], changed: [] })
   })
 
-  it('detects added tools with description and param names', () => {
-    const live = [
-      tool('read_file'),
-      tool('write_file', { description: 'Writes a file', parameters: { type: 'object', properties: { path: {} } } }),
-    ]
+  it('detects added tools with full definitions', () => {
+    const writeFile = tool('write_file', {
+      description: 'Writes a file',
+      parameters: { type: 'object', properties: { path: {} } },
+    })
+    const live = [tool('read_file'), writeFile]
     const cached = [tool('read_file')]
     expect(detectToolChanges(live, cached)).toEqual({
-      added: [{ name: 'write_file', description: 'Writes a file', params: ['path'] }],
+      added: [{ name: 'write_file', tool: writeFile }],
       removed: [],
       changed: [],
     })
@@ -361,17 +362,18 @@ describe('detectToolChanges', () => {
     expect(detectToolChanges(live, cached)).toEqual({
       added: [],
       removed: [],
-      changed: ['read_file'],
+      changed: [{ name: 'read_file', tool: live[0] }],
     })
   })
 
   it('detects changed tools when parameters differ but name and description match', () => {
-    const live = [tool('run_command', { parameters: { type: 'object', properties: { cwd: {} } } })]
+    const runCommand = tool('run_command', { parameters: { type: 'object', properties: { cwd: {} } } })
+    const live = [runCommand]
     const cached = [tool('run_command', { parameters: { type: 'object', properties: {} } })]
     expect(detectToolChanges(live, cached)).toEqual({
       added: [],
       removed: [],
-      changed: ['run_command'],
+      changed: [{ name: 'run_command', tool: runCommand }],
     })
   })
 
@@ -382,12 +384,14 @@ describe('detectToolChanges', () => {
   })
 
   it('detects a mix of added, removed and changed tools', () => {
-    const live = [tool('read_file'), tool('write_file', { description: 'New description' }), tool('glob')]
+    const writeFile = tool('write_file', { description: 'New description' })
+    const glob = tool('glob')
+    const live = [tool('read_file'), writeFile, glob]
     const cached = [tool('read_file'), tool('write_file', { description: 'Old description' }), tool('web_fetch')]
     expect(detectToolChanges(live, cached)).toEqual({
-      added: [{ name: 'glob', description: 'desc glob', params: [] }],
+      added: [{ name: 'glob', tool: glob }],
       removed: ['web_fetch'],
-      changed: ['write_file'],
+      changed: [{ name: 'write_file', tool: writeFile }],
     })
   })
 })
@@ -397,22 +401,22 @@ describe('renderToolChangeReminder', () => {
     expect(renderToolChangeReminder({ added: [], removed: [], changed: [] })).toBeNull()
   })
 
-  it('renders added tools with truncated description and param names', () => {
-    const longDescription = `A tool that does a very long thing `.repeat(10).trim()
+  it('renders added tools with full JSON schema', () => {
+    const toolDef = tool('mcp_notes_search', {
+      description: 'Search notes',
+      parameters: { type: 'object', properties: { query: { type: 'string' } } },
+    })
     const reminder = renderToolChangeReminder({
-      added: [
-        { name: 'mcp_notes_search', description: longDescription, params: ['query', 'limit'] },
-        { name: 'mcp_notes_add', description: undefined, params: [] },
-      ],
+      added: [{ name: 'mcp_notes_search', tool: toolDef }],
       removed: [],
       changed: [],
     })
     expect(reminder).toContain('<system-reminder>')
     expect(reminder).toContain('Added:')
     expect(reminder).toContain('mcp_notes_search')
-    expect(reminder).toContain('(params: query, limit)')
-    expect(reminder).toContain('…')
-    expect(reminder).toContain('mcp_notes_add')
+    expect(reminder).toContain('Search notes')
+    expect(reminder).toContain('"query"')
+    expect(reminder).toContain('"type": "object"')
   })
 
   it('renders removed tool names', () => {
@@ -421,10 +425,20 @@ describe('renderToolChangeReminder', () => {
     expect(reminder).toContain('mcp_notes_delete')
   })
 
-  it('renders changed tool names', () => {
-    const reminder = renderToolChangeReminder({ added: [], removed: [], changed: ['mcp_notes_update'] })
+  it('renders changed tools with full JSON schema', () => {
+    const toolDef = tool('mcp_notes_update', {
+      description: 'Update a note',
+      parameters: { type: 'object', properties: { id: { type: 'string' } } },
+    })
+    const reminder = renderToolChangeReminder({
+      added: [],
+      removed: [],
+      changed: [{ name: 'mcp_notes_update', tool: toolDef }],
+    })
     expect(reminder).toContain('Changed:')
     expect(reminder).toContain('mcp_notes_update')
+    expect(reminder).toContain('Update a note')
+    expect(reminder).toContain('"id"')
   })
 
   it('omits sections that have no entries', () => {

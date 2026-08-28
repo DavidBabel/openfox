@@ -229,6 +229,8 @@ function createSessionManager(state: Record<string, any>) {
     setDynamicContextChanged: vi.fn(),
     getAnnouncedPromptHash: vi.fn(() => undefined),
     setAnnouncedPromptHash: vi.fn(),
+    getAnnouncedToolFingerprint: vi.fn(() => undefined),
+    setAnnouncedToolFingerprint: vi.fn(),
     clearDebugDump: vi.fn(),
     updateCriterionStatus: vi.fn((_: string, criterionId: string, status: Record<string, unknown>) => {
       state['current'].criteria = state['current'].criteria.map((criterion: any) =>
@@ -1330,6 +1332,79 @@ describe('chat orchestrator', () => {
     })
 
     expect(kickoffEvent).toBeUndefined()
+  })
+
+  it('ships the FROZEN cached tools and lights the rebase door when tool drift is detected', async () => {
+    const eventStore = createEventStore()
+    getEventStoreMock.mockReturnValue(eventStore)
+    getCurrentContextWindowIdMock.mockReturnValue('window-1')
+    getAllInstructionsMock.mockResolvedValue({ content: 'Build carefully', files: [] })
+    getContextMessagesMock.mockReturnValue([{ role: 'user' as const, content: 'Do something' }])
+    getConversationMessagesMock.mockReturnValue([
+      { role: 'user' as const, content: 'Do something', source: 'history' as const },
+    ])
+
+    const cachedTools = [
+      { type: 'function' as const, function: { name: 'read_file', description: 'Read', parameters: {} } },
+    ]
+    const liveTools = [
+      { type: 'function' as const, function: { name: 'read_file', description: 'Read', parameters: {} } },
+      { type: 'function' as const, function: { name: 'mcp_config', description: 'MCP', parameters: {} } },
+    ]
+    getToolRegistryForModeMock.mockReturnValue({ tools: liveTools, definitions: liveTools, execute: vi.fn() })
+
+    let capturedTools: any[] = []
+    streamLLMPureMock.mockImplementation((options: any) => {
+      capturedTools = options.tools?.map((t: any) => t.function?.name) || []
+      return { kind: 'stream' }
+    })
+    consumeStreamGeneratorMock.mockResolvedValueOnce({
+      content: 'Done',
+      toolCalls: [],
+      segments: [{ type: 'text', content: 'Done' }],
+      usage: { promptTokens: 10, completionTokens: 3 },
+      timing: { ttft: 1, completionTime: 1, tps: 3, prefillTps: 10 },
+      aborted: false,
+    })
+
+    const sessionManager = createSessionManager({
+      current: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/tmp/project',
+        mode: 'builder',
+        phase: 'build',
+        isRunning: true,
+        criteria: [{ id: 'c1', description: 'Test', status: { type: 'pending' }, attempts: [] }],
+        executionState: {},
+        messages: [{ id: 'user-1', role: 'user', content: 'Do something' }],
+      },
+    })
+    // Existing conversation with a warm prefix cache (frozen tools).
+    ;(sessionManager.getCachedPrompt as ReturnType<typeof vi.fn>).mockReturnValue({
+      systemPrompt: 'frozen system prompt',
+      tools: cachedTools,
+      hash: 'old-hash',
+    })
+
+    await runAgentTurn(
+      {
+        sessionManager: sessionManager as never,
+        sessionId: 'session-1',
+        llmClient: { getModel: () => 'qwen3-32b' } as never,
+        onMessage: vi.fn(),
+      },
+      new TurnMetrics(),
+      'builder',
+      vi.fn(),
+    )
+
+    // The request must ship the FROZEN cached tools (identical prefix) — the
+    // new mcp_config tool is NOT in the request, so the provider prefix cache
+    // stays valid.
+    expect(capturedTools).toEqual(['read_file'])
+    // The rebase door lights up: drift is pending until the user rebases.
+    expect(sessionManager.setDynamicContextChanged).toHaveBeenCalledWith('session-1', true)
   })
 
   it('injects a builder kickoff prompt for orchestrated builder turns', async () => {

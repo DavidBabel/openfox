@@ -115,6 +115,16 @@ export function getToolFingerprint(tools: LLMToolDefinition[]): string {
 }
 
 /**
+ * Fingerprint of a tool SET covering name, description and parameters — the
+ * same domain as detectToolChanges. Used to track which tool state was last
+ * announced to the model, so drift reminders fire exactly once per change
+ * without mutating the cached prefix.
+ */
+export function getToolSetFingerprint(tools: LLMToolDefinition[]): string {
+  return tools.map(getToolSignature).sort().join('|')
+}
+
+/**
  * Compute a diff of tool names between two tool lists.
  * Returns added/removed lines (removals first) for tools present in only one list.
  */
@@ -152,18 +162,18 @@ export function computePreviewToolDiff(
 // Incremental change detection + system-reminder injection
 // ============================================================================
 
-const MAX_DESCRIPTION_LENGTH = 80
+const MAX_TOOL_SCHEMA_LINES = 120
 
-export interface AddedToolInfo {
+export interface ToolChangeInfo {
   name: string
-  description: string | undefined
-  params: string[]
+  /** Full live tool definition — the exact schema the rebased prefix would carry. */
+  tool: LLMToolDefinition
 }
 
 export interface ToolChanges {
-  added: AddedToolInfo[]
+  added: ToolChangeInfo[]
   removed: string[]
-  changed: string[]
+  changed: ToolChangeInfo[]
 }
 
 export interface ReminderInjectionOptions {
@@ -192,28 +202,23 @@ export function getToolSignature(tool: LLMToolDefinition): string {
 
 /**
  * Compare the live tool set against the cached tool set.
- * Returns added (with description + param names), removed (names) and changed
- * (same name, different description/parameters) tool lists.
+ * Returns added and changed entries carrying the FULL live tool definitions
+ * (self-sufficient for the agent), removed entries by name.
  */
 export function detectToolChanges(liveTools: LLMToolDefinition[], cachedTools: LLMToolDefinition[]): ToolChanges {
   const liveByName = new Map(liveTools.map((t) => [t.function.name, t]))
   const cachedByName = new Map(cachedTools.map((t) => [t.function.name, t]))
-  const added: AddedToolInfo[] = []
+  const added: ToolChangeInfo[] = []
   const removed: string[] = []
-  const changed: string[] = []
+  const changed: ToolChangeInfo[] = []
 
   for (const name of liveByName.keys()) {
     const liveTool = liveByName.get(name)!
     const cachedTool = cachedByName.get(name)
     if (!cachedTool) {
-      const properties = liveTool.function.parameters?.['properties'] as Record<string, unknown> | undefined
-      added.push({
-        name,
-        description: liveTool.function.description,
-        params: Object.keys(properties ?? {}),
-      })
+      added.push({ name, tool: liveTool })
     } else if (getToolSignature(liveTool) !== getToolSignature(cachedTool)) {
-      changed.push(name)
+      changed.push({ name, tool: liveTool })
     }
   }
   for (const name of cachedByName.keys()) {
@@ -222,7 +227,7 @@ export function detectToolChanges(liveTools: LLMToolDefinition[], cachedTools: L
 
   added.sort((a, b) => a.name.localeCompare(b.name))
   removed.sort()
-  changed.sort()
+  changed.sort((a, b) => a.name.localeCompare(b.name))
   return { added, removed, changed }
 }
 
@@ -230,36 +235,39 @@ function hasToolChanges(changes: ToolChanges): boolean {
   return changes.added.length > 0 || changes.removed.length > 0 || changes.changed.length > 0
 }
 
-function truncateDescription(description: string | undefined): string | undefined {
-  if (!description) return undefined
-  const trimmed = description.replace(/\s+/g, ' ').trim()
-  if (trimmed.length <= MAX_DESCRIPTION_LENGTH) return trimmed
-  return trimmed.slice(0, MAX_DESCRIPTION_LENGTH - 1) + '…'
-}
-
-function formatAddedTool(tool: AddedToolInfo): string {
-  const description = truncateDescription(tool.description)
-  const params = tool.params.length > 0 ? ` (params: ${tool.params.join(', ')})` : ''
-  return description ? `${tool.name} — ${description}${params}` : `${tool.name}${params}`
+/**
+ * Serialize a tool definition as a self-sufficient JSON block — the exact
+ * schema the rebased tool prefix would carry. Capped to keep a large toolset
+ * from bloating the context.
+ */
+function formatToolDefinition(entry: ToolChangeInfo): string {
+  const json = JSON.stringify(entry.tool, null, 2)
+  const lines = json.split('\n')
+  if (lines.length <= MAX_TOOL_SCHEMA_LINES) return `### ${entry.name}\n${json}`
+  const visible = lines.slice(0, MAX_TOOL_SCHEMA_LINES)
+  const omitted = lines.length - visible.length
+  return `### ${entry.name}\n${visible.join('\n')}\n… ${omitted} more lines omitted`
 }
 
 /**
- * Render a compact <system-reminder> describing tool changes.
- * Returns null when there is nothing to announce.
+ * Render a self-sufficient <system-reminder> describing tool changes.
+ * Added and changed tools carry their full JSON schema — the exact diff the
+ * agent would have gotten from a rebased tool prefix — so the agent can act
+ * without needing a rebase. Returns null when there is nothing to announce.
  */
 export function renderToolChangeReminder(changes: ToolChanges): string | null {
   if (!hasToolChanges(changes)) return null
   const sections: string[] = []
   if (changes.added.length > 0) {
-    sections.push(`Added:\n${changes.added.map(formatAddedTool).join('\n')}`)
+    sections.push(`Added:\n${changes.added.map(formatToolDefinition).join('\n')}`)
   }
   if (changes.removed.length > 0) {
     sections.push(`Removed:\n${changes.removed.join('\n')}`)
   }
   if (changes.changed.length > 0) {
-    sections.push(`Changed:\n${changes.changed.join('\n')}`)
+    sections.push(`Changed:\n${changes.changed.map(formatToolDefinition).join('\n')}`)
   }
-  return `<system-reminder>\nThe available tools have changed since your last turn:\n${sections.join(
+  return `<system-reminder>\nThe available tools have changed since your last turn. The definitions below are the exact tool schemas now available:\n${sections.join(
     '\n',
   )}\n</system-reminder>`
 }
@@ -325,14 +333,14 @@ function injectSystemReminder(
  * at the start of a top-level turn and at the point of contention (tool /
  * system-prompt changes) for instant visibility.
  *
- * Tool drift is resolved by syncing ONLY the cached tools to the live set
- * (same system prompt text + recomputed hash) so the reminder fires exactly
- * once per change and the new tools are callable immediately. The system
- * prompt text stays frozen — this never calls applyDynamicContext.
+ * The cached prefix (system prompt AND tools) is NEVER mutated here — it stays
+ * frozen so the provider-side prefix cache stays valid. Tool drift is announced
+ * exactly once per change (tracked via the session's announced tool
+ * fingerprint) but the cached tools are left untouched; a manual rebase
+ * (applyDynamicContext) or a new context window rebuilds the canonical text.
  *
  * Prompt drift is announced once per change (tracked via the session's
- * announced prompt hash) and the cache is left untouched — a manual rebase
- * (applyDynamicContext) or a new context window rebuilds the canonical text.
+ * announced prompt hash) and the cache is left untouched as well.
  */
 async function injectDriftReminders(
   sessionManager: SessionManager,
@@ -352,20 +360,25 @@ async function injectDriftReminders(
   let injectedToolReminder = false
   let injectedPromptReminder = false
 
-  const changes = detectToolChanges(liveTools, cached.tools)
-  if (hasToolChanges(changes)) {
-    const reminder = renderToolChangeReminder(changes)
-    if (reminder) {
-      injectSystemReminder(sessionId, append, reminder, 'tools', 'Tools')
-      injectedToolReminder = true
+  // Tool drift: announce once per change, but NEVER mutate the cached prefix.
+  // The announced fingerprint records what we last told the model about, so
+  // the same drift isn't re-injected on every turn while the cache stays frozen.
+  const liveToolFingerprint = getToolSetFingerprint(liveTools)
+  const announcedToolFingerprint =
+    sessionManager.getAnnouncedToolFingerprint(sessionId) ?? getToolSetFingerprint(cached.tools)
+  if (announcedToolFingerprint !== liveToolFingerprint) {
+    const changes = detectToolChanges(liveTools, cached.tools)
+    if (hasToolChanges(changes)) {
+      const reminder = renderToolChangeReminder(changes)
+      if (reminder) {
+        injectSystemReminder(sessionId, append, reminder, 'tools', 'Tools')
+        injectedToolReminder = true
+      }
+      // The prefix is frozen, so the change is pending until the user rebases —
+      // light up the rebase door in the UI.
+      sessionManager.setDynamicContextChanged(sessionId, true)
     }
-    const newHash = computeDynamicContextHash(
-      options.instructionContent,
-      options.skills,
-      getToolFingerprint(liveTools),
-      options.modelName,
-    )
-    sessionManager.setCachedPrompt(sessionId, cached.systemPrompt, liveTools, newHash)
+    sessionManager.setAnnouncedToolFingerprint(sessionId, liveToolFingerprint)
   }
 
   const livePromptHash = computeDynamicContextHash(
@@ -374,7 +387,10 @@ async function injectDriftReminders(
     undefined,
     options.modelName,
   )
-  const announcedPromptHash = sessionManager.getAnnouncedPromptHash(sessionId) ?? cached.hash
+  // Fall back to the tool-independent prompt hash (not cached.hash, which
+  // includes the tool fingerprint) so a post-restart turn doesn't spuriously
+  // run a prompt-diff check when only tools drifted.
+  const announcedPromptHash = sessionManager.getAnnouncedPromptHash(sessionId) ?? cached.promptHash ?? cached.hash
   if (announcedPromptHash !== livePromptHash) {
     // Only build the prompt text when the cheap hash says it drifted — the
     // build is pure string work but the LCS diff can be expensive on big prompts.
@@ -581,8 +597,9 @@ export async function applyDynamicContext(
     modelName,
   )
 
-  sessionManager.setCachedPrompt(sessionId, systemPrompt, tools, hash)
+  sessionManager.setCachedPrompt(sessionId, systemPrompt, tools, hash, promptHash)
   sessionManager.setAnnouncedPromptHash(sessionId, promptHash)
+  sessionManager.setAnnouncedToolFingerprint(sessionId, getToolSetFingerprint(tools))
   sessionManager.setDynamicContextChanged(sessionId, false)
   sessionManager.clearDebugDump(sessionId)
   logger.debug('applyDynamicContext done', { sessionId, hash, toolCount: tools.length })

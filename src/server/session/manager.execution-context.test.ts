@@ -718,23 +718,25 @@ describe('SessionManager.switchWorkspace – execution context integrity (issue 
         expect(secondCall.systemPrompt).toBe(oldSystemPrompt)
         expect(secondCall.systemPrompt).toBe(firstCall.systemPrompt)
 
-        // Tool list reuse (deep equality). The turn-start tool check synced the
-        // cached tools to the live registry, so both calls share the same set
-        // and it contains the originally cached tool names.
+        // Tool list reuse (deep equality). The turn-start tool check must NOT
+        // sync the cached tools to the live registry — the cached prefix is
+        // frozen so the provider prefix cache stays valid.
         expect(secondCall.tools).toEqual(firstCall.tools)
         const firstToolNames = new Set(
           (firstCall.tools as Array<{ function: { name: string } }>).map((t) => t.function.name),
         )
         expect(Array.from(firstToolNames)).toEqual(expect.arrayContaining(cachedTools.map((t) => t.function.name)))
 
-        // Cache state after both calls — the system prompt text is untouched
-        // (prefix-cache sacred); only tools + hash were synced to the live set.
+        // Cache state after both calls — the ENTIRE cached prefix (system
+        // prompt, tools AND hash) is frozen. Only the user's rebase
+        // (applyDynamicContext) rebuilds it.
         const cachedAfter = manager.getCachedPrompt(session.id)
         expect(cachedAfter).toBeDefined()
-        expect(cachedAfter?.hash).not.toBe(oldHash)
+        expect(cachedAfter?.hash).toBe(oldHash)
         expect(cachedAfter?.systemPrompt).toBe(oldSystemPrompt)
-        expect(setCachedSpy).toHaveBeenCalledTimes(1)
-        expect(resetWarmupSpy).toHaveBeenCalledTimes(1)
+        expect(cachedAfter?.tools).toEqual(cachedTools)
+        expect(setCachedSpy).not.toHaveBeenCalled()
+        expect(resetWarmupSpy).not.toHaveBeenCalled()
 
         // The workspace reminder reaches the second LLM call with the
         // authoritatively-read workspace, path, and branch — not the requested one.

@@ -292,6 +292,11 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE sessions ADD COLUMN cached_hash TEXT`)
   }
 
+  if (!columnNames.includes('cached_prompt_hash')) {
+    logger.info('Migrating sessions table: adding cached_prompt_hash column')
+    db.exec(`ALTER TABLE sessions ADD COLUMN cached_prompt_hash TEXT`)
+  }
+
   // Migration: Rename worktree → workspace
   if (!columnNames.includes('workspace') && columnNames.includes('worktree')) {
     logger.info('Migrating sessions table: renaming worktree to workspace')

@@ -100,6 +100,52 @@ describe('ContextPopover', () => {
     expect(screen.getByText('Rebase system prompt')).toBeDefined()
   })
 
+  it('does not show a "changes" indicator when dynamicContextChanged is false', () => {
+    render(
+      <SessionScopeProvider value="s1">
+        <ContextPopover />
+      </SessionScopeProvider>,
+    )
+    expect(screen.queryByLabelText('System prompt changes available')).toBeNull()
+  })
+
+  it('shows a "changes" indicator when dynamicContextChanged is true', () => {
+    storeState = {
+      ...makeBaseState(),
+      panes: {
+        s1: {
+          ...(makeBaseState().panes as Record<string, any>)['s1'],
+          contextState: { ...makeContextState(), dynamicContextChanged: true },
+        },
+      },
+    }
+    render(
+      <SessionScopeProvider value="s1">
+        <ContextPopover />
+      </SessionScopeProvider>,
+    )
+    expect(screen.getByLabelText('System prompt changes available')).toBeDefined()
+  })
+
+  it('shows a "changes" indicator in the sidebar variant when dynamicContextChanged is true', () => {
+    storeState = {
+      ...makeBaseState(),
+      panes: {
+        s1: {
+          ...(makeBaseState().panes as Record<string, any>)['s1'],
+          contextState: { ...makeContextState(), dynamicContextChanged: true },
+        },
+      },
+    }
+    render(
+      <SessionScopeProvider value="s1">
+        <ContextPopover variant="sidebar" />
+      </SessionScopeProvider>,
+    )
+    fireEvent.click(screen.getByTitle('More options'))
+    expect(screen.getByLabelText('System prompt changes available')).toBeDefined()
+  })
+
   it('calls onUpdateSystemPrompt when the action is clicked and a handler is provided', () => {
     const onUpdateSystemPrompt = vi.fn()
     render(

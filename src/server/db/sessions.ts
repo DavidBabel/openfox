@@ -261,31 +261,39 @@ export function updateSessionCachedPrompt(
   systemPrompt: string,
   tools: import('../llm/types.js').LLMToolDefinition[],
   hash: string,
+  promptHash?: string,
 ): void {
   const db = getDatabase()
   const now = new Date().toISOString()
 
   db.prepare(
     `
-    UPDATE sessions SET cached_system_prompt = ?, cached_tools = ?, cached_hash = ?, updated_at = ? WHERE id = ?
+    UPDATE sessions SET cached_system_prompt = ?, cached_tools = ?, cached_hash = ?, cached_prompt_hash = ?, updated_at = ? WHERE id = ?
   `,
-  ).run(systemPrompt, JSON.stringify(tools), hash, now, id)
+  ).run(systemPrompt, JSON.stringify(tools), hash, promptHash ?? null, now, id)
 }
 
 export function getSessionCachedPrompt(id: string): {
   systemPrompt: string
   tools: import('../llm/types.js').LLMToolDefinition[]
   hash: string
+  promptHash?: string
 } | null {
   const db = getDatabase()
   const row = db
     .prepare(
       `
-    SELECT cached_system_prompt, cached_tools, cached_hash FROM sessions WHERE id = ?
+    SELECT cached_system_prompt, cached_tools, cached_hash, cached_prompt_hash FROM sessions WHERE id = ?
   `,
     )
     .get(id) as
-    { cached_system_prompt: string | null; cached_tools: string | null; cached_hash: string | null } | undefined
+    | {
+        cached_system_prompt: string | null
+        cached_tools: string | null
+        cached_hash: string | null
+        cached_prompt_hash: string | null
+      }
+    | undefined
 
   if (!row || !row.cached_system_prompt || !row.cached_tools || !row.cached_hash) {
     return null
@@ -293,7 +301,12 @@ export function getSessionCachedPrompt(id: string): {
 
   try {
     const tools = JSON.parse(row.cached_tools) as import('../llm/types.js').LLMToolDefinition[]
-    return { systemPrompt: row.cached_system_prompt, tools, hash: row.cached_hash }
+    return {
+      systemPrompt: row.cached_system_prompt,
+      tools,
+      hash: row.cached_hash,
+      ...(row.cached_prompt_hash ? { promptHash: row.cached_prompt_hash } : {}),
+    }
   } catch {
     return null
   }
@@ -574,6 +587,7 @@ interface SessionRow {
   cached_system_prompt: string | null
   cached_tools: string | null
   cached_hash: string | null
+  cached_prompt_hash: string | null
 }
 
 interface SessionSummaryRow {

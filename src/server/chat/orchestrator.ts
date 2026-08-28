@@ -455,7 +455,13 @@ export async function runAgentTurn(
           agentDef,
           agentLlmClient.getModel(),
         )
-        options.sessionManager.setCachedPrompt(options.sessionId, result.systemPrompt, result.tools, result.hash)
+        options.sessionManager.setCachedPrompt(
+          options.sessionId,
+          result.systemPrompt,
+          result.tools,
+          result.hash,
+          result.promptHash,
+        )
         options.sessionManager.setAnnouncedPromptHash(options.sessionId, result.promptHash)
         return createAssemblyResult({
           systemPrompt: result.systemPrompt,

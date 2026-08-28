@@ -346,7 +346,20 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
                 dangerZone={contextState.dangerZone}
                 size="sm"
               />
-              <Popover ref={contextPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
+              <Popover
+                ref={contextPopoverRef}
+                trigger={
+                  <span className="relative inline-flex">
+                    <ChevronDownIcon className="w-3 h-3" />
+                    {contextState.dynamicContextChanged && (
+                      <span
+                        className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-accent-warning"
+                        aria-label="System prompt changes available"
+                      />
+                    )}
+                  </span>
+                }
+              >
                 <ContextPopover
                   onUpdateSystemPrompt={() => {
                     contextPopoverRef.current?.close()

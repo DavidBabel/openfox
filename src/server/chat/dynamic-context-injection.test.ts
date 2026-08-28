@@ -5,6 +5,7 @@ import type { TurnEvent } from '../events/types.js'
 import {
   checkToolChangesAndInject,
   computeDynamicContextHash,
+  getToolFingerprint,
   injectContextDriftReminders,
   injectContextDriftRemindersForSessions,
 } from './dynamic-context.js'
@@ -70,20 +71,29 @@ interface CachedState {
   systemPrompt: string
   tools: LLMToolDefinition[]
   hash: string
+  promptHash?: string
 }
 
 function createSessionManager(initial?: CachedState) {
   let cached: CachedState | undefined = initial
   let announcedPromptHash: string | undefined
+  let announcedToolFingerprint: string | undefined
   return {
     getCachedPrompt: vi.fn(() => cached),
-    setCachedPrompt: vi.fn((_sessionId: string, systemPrompt: string, tools: LLMToolDefinition[], hash: string) => {
-      cached = { systemPrompt, tools, hash }
-    }),
+    setCachedPrompt: vi.fn(
+      (_sessionId: string, systemPrompt: string, tools: LLMToolDefinition[], hash: string, promptHash?: string) => {
+        cached = { systemPrompt, tools, hash, ...(promptHash ? { promptHash } : {}) }
+      },
+    ),
     getAnnouncedPromptHash: vi.fn(() => announcedPromptHash),
     setAnnouncedPromptHash: vi.fn((_sessionId: string, hash: string) => {
       announcedPromptHash = hash
     }),
+    getAnnouncedToolFingerprint: vi.fn(() => announcedToolFingerprint),
+    setAnnouncedToolFingerprint: vi.fn((_sessionId: string, fingerprint: string) => {
+      announcedToolFingerprint = fingerprint
+    }),
+    setDynamicContextChanged: vi.fn(),
   } as unknown as SessionManager
 }
 
@@ -123,7 +133,7 @@ describe('checkToolChangesAndInject', () => {
     expect(sessionManager.setCachedPrompt).not.toHaveBeenCalled()
   })
 
-  it('injects a tool reminder and syncs cached tools when a tool is added', async () => {
+  it('injects a tool reminder WITHOUT mutating the cached prefix (frozen cache)', async () => {
     const cachedTools = [tool('read_file')]
     const liveTools = [tool('read_file'), tool('write_file')]
     vi.mocked(getToolRegistryForAgent).mockReturnValue({ definitions: liveTools } as never)
@@ -149,13 +159,16 @@ describe('checkToolChangesAndInject', () => {
       },
     })
     expect(starts[0]!.data.content).toContain('write_file')
+    expect(starts[0]!.data.content).toContain('"name": "write_file"')
     expect(events.some((e) => e.type === 'message.done')).toBe(true)
-    expect(sessionManager.setCachedPrompt).toHaveBeenCalledWith(
-      's1',
-      'new system prompt',
-      liveTools,
-      expect.not.stringMatching(/^old-hash$/),
-    )
+    // The cached prefix must stay frozen — no setCachedPrompt, no hash rewrite.
+    expect(sessionManager.setCachedPrompt).not.toHaveBeenCalled()
+    expect(sessionManager.getCachedPrompt('s1')?.tools).toEqual(cachedTools)
+    expect(sessionManager.getCachedPrompt('s1')?.hash).toBe('old-hash')
+    // Exactly-once is tracked via the announced tool fingerprint instead.
+    expect(sessionManager.setAnnouncedToolFingerprint).toHaveBeenCalled()
+    // Drift lights up the rebase door: dynamicContextChanged flips to true.
+    expect(sessionManager.setDynamicContextChanged).toHaveBeenCalledWith('s1', true)
   })
 
   it('injects exactly once across consecutive turns (injection-once semantics)', async () => {
@@ -296,6 +309,73 @@ describe('checkToolChangesAndInject', () => {
     expect(events).toEqual([])
   })
 
+  it('does not spuriously run a prompt-diff check after restart when only tools drifted', async () => {
+    // Post-restart: the announced prompt hash is lost (in-memory), but the
+    // cached prompt persists its TOOL-INDEPENDENT promptHash. A tool change
+    // must NOT make the prompt hash look drifted.
+    const tools = [tool('read_file')]
+    const livePromptHash = computeDynamicContextHash('instructions', [], undefined, 'test-model')
+    vi.mocked(getToolRegistryForAgent).mockReturnValue({
+      definitions: [tool('read_file'), tool('write_file')],
+    } as never)
+    const sessionManager = createSessionManager({
+      systemPrompt: 'prompt',
+      tools,
+      hash: computeDynamicContextHash('instructions', [], getToolFingerprint(tools), 'test-model'),
+      promptHash: livePromptHash,
+    })
+    const buildNewSystemPrompt = vi.fn(() => 'prompt')
+    const { append } = createAppend()
+
+    const result = await checkToolChangesAndInject(
+      sessionManager,
+      's1',
+      agentDef,
+      { ...OPTIONS, buildNewSystemPrompt },
+      append,
+    )
+
+    // Tool reminder fires (frozen prefix), but the prompt check is skipped:
+    // buildNewSystemPrompt is never invoked.
+    expect(result.injectedToolReminder).toBe(true)
+    expect(result.injectedPromptReminder).toBe(false)
+    expect(buildNewSystemPrompt).not.toHaveBeenCalled()
+    expect(sessionManager.setCachedPrompt).not.toHaveBeenCalled()
+  })
+
+  it('keeps the cached tools byte-identical when the mcp_config tool definition changes', async () => {
+    const cachedTools = [
+      tool('mcp_config', {
+        description: 'Configure MCP servers',
+        parameters: { type: 'object', properties: { action: { type: 'string', enum: ['list', 'add'] } } },
+      }),
+    ]
+    const liveTools = [
+      tool('mcp_config', {
+        description: 'Configure MCP servers',
+        parameters: {
+          type: 'object',
+          properties: { action: { type: 'string', enum: ['list', 'add', 'bootstrap'] } },
+        },
+      }),
+    ]
+    vi.mocked(getToolRegistryForAgent).mockReturnValue({ definitions: liveTools } as never)
+    const sessionManager = createSessionManager({
+      systemPrompt: 'new system prompt',
+      tools: cachedTools,
+      hash: 'old-hash',
+    })
+    const { append, events } = createAppend()
+
+    const result = await checkToolChangesAndInject(sessionManager, 's1', agentDef, OPTIONS, append)
+
+    expect(result.injectedToolReminder).toBe(true)
+    expect(reminders(events)[0]!.data.content).toContain('bootstrap')
+    // Prefix invariant: cached tools untouched → provider prefix cache stays valid.
+    expect(sessionManager.getCachedPrompt('s1')?.tools).toEqual(cachedTools)
+    expect(sessionManager.setCachedPrompt).not.toHaveBeenCalled()
+  })
+
   it('scopes injected reminders to the current context window', async () => {
     vi.mocked(getToolRegistryForAgent).mockReturnValue({
       definitions: [tool('read_file'), tool('write_file')],
@@ -322,15 +402,23 @@ describe('injectContextDriftReminders', () => {
     const caches = new Map<string, CachedState>(Object.entries(extra))
     if (initial) caches.set('s1', initial)
     const announcedHashes = new Map<string, string>()
+    const announcedFingerprints = new Map<string, string>()
     return {
       getCachedPrompt: vi.fn((sessionId: string) => caches.get(sessionId)),
-      setCachedPrompt: vi.fn((sessionId: string, systemPrompt: string, tools: LLMToolDefinition[], hash: string) => {
-        caches.set(sessionId, { systemPrompt, tools, hash })
-      }),
+      setCachedPrompt: vi.fn(
+        (sessionId: string, systemPrompt: string, tools: LLMToolDefinition[], hash: string, promptHash?: string) => {
+          caches.set(sessionId, { systemPrompt, tools, hash, ...(promptHash ? { promptHash } : {}) })
+        },
+      ),
       getAnnouncedPromptHash: vi.fn((sessionId: string) => announcedHashes.get(sessionId)),
       setAnnouncedPromptHash: vi.fn((sessionId: string, hash: string) => {
         announcedHashes.set(sessionId, hash)
       }),
+      getAnnouncedToolFingerprint: vi.fn((sessionId: string) => announcedFingerprints.get(sessionId)),
+      setAnnouncedToolFingerprint: vi.fn((sessionId: string, fingerprint: string) => {
+        announcedFingerprints.set(sessionId, fingerprint)
+      }),
+      setDynamicContextChanged: vi.fn(),
       getProjectWorkdir: vi.fn(() => '/tmp/project'),
       requireSession: vi.fn(() => ({ workdir: '/tmp/project', mode: 'builder', projectId: 'p1' })),
       resolveEffectiveProviderModel: vi.fn(() => ({ providerId: null, model: 'test-model' })),
@@ -363,12 +451,9 @@ describe('injectContextDriftReminders', () => {
       data: { metadata: { type: 'tools', name: 'Tools', kind: 'reminder' } },
     })
     expect(starts[0]!.data.content).toContain('write_file')
-    expect(sessionManager.setCachedPrompt).toHaveBeenCalledWith(
-      's1',
-      'new system prompt',
-      [tool('read_file'), tool('write_file')],
-      expect.any(String),
-    )
+    // Point-of-contention injection must not mutate the cached prefix either.
+    expect(sessionManager.setCachedPrompt).not.toHaveBeenCalled()
+    expect(sessionManager.setAnnouncedToolFingerprint).toHaveBeenCalled()
   })
 
   it('injects a system prompt diff reminder at the point of contention', async () => {
@@ -482,7 +567,7 @@ describe('injectContextDriftReminders', () => {
     expect(events).toEqual([])
   })
 
-  it('injects for every session in the batch', async () => {
+  it('injects for every session in the batch without mutating cached prefixes', async () => {
     vi.mocked(getToolRegistryForAgent).mockReturnValue({
       definitions: [tool('read_file'), tool('write_file')],
     } as never)
@@ -493,7 +578,8 @@ describe('injectContextDriftReminders', () => {
 
     await injectContextDriftRemindersForSessions(sessionManager, ['s1', 's2'])
 
-    expect(sessionManager.setCachedPrompt).toHaveBeenCalledWith('s1', 'p', expect.anything(), expect.any(String))
-    expect(sessionManager.setCachedPrompt).toHaveBeenCalledWith('s2', 'p', expect.anything(), expect.any(String))
+    expect(sessionManager.setCachedPrompt).not.toHaveBeenCalled()
+    expect(sessionManager.setAnnouncedToolFingerprint).toHaveBeenCalledWith('s1', expect.any(String))
+    expect(sessionManager.setAnnouncedToolFingerprint).toHaveBeenCalledWith('s2', expect.any(String))
   })
 })

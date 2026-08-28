@@ -449,6 +449,19 @@ describe('SessionManager', () => {
     expect(manager.getContextState(session.id).warmCache).toBe(true)
   })
 
+  it('tracks the announced tool fingerprint independently of the cached prompt', () => {
+    const session = manager.createSession(projectId)
+
+    expect(manager.getAnnouncedToolFingerprint(session.id)).toBeUndefined()
+
+    manager.setAnnouncedToolFingerprint(session.id, 'live-fingerprint')
+    expect(manager.getAnnouncedToolFingerprint(session.id)).toBe('live-fingerprint')
+
+    // The announced fingerprint must not depend on the cached prefix.
+    manager.setCachedPrompt(session.id, 'cached system prompt', [], 'hash-1')
+    expect(manager.getAnnouncedToolFingerprint(session.id)).toBe('live-fingerprint')
+  })
+
   it('preserves subAgentId and subAgentType when adding messages', () => {
     const session = manager.createSession(projectId)
     const subAgentId = 'verifier-test-123'
@@ -745,6 +758,7 @@ describe('SessionManager', () => {
         'system prompt',
         [{ type: 'function', function: { name: 'test', description: '', parameters: {} } }],
         'hash123',
+        'promptHash123',
       )
 
       const msg = manager.addMessage(original.id, { role: 'user', content: 'Hello', tokenCount: 10 })
@@ -755,6 +769,7 @@ describe('SessionManager', () => {
       expect(cached).not.toBeNull()
       expect(cached?.systemPrompt).toBe('system prompt')
       expect(cached?.hash).toBe('hash123')
+      expect(cached?.promptHash).toBe('promptHash123')
     })
 
     it('marks forked session as warmed up', async () => {

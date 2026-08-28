@@ -136,6 +136,7 @@ export class SessionManager {
   private dynamicContextChangedStore = new Map<string, boolean>()
   private debugDumpStore = new Map<string, { cachedPrompt: string; cachedTools: string[]; liveTools: string[] }>()
   private announcedPromptHashStore = new Map<string, string>()
+  private announcedToolFingerprintStore = new Map<string, string>()
   private warmedUpSessions = new Set<string>()
   private switchLocks = new Map<string, Promise<unknown>>()
   private workspaceCreationLocks = new Map<string, Promise<void>>()
@@ -490,7 +491,7 @@ export class SessionManager {
 
     const cached = getSessionCachedPrompt(originalSessionId)
     if (cached) {
-      updateSessionCachedPrompt(newSession.id, cached.systemPrompt, cached.tools, cached.hash)
+      updateSessionCachedPrompt(newSession.id, cached.systemPrompt, cached.tools, cached.hash, cached.promptHash)
       this.markWarmedUp(newSession.id)
     }
 
@@ -577,6 +578,8 @@ export class SessionManager {
 
     // Clean up warmup state
     this.warmedUpSessions.delete(id)
+    this.announcedPromptHashStore.delete(id)
+    this.announcedToolFingerprintStore.delete(id)
 
     // Delete session from DB
     dbDeleteSession(id)
@@ -1545,14 +1548,17 @@ export class SessionManager {
     systemPrompt: string,
     tools: import('../llm/types.js').LLMToolDefinition[],
     hash: string,
+    promptHash?: string,
   ): void {
-    updateSessionCachedPrompt(sessionId, systemPrompt, tools, hash)
+    updateSessionCachedPrompt(sessionId, systemPrompt, tools, hash, promptHash)
     this.resetWarmup(sessionId)
   }
 
   getCachedPrompt(
     sessionId: string,
-  ): { systemPrompt: string; tools: import('../llm/types.js').LLMToolDefinition[]; hash: string } | undefined {
+  ):
+    | { systemPrompt: string; tools: import('../llm/types.js').LLMToolDefinition[]; hash: string; promptHash?: string }
+    | undefined {
     const result = getSessionCachedPrompt(sessionId)
     return result ?? undefined
   }
@@ -1583,6 +1589,19 @@ export class SessionManager {
 
   setAnnouncedPromptHash(sessionId: string, hash: string): void {
     this.announcedPromptHashStore.set(sessionId, hash)
+  }
+
+  /**
+   * The tool fingerprint last announced to the model via a tool-change
+   * reminder. Drives exactly-once tool-drift reminders WITHOUT mutating the
+   * cached prefix (the cached tools stay frozen until a manual rebase).
+   */
+  getAnnouncedToolFingerprint(sessionId: string): string | undefined {
+    return this.announcedToolFingerprintStore.get(sessionId)
+  }
+
+  setAnnouncedToolFingerprint(sessionId: string, fingerprint: string): void {
+    this.announcedToolFingerprintStore.set(sessionId, fingerprint)
   }
 
   /**

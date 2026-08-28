@@ -29,6 +29,8 @@ import {
   updateSessionPhase,
   updateSessionRunning,
   updateSessionMessageCount,
+  updateSessionCachedPrompt,
+  getSessionCachedPrompt,
 } from './sessions.js'
 import { getDatabase } from './index.js'
 
@@ -495,6 +497,37 @@ describe('db sessions', () => {
       const page2 = listSessionsLimited(2, 2)
       expect(page2.sessions.map((s) => s.id)).toEqual([b2.id, b3.id])
       expect(page2.hasMore).toBe(false)
+    })
+  })
+
+  describe('cached prompt', () => {
+    it('round-trips the tool-independent promptHash alongside the cached prompt', () => {
+      const session = createSession(projectAId, rootA, 'Cached')
+      const tools = [
+        {
+          type: 'function' as const,
+          function: { name: 'read_file', description: 'Read', parameters: {} },
+        },
+      ]
+
+      updateSessionCachedPrompt(session.id, 'system prompt', tools, 'hash-1', 'prompt-hash-1')
+
+      const cached = getSessionCachedPrompt(session.id)
+      expect(cached).not.toBeNull()
+      expect(cached?.systemPrompt).toBe('system prompt')
+      expect(cached?.hash).toBe('hash-1')
+      expect(cached?.promptHash).toBe('prompt-hash-1')
+    })
+
+    it('returns null when only promptHash is set without the cached prompt', () => {
+      const session = createSession(projectAId, rootA, 'Cached-2')
+
+      updateSessionCachedPrompt(session.id, 'sp', [], 'h')
+
+      const cached = getSessionCachedPrompt(session.id)
+      expect(cached).not.toBeNull()
+      // No promptHash persisted → omitted from the result (optional field).
+      expect(cached?.promptHash).toBeUndefined()
     })
   })
 })

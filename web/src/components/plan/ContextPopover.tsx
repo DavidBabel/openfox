@@ -12,6 +12,18 @@ interface ContextPopoverProps {
   onUpdateSystemPrompt?: () => void
 }
 
+function RebaseIndicator() {
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center gap-1 text-[10px] text-accent-warning"
+      aria-label="System prompt changes available"
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-accent-warning" />
+      changes
+    </span>
+  )
+}
+
 export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: ContextPopoverProps) {
   const { sessionId, contextState, currentSession } = useScopedContext()
   const compactContext = useSessionStore((state) => state.compactContext)
@@ -25,6 +37,7 @@ export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: Co
   const { currentTokens, maxTokens, compactionCount, dangerZone } = contextState
   const percent = Math.round((currentTokens / maxTokens) * 100)
   const isRunning = currentSession.isRunning
+  const needsRebase = contextState.dynamicContextChanged === true
 
   const handleApplyDynamic = () => {
     applyDynamicContext(isRunning)
@@ -83,6 +96,7 @@ export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: Co
               title="Preview and apply system prompt changes"
             >
               <span className="text-accent-warning">Rebase system prompt</span>
+              {needsRebase && <RebaseIndicator />}
             </button>
           </div>
         </>
@@ -141,6 +155,7 @@ export function ContextPopover({ variant = 'popover', onUpdateSystemPrompt }: Co
           title="Preview and apply system prompt changes"
         >
           <span className="text-accent-warning">Rebase system prompt</span>
+          {needsRebase && <RebaseIndicator />}
         </button>
       </div>
       {applyModal}
