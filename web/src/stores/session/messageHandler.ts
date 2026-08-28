@@ -1054,9 +1054,8 @@ export function handleServerMessage(
       if (payload?.servers) {
         const sorted = [...payload.servers].sort((a, b) => a.name.localeCompare(b.name))
         useMcpStore.getState().setServers(sorted)
-      } else {
-        window.dispatchEvent(new CustomEvent('mcp-servers-changed'))
       }
+      window.dispatchEvent(new CustomEvent('mcp-servers-changed'))
       break
     }
 
