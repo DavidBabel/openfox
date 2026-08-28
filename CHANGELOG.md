@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.132 - 2026-08-28
+
+### Enhancements
+
+- **Deterministic workspace commit-and-push flow** — landing workspace changes is now an unconditional recipe: push a temp branch, merge back into the original repo, then delete the workspace and push to the remote
+
+### Bug Fixes
+
+- **OpenCode Go models work on unset backends** — gpt-5.6-luna, grok-4.6 and muse-spark route to the Responses API even when the provider backend is unknown, instead of being rejected with HTTP 400
+- **Agent now calls newly added tools** — drift reminders explicitly tell the agent that fresh MCP tools are callable like any other tool
+
 ## 2.0.131 - 2026-08-28
 
 ### Enhancements
