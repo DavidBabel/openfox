@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.131 - 2026-08-28
+
+### Enhancements
+
+- **Tool-change reminders embed full schemas** — added and changed tools carry their exact JSON definition, so no rebase is needed to act on them
+- **Rebase system prompt shows a pending badge** — a "changes" indicator lights up the rebase action whenever drift awaits your approval
+
+### Bug Fixes
+
+- **Tool changes no longer wipe the prefix cache** — deep context caching survives releases and restarts, so 400k-token sessions skip the full re-prefill
+- **No spurious prompt-diff checks after restart** — only a tool change no longer trips the prompt drift detector
+
 ## 2.0.130 - 2026-08-28
 
 ### Features
