@@ -70,7 +70,11 @@ export interface AgentStep extends StepBase {
   agentId?: string
   /** Injected as user message on first entry. Supports template variables. */
   prompt?: string
-  /** Injected when re-entering after a failed verify. Supports template variables. */
+  /**
+   * Injected when re-entering an agent step without calling step_done.
+   * Supports template variables. Skipped when the step's transition condition
+   * is already satisfied — in that case only the step_done reminder is shown.
+   */
   nudgePrompt?: string
 }
 

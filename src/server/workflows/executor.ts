@@ -173,6 +173,52 @@ export function evaluateTransitions(
 }
 
 // ============================================================================
+// Step-Done Nudge
+// ============================================================================
+
+const STEP_DONE_NUDGE =
+  "You haven't called step_done(). If you haven't finished the task, continue and when you're finished call step_done()"
+const STEP_DONE_REMINDER = 'If you have finished the task, call step_done()'
+
+/**
+ * True when a step's transition condition is already satisfied — the first
+ * matching transition would move the workflow away from the current step. In
+ * that case there is nothing left to do but call step_done, so the verbose
+ * "keep working" nudge should be skipped. A transition that loops back to the
+ * current step (the usual `always` fallback) means work remains.
+ */
+export function isStepTransitionSatisfied(
+  transitions: Transition[],
+  metadataEntries: Record<string, import('../../shared/types.js').MetadataEntry[]>,
+  currentStepId: string,
+): boolean {
+  const fired = findMatchingTransition(transitions, null, metadataEntries)
+  return fired !== null && fired.goto !== currentStepId
+}
+
+/**
+ * Build the reminder injected when an agent step loops back without calling
+ * step_done. When the transition condition is already satisfied (e.g. all
+ * criteria completed but step_done forgotten), the verbose nudgePrompt is
+ * skipped and only a simple "call step_done" reminder is emitted.
+ */
+export function buildAgentNudge(
+  nudgePrompt: string | undefined,
+  templateCtx: TemplateContext,
+  transitions: Transition[],
+  metadataEntries: Record<string, import('../../shared/types.js').MetadataEntry[]>,
+  currentStepId: string,
+): string {
+  const transitionSatisfied = isStepTransitionSatisfied(transitions, metadataEntries, currentStepId)
+  const parts: string[] = []
+  if (nudgePrompt && !transitionSatisfied) {
+    parts.push(resolveTemplate(nudgePrompt, templateCtx))
+  }
+  parts.push(transitionSatisfied ? STEP_DONE_REMINDER : STEP_DONE_NUDGE)
+  return parts.join('\n\n')
+}
+
+// ============================================================================
 // User-Step Choices
 // ============================================================================
 
@@ -487,8 +533,6 @@ export async function executeWorkflow(
       case 'agent': {
         const agentStep = step as AgentStep
         const STEP_DONE_PROMPT = "\n\nOnce you're done, call step_done()"
-        const STEP_DONE_NUDGE =
-          "You haven't called step_done(). If you haven't finished the task, continue and when you're finished call step_done()"
 
         // When resuming from the same step after abort, skip re-injecting the
         // prompt or nudge — the agent already knows what step it's in and the
@@ -530,14 +574,16 @@ export async function executeWorkflow(
             )
           }
         } else if (firstEntryForStep.has(step.id) && !isResumingCurrentStep) {
-          // Build nudge: nudgePrompt first (if exists), then step_done nudge
-          const parts: string[] = []
-          if (agentStep.nudgePrompt) {
-            const resolvedNudge = resolveTemplate(agentStep.nudgePrompt, templateCtx)
-            parts.push(resolvedNudge)
-          }
-          parts.push(STEP_DONE_NUDGE)
-          nudgeContent = parts.join('\n\n')
+          // Build nudge: if the transition condition is already satisfied (e.g.
+          // all criteria completed but step_done forgotten), only remind to call
+          // step_done instead of the verbose keep-working nudgePrompt.
+          nudgeContent = buildAgentNudge(
+            agentStep.nudgePrompt,
+            templateCtx,
+            step.transitions,
+            session.metadataEntries,
+            step.id,
+          )
 
           emitWorkflowMessage(eventStore, sessionId, nudgeContent, currentWindowMessageOptions, onMessage)
         }
