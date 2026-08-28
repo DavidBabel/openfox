@@ -253,7 +253,9 @@ function formatToolDefinition(entry: ToolChangeInfo): string {
  * Render a self-sufficient <system-reminder> describing tool changes.
  * Added and changed tools carry their full JSON schema — the exact diff the
  * agent would have gotten from a rebased tool prefix — so the agent can act
- * without needing a rebase. Returns null when there is nothing to announce.
+ * without needing a rebase. When new tools were added, the reminder explicitly
+ * tells the agent they are callable like any other tool. Returns null when
+ * there is nothing to announce.
  */
 export function renderToolChangeReminder(changes: ToolChanges): string | null {
   if (!hasToolChanges(changes)) return null
@@ -267,9 +269,11 @@ export function renderToolChangeReminder(changes: ToolChanges): string | null {
   if (changes.changed.length > 0) {
     sections.push(`Changed:\n${changes.changed.map(formatToolDefinition).join('\n')}`)
   }
-  return `<system-reminder>\nThe available tools have changed since your last turn. The definitions below are the exact tool schemas now available:\n${sections.join(
-    '\n',
-  )}\n</system-reminder>`
+  const intro =
+    changes.added.length > 0
+      ? 'You now have access to new tools — you can call them like any other tool. The definitions below are the exact tool schemas now available:'
+      : 'The available tools have changed since your last turn. The definitions below are the exact tool schemas now available:'
+  return `<system-reminder>\n${intro}\n${sections.join('\n')}\n</system-reminder>`
 }
 
 const MAX_PROMPT_DIFF_LINES = 40

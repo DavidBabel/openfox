@@ -419,6 +419,26 @@ describe('renderToolChangeReminder', () => {
     expect(reminder).toContain('"type": "object"')
   })
 
+  it('tells the agent it can call newly added tools like any other tool', () => {
+    const toolDef = tool('mcp_notes_search', { description: 'Search notes' })
+    const reminder = renderToolChangeReminder({
+      added: [{ name: 'mcp_notes_search', tool: toolDef }],
+      removed: [],
+      changed: [],
+    })
+    expect(reminder).toContain('You now have access to new tools')
+    expect(reminder).toContain('call them like any other tool')
+  })
+
+  it('does not tell the agent to call tools when nothing was added', () => {
+    const reminder = renderToolChangeReminder({
+      added: [],
+      removed: ['mcp_notes_delete'],
+      changed: [{ name: 'mcp_notes_update', tool: tool('mcp_notes_update') }],
+    })
+    expect(reminder).not.toContain('You now have access to new tools')
+  })
+
   it('renders removed tool names', () => {
     const reminder = renderToolChangeReminder({ added: [], removed: ['mcp_notes_delete'], changed: [] })
     expect(reminder).toContain('Removed:')

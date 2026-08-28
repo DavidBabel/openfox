@@ -97,7 +97,10 @@ describe('Context drift injection at the point of contention', () => {
 
   function toolChangeReminders(messages: SessionMessage[]): SessionMessage[] {
     return messages.filter(
-      (m) => m.isSystemGenerated === true && m.content?.includes('The available tools have changed'),
+      (m) =>
+        m.isSystemGenerated === true &&
+        (m.content?.includes('The available tools have changed') ||
+          m.content?.includes('You now have access to new tools')),
     )
   }
 
