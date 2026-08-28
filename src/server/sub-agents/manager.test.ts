@@ -484,6 +484,7 @@ describe('SubAgentManager', () => {
       'run_command',
       'session_metadata',
       'web_fetch',
+      'load_skill',
     ])
 
     expect(findAgentById('code_reviewer', agents)?.metadata.allowedTools).toEqual([
@@ -491,9 +492,15 @@ describe('SubAgentManager', () => {
       'run_command',
       'web_fetch',
       'session_metadata',
+      'load_skill',
     ])
 
-    expect(findAgentById('explorer', agents)?.metadata.allowedTools).toEqual(['read_file', 'run_command', 'web_fetch'])
+    expect(findAgentById('explorer', agents)?.metadata.allowedTools).toEqual([
+      'read_file',
+      'run_command',
+      'web_fetch',
+      'load_skill',
+    ])
   })
 
   describe('loadGitIgnoreRules', () => {
