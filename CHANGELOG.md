@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.0.130 - 2026-08-28
+
+### Features
+
+- **Drive OpenFox sessions from any MCP client** — a built-in MCP server exposes `openfox_*` tools to run agents, manage sessions and workflows, plus an `openfox mcp` command that prints a paste-ready client config
+- **Merge multi-mode model variants into a single model** — OmniRoute-style families (`*-low/-medium/-high`) collapse into one model with mode chips, mapped to the right provider ID per effort
+- **Agent sees tool and prompt changes instantly** — system-reminder diffs are injected at the point of contention mid-session
+- **Header icons collapse into a mobile menu** — cleaner navigation on small screens
+- **New plugin registry entries** — openfox-openrouter-free and openfox-opencode-free
+
+### Enhancements
+
+- **Full reasoning-effort control on OpenAI gpt-5** — tools and effort work together via the Responses API, no more forced "none"
+- **Vision-capable models get an eye indicator** — auto-detected from the backend and shown across the model lists
+- **MCP tool changes previewed in the system prompt** — the preview lists exactly which tools were added/removed
+- **OAuth authorize completes instantly in the UI** — the callback tab notifies the app via BroadcastChannel, no paste-back needed
+
+### Bug Fixes
+
+- **OpenAI provider no longer fails LLM calls** — gpt-5.x uses max_completion_tokens, thinking no longer sends chat_template_kwargs, and api.openai.com/anthropic.com providers auto-detect their backend without a re-save
+- **OpenCode Go Responses-API models now work** — gpt-5.6-luna, grok-4.6 and muse-spark route to /v1/responses instead of the rejecting chat endpoint
+- **Responses routing is backend-aware** — vLLM, Ollama and friends never hit /v1/responses
+- **Session list no longer shrinks after delete/rename/favorite** — reloads are scoped to the active project
+- **Session history defaults to a 300-message limit** — fresh installs no longer send unlimited history; explicit 0 stays opt-in unlimited
+- **Logout actually logs out** — clears the token, closes the WebSocket and stops auto-reconnect
+- **MCP OAuth reconnects no longer clobber pending authorizations** — background probes use in-memory state; stale client registrations are auto-detected and cleared
+- **MCP server list refreshes reliably in the UI** — the tools tab updates immediately after server changes
+- **Sub-agent window no longer shows the main session's compaction badge** — and no longer overlaps on narrow panes
+- **No more false path confirmations from heredoc bodies** — path extraction ignores heredocs
+- **Removed fake provider-defaults fields** — dead thinking/non-thinking params are gone, pointing to the real per-model settings
+- **Merged mode-chip models survive catalog refresh** — no re-expanding after a re-fetch
+
 ## 2.0.129 - 2026-08-25
 
 ### Features
