@@ -97,7 +97,7 @@ type MinimalCapabilities = Pick<
 >
 type MinimalProfile = Pick<
   ModelProfile,
-  'temperature' | 'defaultMaxTokens' | 'topP' | 'topK' | 'supportsVision' | 'reasoningEffortWithTools'
+  'temperature' | 'defaultMaxTokens' | 'topP' | 'topK' | 'supportsVision' | 'apiProtocol'
 >
 
 function convertToolCalls(
@@ -245,6 +245,7 @@ async function buildChatCompletionCreateParams(
   isStreaming: boolean,
   thinkingField?: string,
   sendReasoningInMessages?: boolean,
+  apiProtocol?: 'chat-completions' | 'responses',
 ): Promise<{
   params: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming
   modelParams: ModelParams
@@ -288,11 +289,13 @@ async function buildChatCompletionCreateParams(
   }
 
   let resolvedEffort = reasoningEffort ?? request.reasoningEffort
-  // Some models reject a reasoning_effort other than "none" when the request
-  // carries function tools (e.g. OpenAI gpt-5 on /v1/chat/completions).
-  // Agentic sessions always pass tools, so clamp to the profile's rule.
-  if (request.tools?.length && profile.reasoningEffortWithTools !== undefined) {
-    resolvedEffort = profile.reasoningEffortWithTools as ReasoningEffort
+  // Responses-class models (e.g. OpenAI gpt-5) reject any reasoning_effort
+  // other than "none" when the request carries function tools — but only on
+  // /v1/chat/completions; the Responses API supports tools + effort together.
+  // When such a model is bound for chat completions (non-openai backend or an
+  // explicit override), clamp the effort so agentic (tool-using) calls work.
+  if (request.tools?.length && apiProtocol !== 'responses' && profile.apiProtocol === 'responses') {
+    resolvedEffort = 'none'
   }
 
   const queryParams = request.modelSettings?.queryParams as Record<string, unknown> | undefined
@@ -388,10 +391,20 @@ async function buildCreateParamsFromInput<
     reasoningEffort?: ReasoningEffort
     thinkingField?: string
     sendReasoningInMessages?: boolean
+    apiProtocol?: 'chat-completions' | 'responses'
   },
   isStreaming: boolean,
 ): Promise<{ params: T; modelParams: ModelParams }> {
-  const { model, request, profile, capabilities, reasoningEffort, thinkingField, sendReasoningInMessages } = input
+  const {
+    model,
+    request,
+    profile,
+    capabilities,
+    reasoningEffort,
+    thinkingField,
+    sendReasoningInMessages,
+    apiProtocol,
+  } = input
   return buildChatCompletionCreateParams(
     model,
     request,
@@ -401,6 +414,7 @@ async function buildCreateParamsFromInput<
     isStreaming,
     thinkingField,
     sendReasoningInMessages,
+    apiProtocol,
   ) as Promise<{ params: T; modelParams: ModelParams }>
 }
 

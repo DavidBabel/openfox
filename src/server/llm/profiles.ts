@@ -19,12 +19,11 @@ export interface ModelProfile {
   supportsVision: boolean
 
   /**
-   * Reasoning effort to force when the request carries function tools.
-   * Some providers' models (e.g. OpenAI gpt-5 in /v1/chat/completions) reject
-   * any reasoning_effort other than "none" when tools are present — agentic
-   * sessions always use tools, so the effort is clamped to this value.
+   * Preferred API protocol for the model family (e.g. gpt-5 → responses,
+   * where tools + reasoning effort work together). Used to route the request
+   * on backends that speak that protocol (currently `openai`).
    */
-  reasoningEffortWithTools?: string
+  apiProtocol?: 'chat-completions' | 'responses'
 }
 
 /** Default profile for unknown models */
@@ -203,10 +202,11 @@ const MODEL_PROFILES: Array<{ pattern: string; profile: ModelProfile }> = [
       topP: 1.0,
       defaultMaxTokens: 16384,
       supportsVision: true,
-      // gpt-5 in /v1/chat/completions rejects reasoning_effort with function
-      // tools ("use /v1/responses or set reasoning_effort to 'none'") — clamp
-      // it so agentic (tool-using) sessions work on the chat endpoint.
-      reasoningEffortWithTools: 'none',
+      // gpt-5 is a Responses-API family: /v1/chat/completions rejects tools
+      // with any reasoning_effort other than "none", while /v1/responses
+      // supports tools + effort together. Route it there on the openai
+      // backend; on chat completions the request builder clamps the effort.
+      apiProtocol: 'responses',
     },
   },
   {

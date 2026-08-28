@@ -239,7 +239,7 @@ describe('llm client pure helpers', () => {
     })
   })
 
-  it('clamps reasoning_effort to none for gpt-5 models when tools are present', async () => {
+  it('keeps the reasoning effort on the responses protocol even with tools', async () => {
     const baseRequest = {
       messages: [{ role: 'user' as const, content: 'hello' }],
       tools: [
@@ -254,7 +254,7 @@ describe('llm client pure helpers', () => {
       defaultMaxTokens: 2000,
       topP: 1.0,
       supportsVision: true,
-      reasoningEffortWithTools: 'none' as const,
+      apiProtocol: 'responses' as const,
     }
 
     expect(
@@ -262,6 +262,47 @@ describe('llm client pure helpers', () => {
         model: 'gpt-5.6-luna',
         request: { ...baseRequest, reasoningEffort: 'medium' },
         profile,
+        apiProtocol: 'responses',
+        capabilities: {
+          supportsTopK: false,
+          supportsChatTemplateKwargs: false,
+          supportsNumCtx: false,
+          routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: true,
+        },
+      }),
+    ).toMatchObject({
+      params: {
+        reasoning_effort: 'medium',
+        max_completion_tokens: 2000,
+      },
+    })
+  })
+
+  it('clamps the effort to none on chat completions for a responses-class model with tools', async () => {
+    const baseRequest = {
+      messages: [{ role: 'user' as const, content: 'hello' }],
+      tools: [
+        {
+          type: 'function' as const,
+          function: { name: 'glob', description: 'Search', parameters: { type: 'object' } },
+        },
+      ],
+    }
+    const profile = {
+      temperature: 1.0,
+      defaultMaxTokens: 2000,
+      topP: 1.0,
+      supportsVision: true,
+      apiProtocol: 'responses' as const,
+    }
+
+    expect(
+      await buildNonStreamingCreateParams({
+        model: 'gpt-5.6-luna',
+        request: { ...baseRequest, reasoningEffort: 'medium' },
+        profile,
+        apiProtocol: 'chat-completions',
         capabilities: {
           supportsTopK: false,
           supportsChatTemplateKwargs: false,
@@ -273,12 +314,11 @@ describe('llm client pure helpers', () => {
     ).toMatchObject({
       params: {
         reasoning_effort: 'none',
-        max_completion_tokens: 2000,
       },
     })
   })
 
-  it('keeps the reasoning effort when tools are present but the profile has no tool-effort rule', async () => {
+  it('keeps the reasoning effort when tools are present for a non-responses model', async () => {
     const baseRequest = {
       messages: [{ role: 'user' as const, content: 'hello' }],
       tools: [

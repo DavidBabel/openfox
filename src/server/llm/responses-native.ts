@@ -84,7 +84,9 @@ function messageToInputItem(message: ChatCompletionMessageParam): ResponsesInput
 }
 
 function flattenInput(items: Array<ResponsesInputItem>): Array<ResponsesInputItem> {
-  return items.flatMap((item) => (item['__multi'] !== undefined ? (item['__multi'] as Array<ResponsesInputItem>) : [item]))
+  return items.flatMap((item) =>
+    item['__multi'] !== undefined ? (item['__multi'] as Array<ResponsesInputItem>) : [item],
+  )
 }
 
 function convertTools(tools: ChatCompletionTool[]): Array<Record<string, unknown>> {
@@ -104,7 +106,9 @@ export function buildResponsesRequest(
 
   const body: ResponsesRequestBody = {
     model: params.model,
-    input: flattenInput(params.messages.map(messageToInputItem).filter((item): item is ResponsesInputItem => item !== null)),
+    input: flattenInput(
+      params.messages.map(messageToInputItem).filter((item): item is ResponsesInputItem => item !== null),
+    ),
     stream: Boolean(params.stream),
     store: false,
   }
@@ -118,7 +122,9 @@ export function buildResponsesRequest(
   // GPT-5.x-family models served through the Responses API reject ALL
   // sampling params ("'temperature'/'top_p' is not supported with this
   // model"), so none are forwarded — only max_output_tokens is safe.
-  if (params.max_tokens !== undefined) body.max_output_tokens = params.max_tokens
+  // The openai backend sends the modern max_completion_tokens param name.
+  const maxTokens = params.max_tokens ?? (params as unknown as { max_completion_tokens?: number }).max_completion_tokens
+  if (maxTokens !== undefined) body.max_output_tokens = maxTokens
 
   // The Responses API expresses reasoning as a `reasoning.effort` object and
   // has no explicit "off" — omit the field entirely for 'none'.
@@ -154,7 +160,10 @@ interface ResponsesApiResponse {
   usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number }
 }
 
-function mapResponseStatus(status?: string, incompleteReason?: string): ChatCompletionResponse['choices'][0]['finish_reason'] {
+function mapResponseStatus(
+  status?: string,
+  incompleteReason?: string,
+): ChatCompletionResponse['choices'][0]['finish_reason'] {
   switch (status) {
     case 'incomplete':
       return incompleteReason === 'max_output_tokens' ? 'length' : 'stop'
@@ -200,7 +209,8 @@ export function parseResponsesResponse(data: ResponsesApiResponse): ChatCompleti
     id: data.id ?? `resp_${Date.now()}`,
     choices: [
       {
-        finish_reason: toolCalls.length > 0 ? 'tool_calls' : mapResponseStatus(data.status, data.incomplete_details?.reason),
+        finish_reason:
+          toolCalls.length > 0 ? 'tool_calls' : mapResponseStatus(data.status, data.incomplete_details?.reason),
         message,
       },
     ],

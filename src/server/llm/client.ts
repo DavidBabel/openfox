@@ -64,9 +64,6 @@ export function createLLMClient(
 ): LLMClientWithModel {
   const baseURL = ensureVersionPrefix(config.llm.baseUrl)
 
-  /** Whether the active model speaks the Responses API (per-model routing). */
-  const clientUsesResponsesApi = (modelId: string) => resolveApiProtocol(modelId) === 'responses'
-
   const httpClient = new OpenAIHttpClient({
     baseURL,
     apiKey: config.llm.apiKey ?? 'not-needed',
@@ -77,17 +74,17 @@ export function createLLMClient(
   const ollamaHttpClient = new OllamaHttpClient({
     baseURL: stripVersionPrefix(baseURL),
   })
-  // Some models (OpenCode Go: gpt-5.6-luna, grok-4.6, muse-spark-1.2-…)
-  // are served through OpenAI's Responses API rather than
-  // /chat/completions — see responses-routing.ts. Routing is per MODEL,
-  // not per backend: one Go provider serves both endpoints.
+  // Some models (OpenCode Go: gpt-5.6-luna, grok-4.6, muse-spark-1.2-…; OpenAI
+  // gpt-5 family) are served through OpenAI's Responses API rather than
+  // /chat/completions — see responses-routing.ts. Routing is per model +
+  // backend, evaluated against the current model on every request.
   const responsesHttpClient = new OpenAIResponsesHttpClient({
     baseURL,
     apiKey: config.llm.apiKey ?? 'not-needed',
   })
   const httpFor = (b: Backend) => {
     if (b === 'ollama') return ollamaHttpClient
-    if (resolveApiProtocol(model) === 'responses') return responsesHttpClient
+    if (currentApiProtocol() === 'responses') return responsesHttpClient
     return httpClient
   }
 
@@ -100,11 +97,21 @@ export function createLLMClient(
   const sendReasoningInMessages = config.llm.sendReasoningInMessages
   const idleTimeout = config.llm.idleTimeout ?? 120_000
 
+  /**
+   * The API protocol the active model speaks on the current backend — derived
+   * from the model profile (gpt-5 family → responses on openai) plus the
+   * OpenCode Go curated table. Re-evaluated on every use so setModel /
+   * setBackend switches take effect.
+   */
+  const currentApiProtocol = (): 'chat-completions' | 'responses' =>
+    resolveApiProtocol({ model, backend, profileApiProtocol: profile.apiProtocol })
+
   function buildExtraParams(resolvedEffort: ReasoningEffort | undefined) {
     return {
       ...(resolvedEffort ? { reasoningEffort: resolvedEffort } : {}),
       ...(thinkingField ? { thinkingField } : {}),
       ...(sendReasoningInMessages !== undefined ? { sendReasoningInMessages } : {}),
+      apiProtocol: currentApiProtocol(),
     }
   }
 
@@ -113,7 +120,7 @@ export function createLLMClient(
       return model
     },
 
-    usesResponsesApi: () => clientUsesResponsesApi(model),
+    usesResponsesApi: () => currentApiProtocol() === 'responses',
 
     getProfile() {
       return profile

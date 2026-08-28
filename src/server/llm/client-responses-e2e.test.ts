@@ -79,6 +79,7 @@ describe('createLLMClient end-to-end against a Responses API mock', () => {
         idleTimeout: 5000,
         model: 'gpt-5.6-luna',
         apiKey: 'test-key',
+        backend: 'opencode-go',
       },
       context: { maxTokens: 8192, compactionThreshold: 0.85, compactionTarget: 0.6 },
     } as never)
@@ -107,7 +108,14 @@ describe('createLLMClient end-to-end against a Responses API mock', () => {
     expect(events.filter((e) => e['type'] === 'tool_call_delta' && e['arguments'])).toHaveLength(2)
 
     const done = events.find((e) => e['type'] === 'done') as
-      | { response: { content: string; toolCalls: Array<{ arguments: string }>; usage: { totalTokens: number }; finishReason: string } }
+      | {
+          response: {
+            content: string
+            toolCalls: Array<{ arguments: string }>
+            usage: { totalTokens: number }
+            finishReason: string
+          }
+        }
       | undefined
     expect(done?.response.content).toBe('Hello world')
     expect(done?.response.toolCalls[0]?.arguments).toEqual({ path: 'a.ts' })
@@ -155,6 +163,7 @@ describe('createLLMClient end-to-end against a Responses API mock', () => {
         idleTimeout: 5000,
         model: 'gpt-5.6-luna',
         apiKey: 'test-key',
+        backend: 'opencode-go',
       },
       context: { maxTokens: 8192, compactionThreshold: 0.85, compactionTarget: 0.6 },
     } as never)
@@ -163,9 +172,7 @@ describe('createLLMClient end-to-end against a Responses API mock', () => {
 
     expect(mock.requests[0]!.path).toBe('/v1/responses')
     expect(response.content).toBe('Final answer')
-    expect(response.toolCalls).toEqual([
-      { id: 'call-9', name: 'glob', arguments: { pattern: '*.ts' } },
-    ])
+    expect(response.toolCalls).toEqual([{ id: 'call-9', name: 'glob', arguments: { pattern: '*.ts' } }])
     expect(response.finishReason).toBe('tool_calls')
     expect(response.usage).toEqual({ promptTokens: 10, completionTokens: 5, totalTokens: 15 })
     void client

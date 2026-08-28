@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildResponsesRequest,
-  parseResponsesResponse,
-  type ResponsesRequestBody,
-} from './responses-native.js'
+import { buildResponsesRequest, parseResponsesResponse, type ResponsesRequestBody } from './responses-native.js'
 import type { ChatCompletionCreateParamsStreaming } from './openai-types.js'
 
-function streamParams(overrides: Partial<ChatCompletionCreateParamsStreaming> = {}): ChatCompletionCreateParamsStreaming {
+function streamParams(
+  overrides: Partial<ChatCompletionCreateParamsStreaming> = {},
+): ChatCompletionCreateParamsStreaming {
   return {
     model: 'gpt-5.6-luna',
     messages: [{ role: 'user', content: 'hi' }],
@@ -35,6 +33,13 @@ describe('buildResponsesRequest', () => {
     expect(body.store).toBe(false)
   })
 
+  it('maps max_completion_tokens to max_output_tokens (openai backend sends the modern param)', () => {
+    const body = buildResponsesRequest(
+      streamParams({ max_completion_tokens: 4096 } as unknown as ChatCompletionCreateParamsStreaming),
+    )
+    expect(body.max_output_tokens).toBe(4096)
+  })
+
   it('never forwards sampling params (GPT-5.x models reject temperature and top_p)', () => {
     const body = buildResponsesRequest(streamParams({ temperature: 0.7, top_p: 0.9 }))
     expect(body['temperature']).toBeUndefined()
@@ -45,7 +50,12 @@ describe('buildResponsesRequest', () => {
 
   it('converts tool definitions to the flat Responses format', () => {
     const params = streamParams({
-      tools: [{ type: 'function', function: { name: 'read_file', description: 'Read a file', parameters: { type: 'object' } } }],
+      tools: [
+        {
+          type: 'function',
+          function: { name: 'read_file', description: 'Read a file', parameters: { type: 'object' } },
+        },
+      ],
     })
     const body = buildResponsesRequest(params)
     expect(body.tools).toEqual([
