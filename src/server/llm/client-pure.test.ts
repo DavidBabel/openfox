@@ -197,6 +197,124 @@ describe('llm client pure helpers', () => {
     expect(mapFinishReason('weird')).toBe('stop')
   })
 
+  it('uses max_completion_tokens for openai backend capabilities', async () => {
+    const baseRequest = {
+      messages: [{ role: 'user' as const, content: 'hello' }],
+    }
+    const profile = {
+      temperature: 0.2,
+      defaultMaxTokens: 2000,
+      topP: 0.9,
+      topK: 40,
+      supportsVision: false,
+    }
+
+    expect(
+      await buildNonStreamingCreateParams({
+        model: 'gpt-4.1-mini',
+        request: baseRequest,
+        profile,
+        capabilities: {
+          supportsTopK: false,
+          supportsChatTemplateKwargs: false,
+          supportsNumCtx: false,
+          routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: true,
+        },
+      }),
+    ).toEqual({
+      params: {
+        model: 'gpt-4.1-mini',
+        messages: [{ role: 'user', content: 'hello' }],
+        temperature: 0.2,
+        max_completion_tokens: 2000,
+        top_p: 0.9,
+        stream: false,
+      },
+      modelParams: {
+        temperature: 0.2,
+        topP: 0.9,
+        maxTokens: 2000,
+      },
+    })
+  })
+
+  it('clamps reasoning_effort to none for gpt-5 models when tools are present', async () => {
+    const baseRequest = {
+      messages: [{ role: 'user' as const, content: 'hello' }],
+      tools: [
+        {
+          type: 'function' as const,
+          function: { name: 'glob', description: 'Search', parameters: { type: 'object' } },
+        },
+      ],
+    }
+    const profile = {
+      temperature: 1.0,
+      defaultMaxTokens: 2000,
+      topP: 1.0,
+      supportsVision: true,
+      reasoningEffortWithTools: 'none' as const,
+    }
+
+    expect(
+      await buildNonStreamingCreateParams({
+        model: 'gpt-5.6-luna',
+        request: { ...baseRequest, reasoningEffort: 'medium' },
+        profile,
+        capabilities: {
+          supportsTopK: false,
+          supportsChatTemplateKwargs: false,
+          supportsNumCtx: false,
+          routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: true,
+        },
+      }),
+    ).toMatchObject({
+      params: {
+        reasoning_effort: 'none',
+        max_completion_tokens: 2000,
+      },
+    })
+  })
+
+  it('keeps the reasoning effort when tools are present but the profile has no tool-effort rule', async () => {
+    const baseRequest = {
+      messages: [{ role: 'user' as const, content: 'hello' }],
+      tools: [
+        {
+          type: 'function' as const,
+          function: { name: 'glob', description: 'Search', parameters: { type: 'object' } },
+        },
+      ],
+    }
+    const profile = {
+      temperature: 0.7,
+      defaultMaxTokens: 2000,
+      topP: 0.9,
+      supportsVision: false,
+    }
+
+    expect(
+      await buildNonStreamingCreateParams({
+        model: 'gpt-4.1-mini',
+        request: { ...baseRequest, reasoningEffort: 'medium' },
+        profile,
+        capabilities: {
+          supportsTopK: false,
+          supportsChatTemplateKwargs: false,
+          supportsNumCtx: false,
+          routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: true,
+        },
+      }),
+    ).toMatchObject({
+      params: {
+        reasoning_effort: 'medium',
+      },
+    })
+  })
+
   it('builds request params with backend capabilities and profile defaults', async () => {
     const baseRequest = {
       messages: [{ role: 'user' as const, content: 'hello' }],
@@ -226,6 +344,7 @@ describe('llm client pure helpers', () => {
           supportsChatTemplateKwargs: true,
           supportsNumCtx: false,
           routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: false,
         },
       }),
     ).toEqual({
@@ -265,6 +384,7 @@ describe('llm client pure helpers', () => {
           supportsChatTemplateKwargs: true,
           supportsNumCtx: false,
           routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: false,
         },
         reasoningEffort: 'high', // client config has reasoning_effort set
       }),
@@ -306,6 +426,7 @@ describe('llm client pure helpers', () => {
           supportsChatTemplateKwargs: true,
           supportsNumCtx: false,
           routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: false,
         },
       }),
     ).toEqual({
@@ -346,6 +467,7 @@ describe('llm client pure helpers', () => {
           supportsChatTemplateKwargs: true,
           supportsNumCtx: false,
           routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: false,
         },
       }),
     ).toEqual({
@@ -386,6 +508,7 @@ describe('llm client pure helpers', () => {
           supportsChatTemplateKwargs: true,
           supportsNumCtx: false,
           routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: false,
         },
         reasoningEffort: 'max',
       }),
@@ -423,6 +546,7 @@ describe('llm client pure helpers', () => {
           supportsChatTemplateKwargs: false,
           supportsNumCtx: false,
           routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: false,
         },
       }),
     ).toEqual({
@@ -455,6 +579,7 @@ describe('llm client pure helpers', () => {
           supportsChatTemplateKwargs: false,
           supportsNumCtx: false,
           routesEffortViaChatTemplateKwargs: false,
+          usesMaxCompletionTokens: false,
         },
       }),
     ).toEqual({
@@ -492,6 +617,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: true,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     // chat_template_kwargs must NOT be here — the modelSettings don't request it
@@ -511,6 +637,7 @@ describe('llm client pure helpers', () => {
       supportsChatTemplateKwargs: false,
       supportsNumCtx: false,
       routesEffortViaChatTemplateKwargs: true,
+      usesMaxCompletionTokens: false,
     }
     const baseRequest = {
       messages: [{ role: 'user' as const, content: 'hello' }],
@@ -627,6 +754,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(result.params).not.toHaveProperty('temperature')
@@ -653,6 +781,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(result.params).not.toHaveProperty('top_p')
@@ -682,6 +811,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(result.params).not.toHaveProperty('temperature')
@@ -707,6 +837,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: true,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(result.params).toHaveProperty('num_ctx', 32768)
@@ -731,6 +862,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(result.params).not.toHaveProperty('num_ctx')
@@ -754,6 +886,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(withoutOmit.params).toHaveProperty('temperature', 0.7)
@@ -767,6 +900,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(withEmpty.params).toHaveProperty('temperature', 0.7)
@@ -791,6 +925,7 @@ describe('llm client pure helpers', () => {
         supportsChatTemplateKwargs: false,
         supportsNumCtx: false,
         routesEffortViaChatTemplateKwargs: false,
+        usesMaxCompletionTokens: false,
       },
     })
     expect(result.params).not.toHaveProperty('temperature')

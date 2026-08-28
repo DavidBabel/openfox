@@ -1,7 +1,28 @@
 import { describe, it, expect } from 'vitest'
-import { getBackendCapabilities, getBackendDisplayName, type Backend } from './backend.js'
+import { detectBackendFromUrl, getBackendCapabilities, getBackendDisplayName, type Backend } from './backend.js'
 
 describe('backend', () => {
+  describe('detectBackendFromUrl', () => {
+    it('detects openai for api.openai.com', () => {
+      expect(detectBackendFromUrl('https://api.openai.com/v1')).toBe('openai')
+      expect(detectBackendFromUrl('https://api.openai.com')).toBe('openai')
+    })
+
+    it('detects anthropic for api.anthropic.com', () => {
+      expect(detectBackendFromUrl('https://api.anthropic.com/v1')).toBe('anthropic')
+    })
+
+    it('returns undefined for local or unknown hosts', () => {
+      expect(detectBackendFromUrl('http://localhost:11434')).toBeUndefined()
+      expect(detectBackendFromUrl('http://localhost:8000/v1')).toBeUndefined()
+      expect(detectBackendFromUrl('https://my-vllm.example.com/v1')).toBeUndefined()
+    })
+
+    it('ignores case and trailing slash', () => {
+      expect(detectBackendFromUrl('HTTPS://API.OPENAI.COM/')).toBe('openai')
+    })
+  })
+
   describe('getBackendCapabilities', () => {
     it('returns correct capabilities for vllm', () => {
       const caps = getBackendCapabilities('vllm')
@@ -19,18 +40,21 @@ describe('backend', () => {
       const caps = getBackendCapabilities('openai')
       expect(caps.supportsChatTemplateKwargs).toBe(false)
       expect(caps.supportsTopK).toBe(false)
+      expect(caps.usesMaxCompletionTokens).toBe(true)
     })
 
     it('returns correct capabilities for anthropic', () => {
       const caps = getBackendCapabilities('anthropic')
       expect(caps.supportsChatTemplateKwargs).toBe(false)
       expect(caps.supportsTopK).toBe(false)
+      expect(caps.usesMaxCompletionTokens).toBe(false)
     })
 
     it('returns correct capabilities for ollama', () => {
       const caps = getBackendCapabilities('ollama')
       expect(caps.supportsChatTemplateKwargs).toBe(false)
       expect(caps.supportsTopK).toBe(false)
+      expect(caps.usesMaxCompletionTokens).toBe(false)
     })
 
     it('returns correct capabilities for llamacpp', () => {
@@ -38,6 +62,7 @@ describe('backend', () => {
       expect(caps.supportsChatTemplateKwargs).toBe(false)
       expect(caps.supportsTopK).toBe(true)
       expect(caps.routesEffortViaChatTemplateKwargs).toBe(true)
+      expect(caps.usesMaxCompletionTokens).toBe(false)
     })
 
     it('returns vllm-like capabilities for unknown', () => {
@@ -45,6 +70,7 @@ describe('backend', () => {
       expect(caps.supportsChatTemplateKwargs).toBe(true)
       expect(caps.supportsTopK).toBe(true)
       expect(caps.routesEffortViaChatTemplateKwargs).toBe(false)
+      expect(caps.usesMaxCompletionTokens).toBe(false)
     })
 
     it('does not route effort via chat_template_kwargs for other backends', () => {

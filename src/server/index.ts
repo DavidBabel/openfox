@@ -17,6 +17,7 @@ import { provideAnswer, getPendingQuestionsForSession } from './tools/ask.js'
 import { providePathConfirmation, getPendingConfirmationsBySession } from './tools/path-security.js'
 import './llm/proxy.js'
 import { detectModel, getLlmStatus, getBackendDisplayName } from './llm/index.js'
+import { detectBackendFromUrl } from './llm/backend.js'
 import { buildModelsUrl } from './llm/url-utils.js'
 
 import { createMockLLMClient } from './llm/mock.js'
@@ -1954,7 +1955,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       res.json({
         success: true,
         url,
-        backend: reqBackend || 'unknown',
+        backend: reqBackend !== 'unknown' && reqBackend ? reqBackend : (detectBackendFromUrl(url) ?? 'unknown'),
         model,
       })
     } catch (error) {
@@ -2189,7 +2190,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         modelSettings['queryParams'] = JSON.parse(rawQP) as Record<string, unknown>
       } else {
         const modeEnabled = mode === 'thinking' ? modelConfig?.thinkingEnabled : modelConfig?.nonThinkingEnabled
-        if (modeEnabled) {
+        if (modeEnabled && capabilities.supportsChatTemplateKwargs) {
           modelSettings['chatTemplateKwargs'] =
             mode === 'thinking' ? { enable_thinking: true } : { enable_thinking: false }
         }
@@ -2271,7 +2272,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         await import('../cli/config.js')
       const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
 
-      const providerBackend = backend as ProviderBackend
+      const providerBackend = (
+        backend === 'unknown' ? (detectBackendFromUrl(url) ?? 'unknown') : backend
+      ) as ProviderBackend
 
       const providerModels: ModelConfig[] = modelConfigs?.length
         ? buildModelConfigs(modelConfigs as ModelConfigInput[])

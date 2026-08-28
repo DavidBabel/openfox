@@ -640,10 +640,11 @@ export interface Diagnostic {
 // ============================================================================
 
 /** Supported LLM inference backends */
-export type LlmBackend = 'vllm' | 'sglang' | 'ollama' | 'llamacpp' | 'lmstudio' | 'opencode-go' | 'unknown'
+export type LlmBackend =
+  'vllm' | 'sglang' | 'ollama' | 'llamacpp' | 'lmstudio' | 'opencode-go' | 'openai' | 'anthropic' | 'unknown'
 
 /** Extended backend type including cloud providers */
-export type ProviderBackend = LlmBackend | 'openai' | 'anthropic'
+export type ProviderBackend = LlmBackend
 
 /** Model configuration with context window */
 export interface ModelConfig {

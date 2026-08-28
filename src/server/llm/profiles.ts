@@ -17,6 +17,14 @@ export interface ModelProfile {
 
   /** Whether the model supports vision/images */
   supportsVision: boolean
+
+  /**
+   * Reasoning effort to force when the request carries function tools.
+   * Some providers' models (e.g. OpenAI gpt-5 in /v1/chat/completions) reject
+   * any reasoning_effort other than "none" when tools are present — agentic
+   * sessions always use tools, so the effort is clamped to this value.
+   */
+  reasoningEffortWithTools?: string
 }
 
 /** Default profile for unknown models */
@@ -183,6 +191,22 @@ const MODEL_PROFILES: Array<{ pattern: string; profile: ModelProfile }> = [
       topP: 0.9,
       defaultMaxTokens: 16384,
       supportsVision: false,
+    },
+  },
+  {
+    pattern: 'gpt-5',
+    profile: {
+      name: 'GPT-5',
+      // OpenAI's gpt-5 family only accepts temperature = 1 (and top_p = 1);
+      // any other value is rejected with a 400.
+      temperature: 1.0,
+      topP: 1.0,
+      defaultMaxTokens: 16384,
+      supportsVision: true,
+      // gpt-5 in /v1/chat/completions rejects reasoning_effort with function
+      // tools ("use /v1/responses or set reasoning_effort to 'none'") — clamp
+      // it so agentic (tool-using) sessions work on the chat endpoint.
+      reasoningEffortWithTools: 'none',
     },
   },
   {

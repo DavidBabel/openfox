@@ -8,6 +8,7 @@ import { parseLmStudioModels } from './providers/lmstudio.js'
 import { ensureVersionPrefix, stripVersionPrefix, buildModelsUrl } from './llm/url-utils.js'
 import { getCatalogEntry } from './providers/model-catalog.js'
 import { hasVisionEvidence } from './providers/vision.js'
+import { detectBackendFromUrl, getBackendCapabilities, type Backend } from './llm/backend.js'
 import { resolveEffortForModel, resolveModeModelId } from '../shared/reasoning-effort.js'
 
 /**
@@ -149,7 +150,7 @@ export async function fetchAvailableModelsFromBackend(baseUrl: string, apiKey?: 
 export async function fetchModelsWithContext(
   baseUrl: string,
   apiKey?: string,
-  backend?: 'ollama' | 'vllm' | 'sglang' | 'llamacpp' | 'lmstudio' | 'unknown',
+  backend?: Backend,
 ): Promise<ModelConfig[]> {
   logger.info('fetchModelsWithContext called', { baseUrl, apiKey: !!apiKey, backend })
 
@@ -468,7 +469,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
         ...config.llm,
         baseUrl: ensureVersionPrefix(provider.url),
         model: send.modelId,
-        backend: provider.backend as LlmBackend,
+        backend: resolveBackend(provider),
         ...(provider.apiKey && { apiKey: provider.apiKey }),
         ...(provider.thinkingField && { thinkingField: provider.thinkingField }),
         ...(provider.sendReasoningInMessages !== undefined
@@ -478,6 +479,11 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
           !send.suppressEffort && { reasoningEffort: modelThinking.reasoningEffort }),
       },
     }
+  }
+
+  function resolveBackend(provider: Provider): Backend {
+    if (provider.backend !== 'unknown') return provider.backend
+    return detectBackendFromUrl(provider.url) ?? 'unknown'
   }
 
   function resolveTransportAdapter(provider: Provider): string | undefined {
@@ -515,10 +521,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     const transport = options.adapters?.getTransport(resolveTransportAdapter(provider))
     return transport
       ? createTransportLLMClient(provider, resolvedModel, transport, reasoningEffort)
-      : createLLMClient(
-          createConfigForProvider(provider, resolvedModel, reasoningEffort),
-          provider.backend as import('./llm/backend.js').Backend,
-        )
+      : createLLMClient(createConfigForProvider(provider, resolvedModel, reasoningEffort), resolveBackend(provider))
   }
 
   async function fetchProviderModels(provider: Provider): Promise<ModelConfig[]> {
@@ -530,7 +533,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
       })
     }
 
-    const backend = provider.backend as 'ollama' | 'vllm' | 'sglang' | 'llamacpp' | 'unknown'
+    const backend = resolveBackend(provider)
     return fetchModelsWithContext(provider.url, provider.apiKey, backend)
   }
 
@@ -944,7 +947,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     getModelSettings(providerId: string, modelId: string, mode: 'thinking' | 'non-thinking' = 'thinking') {
       const provider = providers.find((p) => p.id === providerId)
       const model = provider?.models.find((m) => m.id === modelId)
-      if (!model) return undefined
+      if (!provider || !model) return undefined
 
       const baseSettings: Record<string, unknown> = {}
       if (model['temperature'] !== undefined) baseSettings['temperature'] = model['temperature']
@@ -962,12 +965,18 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
         return { ...baseSettings, queryParams: JSON.parse(rawQueryParams) as Record<string, unknown> }
       }
 
-      // Generate sensible defaults when mode is enabled
+      // Generate sensible defaults when mode is enabled. chat_template_kwargs
+      // is a vLLM/SGLang/llama.cpp concept — never inject it for backends that
+      // reject it (OpenAI/Anthropic expect reasoning_effort instead, which the
+      // request builder derives from the thinking config).
       const modeEnabled = mode === 'thinking' ? model.thinkingEnabled : model.nonThinkingEnabled
       if (modeEnabled) {
-        return {
-          ...baseSettings,
-          chatTemplateKwargs: mode === 'thinking' ? { enable_thinking: true } : { enable_thinking: false },
+        const capabilities = getBackendCapabilities(resolveBackend(provider))
+        if (capabilities.supportsChatTemplateKwargs) {
+          return {
+            ...baseSettings,
+            chatTemplateKwargs: mode === 'thinking' ? { enable_thinking: true } : { enable_thinking: false },
+          }
         }
       }
 

@@ -617,6 +617,48 @@ describe('ProviderManager - Model Selection', () => {
       expect(settings?.chatTemplateKwargs).toEqual({ enable_thinking: true })
     })
 
+    it('does not inject chat_template_kwargs for an openai backend provider', async () => {
+      const openaiManager = createProviderManager({
+        providers: [
+          {
+            id: 'openai-p',
+            name: 'OpenAI',
+            url: 'https://api.openai.com/v1',
+            backend: 'openai',
+            apiKey: undefined,
+            models: [
+              {
+                id: 'gpt-4.1-mini',
+                contextWindow: 200000,
+                source: 'user' as const,
+                thinkingEnabled: true,
+                thinkingLevel: 'high',
+              },
+            ],
+            isActive: true,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        defaultModelSelection: 'openai-p/gpt-4.1-mini',
+        server: { port: 10369, host: '127.0.0.1', openBrowser: true },
+        logging: { level: 'info' as const },
+        database: { path: '' },
+        llm: {
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-4.1-mini',
+          timeout: 120000,
+          idleTimeout: 30000,
+          backend: 'openai',
+        },
+        context: { maxTokens: 4096, compactionThreshold: 10000, compactionTarget: 8000 },
+        agent: { maxIterations: 100, maxConsecutiveFailures: 5, toolTimeout: 30000 },
+        workdir: process.cwd(),
+      })
+
+      const settings = openaiManager.getModelSettings('openai-p', 'gpt-4.1-mini', 'thinking')
+      expect(settings?.chatTemplateKwargs).toBeUndefined()
+    })
+
     it('uses non-thinking kwargs in non-thinking mode when nonThinkingEnabled', async () => {
       await providerManager.updateModelSettings('provider-1', 'model-a', {
         thinkingEnabled: true,
@@ -1217,5 +1259,60 @@ describe('fetchModelsWithContext - Ollama vision detection', () => {
       })
     const models = await fetchModelsWithContext('http://localhost:11434', undefined, 'ollama')
     expect(models[0]?.supportsVision).toBeUndefined()
+  })
+})
+
+describe('ProviderManager - unknown backend URL detection', () => {
+  function buildManager(providers: Provider[]) {
+    return createProviderManager({
+      providers,
+      defaultModelSelection: 'p/model-a',
+      server: { port: 10369, host: '127.0.0.1', openBrowser: true },
+      logging: { level: 'info' as const },
+      database: { path: '' },
+      llm: {
+        baseUrl: 'http://localhost:8000/v1',
+        model: 'model-a',
+        timeout: 120000,
+        idleTimeout: 30000,
+        backend: 'vllm',
+      },
+      context: { maxTokens: 4096, compactionThreshold: 10000, compactionTarget: 8000 },
+      agent: { maxIterations: 100, maxConsecutiveFailures: 5, toolTimeout: 30000 },
+      workdir: process.cwd(),
+    })
+  }
+
+  function openAIProvider(backend: Provider['backend'], url = 'https://api.openai.com/v1'): Provider {
+    return {
+      id: 'p',
+      name: 'OpenAI',
+      url,
+      backend,
+      models: [{ id: 'gpt-4.1-mini', contextWindow: 200000, source: 'default' as const }],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  it('resolves an unknown backend to openai for api.openai.com URLs', () => {
+    const manager = buildManager([openAIProvider('unknown')])
+    manager.createClient('p', 'gpt-4.1-mini')
+    const config = createLLMClientMock.mock.calls.at(-1)![0]!
+    expect(config.llm.backend).toBe('openai')
+  })
+
+  it('leaves an explicit backend untouched even for api.openai.com', () => {
+    const manager = buildManager([openAIProvider('vllm')])
+    manager.createClient('p', 'gpt-4.1-mini')
+    const config = createLLMClientMock.mock.calls.at(-1)![0]!
+    expect(config.llm.backend).toBe('vllm')
+  })
+
+  it('keeps unknown when the URL host is not recognized', () => {
+    const manager = buildManager([openAIProvider('unknown', 'https://my-vllm.example.com/v1')])
+    manager.createClient('p', 'gpt-4.1-mini')
+    const config = createLLMClientMock.mock.calls.at(-1)![0]!
+    expect(config.llm.backend).toBe('unknown')
   })
 })

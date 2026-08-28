@@ -89,9 +89,16 @@ async function buildAttachmentContent(
 
 type MinimalCapabilities = Pick<
   BackendCapabilities,
-  'supportsTopK' | 'supportsChatTemplateKwargs' | 'supportsNumCtx' | 'routesEffortViaChatTemplateKwargs'
+  | 'supportsTopK'
+  | 'supportsChatTemplateKwargs'
+  | 'supportsNumCtx'
+  | 'routesEffortViaChatTemplateKwargs'
+  | 'usesMaxCompletionTokens'
 >
-type MinimalProfile = Pick<ModelProfile, 'temperature' | 'defaultMaxTokens' | 'topP' | 'topK' | 'supportsVision'>
+type MinimalProfile = Pick<
+  ModelProfile,
+  'temperature' | 'defaultMaxTokens' | 'topP' | 'topK' | 'supportsVision' | 'reasoningEffortWithTools'
+>
 
 function convertToolCalls(
   toolCalls: { id: string; name: string; arguments: Record<string, unknown> }[],
@@ -262,7 +269,7 @@ async function buildChatCompletionCreateParams(
     ...(request.tools?.length ? { tools: convertTools(request.tools) } : {}),
     ...(request.toolChoice ? { tool_choice: request.toolChoice as ChatCompletionToolChoiceOption } : {}),
     temperature,
-    max_tokens: maxTokens,
+    ...(capabilities.usesMaxCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
     ...(topP !== undefined && { top_p: topP }),
     stream: isStreaming,
     ...(isStreaming ? { stream_options: { include_usage: true } } : {}),
@@ -280,7 +287,13 @@ async function buildChatCompletionCreateParams(
     ;(params as unknown as Record<string, unknown>)['num_ctx'] = request.modelSettings.numCtx
   }
 
-  const resolvedEffort = reasoningEffort ?? request.reasoningEffort
+  let resolvedEffort = reasoningEffort ?? request.reasoningEffort
+  // Some models reject a reasoning_effort other than "none" when the request
+  // carries function tools (e.g. OpenAI gpt-5 on /v1/chat/completions).
+  // Agentic sessions always pass tools, so clamp to the profile's rule.
+  if (request.tools?.length && profile.reasoningEffortWithTools !== undefined) {
+    resolvedEffort = profile.reasoningEffortWithTools as ReasoningEffort
+  }
 
   const queryParams = request.modelSettings?.queryParams as Record<string, unknown> | undefined
   const hasQueryParams = queryParams && Object.keys(queryParams).length > 0
