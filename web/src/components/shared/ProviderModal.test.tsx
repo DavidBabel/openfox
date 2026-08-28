@@ -885,3 +885,332 @@ describe('ProviderModal - small context window warning', () => {
     expect(document.body.querySelector('[data-small-context]')).toBeNull()
   })
 })
+
+describe('ProviderModal - model mode merge', () => {
+  let container: HTMLElement
+  let root: ReturnType<typeof createRoot>
+  let onSaveMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    onSaveMock = vi.fn()
+  })
+
+  afterEach(() => {
+    root.unmount()
+    document.body.removeChild(container)
+    vi.unstubAllGlobals()
+  })
+
+  const omniModels = [
+    { id: 'antigravity/gemini-3.6-flash-high', contextWindow: 1048576 },
+    { id: 'antigravity/gemini-3.6-flash-low', contextWindow: 1048576 },
+    { id: 'antigravity/gemini-3.6-flash-medium', contextWindow: 1048576 },
+    { id: 'antigravity/claude-opus-4-6-thinking', contextWindow: 1048576 },
+  ] as const
+
+  async function renderOmni(editProviderModels: readonly unknown[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/provider-presets')) {
+          return new Response(JSON.stringify({ presets: [] }), { status: 200 })
+        }
+        return new Response(JSON.stringify({ models: [], url: 'https://omniroute.example/v1' }), { status: 200 })
+      }),
+    )
+    await new Promise<void>((resolve) => {
+      root.render(
+        <ProviderModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={onSaveMock as (provider: ProviderFormData) => void}
+          initialStep={2}
+          editProvider={{
+            id: 'omni-provider',
+            name: 'OmniRoute',
+            url: 'https://omniroute.example/v1',
+            backend: 'openai' as const,
+            models: editProviderModels as never,
+          }}
+        />,
+      )
+      setTimeout(resolve, 200)
+    })
+  }
+
+  // Renders the ProviderModal in creation mode (no editProvider), navigates
+  // step1 → step2 with a URL so the catalog is fetched and auto-collapsed into
+  // mode-chip models.
+  async function renderCreate() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/provider-presets')) {
+          return new Response(JSON.stringify({ presets: [] }), { status: 200 })
+        }
+        if (url.includes('/models')) {
+          return new Response(JSON.stringify({ models: omniModels, url: 'https://omniroute.example/v1' }), {
+            status: 200,
+          })
+        }
+        return new Response(JSON.stringify({ models: [], url: 'https://omniroute.example/v1' }), { status: 200 })
+      }),
+    )
+    await new Promise<void>((resolve) => {
+      root.render(
+        <ProviderModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={onSaveMock as (provider: ProviderFormData) => void}
+          initialStep={1}
+        />,
+      )
+      setTimeout(resolve, 200)
+    })
+    const urlInput = document.body.querySelector('[data-testid="provider-modal-url"]') as HTMLInputElement | null
+    expect(urlInput).toBeTruthy()
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    setter.call(urlInput, 'https://omniroute.example/v1')
+    urlInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    ;(document.body.querySelector('[data-testid="provider-modal-next"]') as HTMLButtonElement | null)?.click()
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+
+  it('creating a provider shows raw suffixed variants and a Merge button, no Unmerge', async () => {
+    await renderCreate()
+    // Raw catalog: suffixed variants shown separately.
+    const hasSuffixed = Array.from(document.body.querySelectorAll('span,div')).some((el) =>
+      el.textContent?.includes('gemini-3.6-flash-high'),
+    )
+    expect(hasSuffixed).toBe(true)
+    // Merge button is visible; Unmerge is not (nothing merged yet).
+    const mergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(mergeButton).toBeTruthy()
+    const unmergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Unmerge '),
+    )
+    expect(unmergeButton).toBeUndefined()
+  })
+
+  it('editing keeps the raw catalog: suffixed variants present, Merge button shown', async () => {
+    await renderOmni(omniModels)
+    // No auto-merge: the merged id is absent and the suffixed members remain.
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    saveButton?.click()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash' && m.modes?.length)).toBe(false)
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash-high')).toBe(true)
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash-low')).toBe(true)
+    // Merge button offered for the family.
+    const mergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(mergeButton).toBeTruthy()
+  })
+
+  it('shows no Merge button when there are no mergeable families (single model)', async () => {
+    await renderOmni([{ id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', contextWindow: 1048576 }])
+    const anyMergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge '),
+    )
+    expect(anyMergeButton).toBeUndefined()
+  })
+
+  const mergedOmniModel = {
+    id: 'antigravity/gemini-3.6-flash',
+    name: 'gemini-3.6-flash',
+    apiModelId: 'antigravity/gemini-3.6-flash',
+    contextWindow: 1048576,
+    reasoningEfforts: ['high', 'low', 'medium'],
+    modes: [
+      { level: 'high', apiModelId: 'antigravity/gemini-3.6-flash-high' },
+      { level: 'low', apiModelId: 'antigravity/gemini-3.6-flash-low' },
+      { level: 'medium', apiModelId: 'antigravity/gemini-3.6-flash-medium' },
+    ],
+  } as const
+  const claudeOpusModel = { id: 'antigravity/claude-opus-4-6-thinking', contextWindow: 1048576 }
+  const mergedProviderModels = [mergedOmniModel, claudeOpusModel] as const
+
+  // Ensure at least 2 models so the "Available Models" block (which hosts the
+  // merge/unmerge banner) renders.
+  async function renderWithRawCatalog(editProviderModels: readonly unknown[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/provider-presets')) {
+          return new Response(JSON.stringify({ presets: [] }), { status: 200 })
+        }
+        if (url.includes('/models')) {
+          return new Response(JSON.stringify({ models: omniModels, url: 'https://omniroute.example/v1' }), {
+            status: 200,
+          })
+        }
+        return new Response(JSON.stringify({ models: [], url: 'https://omniroute.example/v1' }), { status: 200 })
+      }),
+    )
+    await new Promise<void>((resolve) => {
+      root.render(
+        <ProviderModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={onSaveMock as (provider: ProviderFormData) => void}
+          initialStep={2}
+          editProvider={{
+            id: 'omni-provider',
+            name: 'OmniRoute',
+            url: 'https://omniroute.example/v1',
+            backend: 'openai' as const,
+            models: editProviderModels as never,
+          }}
+        />,
+      )
+      setTimeout(resolve, 200)
+    })
+  }
+
+  it('does not re-fetch raw catalog over saved merged models (no merge button on edit)', async () => {
+    // The fetch mock returns the raw suffixed catalog; if the edit path
+    // re-fetched over the saved merged model, the merged entry would be lost
+    // and Merge buttons would reappear.
+    await renderWithRawCatalog(mergedProviderModels)
+    // The merged model is still present, and no Merge button is shown.
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    saveButton?.click()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash' && m.modes?.length)).toBe(true)
+    const mergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(mergeButton).toBeUndefined()
+  })
+
+  it('shows an Unmerge button for an already-merged model', async () => {
+    await renderWithRawCatalog(mergedProviderModels)
+    const unmergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Unmerge gemini-3.6-flash'),
+    )
+    expect(unmergeButton).toBeTruthy()
+  })
+
+  it('manual merge migrates selection from suffixed members to the merged model', async () => {
+    // Edit provider where one suffixed member was selected; after a manual
+    // Merge the merged model stays selected and the suffixed members are gone.
+    await renderOmni([
+      { id: 'antigravity/gemini-3.6-flash-high', contextWindow: 1048576, selected: true },
+      { id: 'antigravity/gemini-3.6-flash-low', contextWindow: 1048576 },
+      { id: 'antigravity/gemini-3.6-flash-medium', contextWindow: 1048576 },
+    ])
+    const mergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(mergeButton).toBeTruthy()
+    mergeButton?.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    saveButton?.click()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    const merged = savedData.models.find((m) => m.id === 'antigravity/gemini-3.6-flash')
+    expect(merged?.modes?.length).toBe(3)
+    // Because a member was selected, the merged model is selected in the payload.
+    expect(merged?.selected).toBe(true)
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash-high')).toBe(false)
+  })
+
+  it('manual merge on multi-family only selects the family whose member was selected', async () => {
+    // Two families; only a gemini member is selected. After merging the gemini
+    // family the gemini merged model is selected but the claude family is not.
+    await renderOmni([
+      { id: 'antigravity/gemini-3.6-flash-high', contextWindow: 1048576, selected: true },
+      { id: 'antigravity/gemini-3.6-flash-low', contextWindow: 1048576 },
+      { id: 'antigravity/gemini-3.6-flash-medium', contextWindow: 1048576 },
+      { id: 'antigravity/claude-opus-4-6-thinking-low', contextWindow: 1048576 },
+      { id: 'antigravity/claude-opus-4-6-thinking-high', contextWindow: 1048576 },
+    ])
+    const geminiMerge = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(geminiMerge).toBeTruthy()
+    geminiMerge?.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    saveButton?.click()
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    const geminiMerged = savedData.models.find((m) => m.id === 'antigravity/gemini-3.6-flash')
+    const claudeMerged = savedData.models.find((m) => m.id === 'antigravity/claude-opus-4-6-thinking')
+    expect(geminiMerged?.modes?.length).toBe(3)
+    // Claude family was not merged, so it stays as separate variants.
+    expect(claudeMerged?.modes?.length).toBeUndefined()
+    // Only the gemini family (which had a selected member) is selected.
+    expect(geminiMerged?.selected).toBe(true)
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash-high')).toBe(false)
+  })
+
+  it('unmerges a merged model back into its suffixed members in the save payload', async () => {
+    await renderWithRawCatalog(mergedProviderModels)
+    const unmergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Unmerge gemini-3.6-flash'),
+    )
+    expect(unmergeButton).toBeTruthy()
+    unmergeButton?.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // After unmerge a Merge button for the re-expanded family must appear
+    // (the suffixed variants are once again present in the list).
+    const mergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(mergeButton).toBeTruthy()
+
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    saveButton?.click()
+
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    // The merged entry is gone; the suffixed members are restored.
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash' && m.modes?.length)).toBe(false)
+    const levels = ['high', 'low', 'medium']
+    for (const level of levels) {
+      expect(savedData.models.some((m) => m.id === `antigravity/gemini-3.6-flash-${level}`)).toBe(true)
+    }
+  })
+
+  it('re-merges an unmerged family back into a mode-chip model (Merge button disappears)', async () => {
+    await renderWithRawCatalog(mergedProviderModels)
+    const unmergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Unmerge gemini-3.6-flash'),
+    )
+    expect(unmergeButton).toBeTruthy()
+    unmergeButton?.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const mergeButton = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(mergeButton).toBeTruthy()
+    mergeButton?.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // Merge button must disappear again after re-merging.
+    const mergeAfter = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Merge gemini-3.6-flash'),
+    )
+    expect(mergeAfter).toBeUndefined()
+
+    const saveButton = document.body.querySelector('[data-testid="provider-modal-save"]') as HTMLButtonElement | null
+    saveButton?.click()
+
+    const savedData: ProviderFormData = onSaveMock.mock.calls[0]![0]!
+    // Family collapsed back into a single mode-chip model.
+    const merged = savedData.models.find((m) => m.id === 'antigravity/gemini-3.6-flash')
+    expect(merged?.modes?.map((mode) => mode.level)).toEqual(['low', 'medium', 'high'])
+    expect(savedData.models.some((m) => m.id === 'antigravity/gemini-3.6-flash-high')).toBe(false)
+  })
+})

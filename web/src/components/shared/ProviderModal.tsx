@@ -1,6 +1,6 @@
 import { ScrollArea } from './ScrollArea'
 import { Modal } from './Modal'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { authFetch } from '../../lib/api'
 import type { Backend } from '../../stores/config'
 import type { ModelConfig as SharedModelConfig } from '@shared/types.js'
@@ -10,6 +10,7 @@ import { formatTokens } from '../../lib/format-stats'
 import { shouldAutofocus } from '../../lib/device'
 import { REASONING_EFFORT_VALUES } from '../../lib/model-value'
 import { isSmallContext } from '../../lib/context-warning'
+import { groupModeFamilies, MODE_SUFFIXES, splitModeSuffix } from '@shared/reasoning-effort.js'
 
 const COMMON_PORTS = [8080, 11434, 8000, 1234]
 
@@ -32,6 +33,36 @@ type ModelInfo = Omit<SharedModelConfig, 'source'>
 function defaultReasoningEffort(efforts: string[] | undefined): string | undefined {
   if (!efforts?.length) return undefined
   return efforts.includes('medium') ? 'medium' : efforts[0]
+}
+
+// Build a single merged ModelInfo from a mode-suffix family's base id, its
+// (optionally present) un-suffixed base model, and its members. Shared by the
+// auto-collapse path and the explicit re-merge path so the merged shape stays
+// defined in one place.
+function buildMergedModel(baseId: string, baseModel: ModelInfo | undefined, members: ModelInfo[]): ModelInfo {
+  // Order members by semantic reasoning level (low → medium → high → xhigh →
+  // max) rather than lexically, so displayed chips read predictably.
+  const levelOrder = new Map<string, number>(MODE_SUFFIXES.map((s, i) => [s, i]))
+  const sorted = [...members].sort((a, b) => {
+    const la = splitModeSuffix(a.id)?.level
+    const lb = splitModeSuffix(b.id)?.level
+    const ia = la !== undefined ? (levelOrder.get(la) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER
+    const ib = lb !== undefined ? (levelOrder.get(lb) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER
+    return ia - ib || a.id.localeCompare(b.id)
+  })
+  return {
+    id: baseId,
+    name: baseModel?.name ?? sorted[0]?.name ?? baseId.split('/').pop() ?? baseId,
+    apiModelId: baseModel?.apiModelId ?? (baseModel ? baseId : undefined),
+    requestBody: baseModel?.requestBody,
+    contextWindow: baseModel?.contextWindow ?? sorted[0]?.contextWindow ?? 200000,
+    reasoningEfforts: sorted.map((m) => splitModeSuffix(m.id)?.level).filter((l): l is string => Boolean(l)),
+    modes: sorted.map((m) => ({
+      level: splitModeSuffix(m.id)!.level,
+      apiModelId: m.apiModelId ?? m.id,
+      ...(m.name !== undefined ? { name: m.name.split('/').pop() ?? m.name } : {}),
+    })),
+  }
 }
 
 interface ModelConfig {
@@ -667,6 +698,13 @@ export function ProviderModal({
   const urlInputRef = useRef<HTMLInputElement>(null)
   const manualModelInputRef = useRef<HTMLInputElement>(null)
 
+  // Models that were already merged into mode chips (have a `modes` map).
+  const mergedModeModels = useMemo(() => models.filter((m) => m.modes?.length), [models])
+  // Families of suffixed variants still present in the list — only non-empty
+  // after an Unmerge re-expands a merged model, so a Merge button appears then
+  // only (auto-collapse clears them at init/fetch).
+  const mergeableGroups = useMemo(() => groupModeFamilies(models.filter((m) => splitModeSuffix(m.id))), [models])
+
   useEffect(() => {
     if (formStep === 1 && isOpen) {
       // Small delay to ensure the input is mounted
@@ -713,6 +751,73 @@ export function ProviderModal({
     if (!query.trim()) return models
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
     return models.filter((m) => terms.every((t) => m.id.toLowerCase().includes(t)))
+  }
+
+  // Re-merge a detected suffixed family (present after an Unmerge) back into a
+  // single mode-chip model, migrating per-model configs and selection from the
+  // member ids onto the merged id so nothing is lost.
+  function mergeModeFamily(baseId: string, members: ModelInfo[]) {
+    const baseModel = models.find((m) => m.id === baseId)
+    const merged = buildMergedModel(baseId, baseModel, members)
+    const removedIds = new Set(members.map((m) => m.id))
+    setModels((current) => [merged, ...current.filter((m) => !removedIds.has(m.id) && m.id !== baseId)])
+    // Migrate member configs onto the merged id.
+    setModelConfigs((current) => {
+      const next = { ...current }
+      for (const memberId of removedIds) {
+        const config = next[memberId]
+        if (config && !next[baseId]) next[baseId] = config
+        delete next[memberId]
+      }
+      return next
+    })
+    // If any member was selected, select the merged model.
+    const anySelected = [...removedIds].some((id) => selectedModelIds.has(id))
+    if (anySelected) {
+      setSelectedModelIds((current) => {
+        const next = new Set(current)
+        for (const id of removedIds) next.delete(id)
+        next.add(baseId)
+        return next
+      })
+    }
+  }
+
+  // Expand a merged mode model back into its per-level members. Each entry in
+  // the model's `modes` becomes a distinct suffixed model; the merged (base)
+  // entry is removed. Any per-model config keyed on the merged id is cloned
+  // (per-member) onto each expanded member so no user settings are lost on
+  // unmerge and later per-level edits don't leak across members.
+  function unmergeModeFamily(merged: ModelInfo) {
+    if (!merged.modes?.length) return
+    const members: ModelInfo[] = merged.modes.map((mode) => ({
+      id: mode.apiModelId ?? merged.id,
+      ...(mode.name !== undefined ? { name: mode.name } : {}),
+      apiModelId: mode.apiModelId ?? merged.id,
+      contextWindow: merged.contextWindow,
+      ...(merged.requestBody !== undefined ? { requestBody: merged.requestBody } : {}),
+      ...(merged.supportsVision !== undefined ? { supportsVision: merged.supportsVision } : {}),
+    }))
+    setModels((current) => [...members, ...current.filter((m) => m.id !== merged.id)])
+    const mergedConfig = modelConfigs[merged.id]
+    if (mergedConfig) {
+      setModelConfigs((current) => {
+        const next = { ...current }
+        delete next[merged.id]
+        for (const member of members) next[member.id] = { ...mergedConfig }
+        return next
+      })
+    }
+    // If the merged model was selected, select its members; otherwise leave the
+    // selection untouched so the previously selected levels carry over.
+    if (selectedModelIds.has(merged.id)) {
+      setSelectedModelIds((current) => {
+        const next = new Set(current)
+        next.delete(merged.id)
+        for (const member of members) next.add(member.id)
+        return next
+      })
+    }
   }
 
   function addManualModel() {
@@ -825,13 +930,17 @@ export function ProviderModal({
     }
   }, [isOpen, initialStep, editProvider?.id, editModelId])
 
-  // Auto-fetch models when entering step 2
+  // Auto-fetch models when entering step 2. Preserved merged mode-chip models
+  // (from a saved provider) are kept intact by fetchModels — the raw catalog
+  // fetch filters out suffixed variants already claimed by a merged model, so
+  // newly-added catalog models still surface without clobbering merged state.
   useEffect(() => {
     const requiresAuthentication = Boolean(formAuthAdapter)
+    const onlyMergedInList = models.length > 0 && models.every((m) => m.modes?.length)
     if (
       formStep === 2 &&
       formUrl &&
-      models.length === 0 &&
+      (models.length === 0 || onlyMergedInList) &&
       !fetchingModels &&
       !fetchError &&
       (!requiresAuthentication || providerAuthState === 'connected')
@@ -950,7 +1059,10 @@ export function ProviderModal({
   async function fetchModels(url: string) {
     setFetchingModels(true)
     setFetchError(null)
-    setModels([])
+    // Preserve any already-merged mode-chip models and their configs so
+    // newly-fetched raw catalog data doesn't clobber user-collapsed families.
+    const preservedMerged = models.filter((m) => m.modes?.length)
+    setModels(preservedMerged)
     try {
       const params = new URLSearchParams({ url })
       if (formApiKey) params.set('apiKey', formApiKey)
@@ -961,26 +1073,40 @@ export function ProviderModal({
       if (response.ok) {
         const data = (await response.json()) as { models: ModelInfo[]; url: string }
         if (data.models?.length) {
-          setModels(data.models)
-          setExpandedModelId(data.models[0]?.id ?? null)
-          const configs: Record<string, ModelConfig> = {}
-          for (const m of data.models) {
-            configs[m.id] = {
-              contextWindow: m.contextWindow,
-              supportsVision: m.supportsVision,
-              thinkingEnabled: true,
-              thinkingLevel: defaultReasoningEffort(m.reasoningEfforts),
-              defaultTemperature: (m as { defaultTemperature?: number }).defaultTemperature,
-              defaultTopP: (m as { defaultTopP?: number }).defaultTopP,
-              defaultTopK: (m as { defaultTopK?: number }).defaultTopK,
-              defaultMaxTokens: (m as { defaultMaxTokens?: number }).defaultMaxTokens,
+          // Suffixed catalog variants already represented by a preserved merged
+          // model must not reappear alongside it (mirrors the server-side
+          // `claimedByMergedModes` filter in provider-manager.ts).
+          const claimed = new Set<string>()
+          for (const merged of preservedMerged) {
+            for (const mode of merged.modes ?? []) {
+              if (mode.apiModelId) claimed.add(mode.apiModelId)
             }
           }
-          setModelConfigs(configs)
-          if (data.models.length === 1) {
-            setSelectedModelIds(new Set([data.models[0]!.id]))
-            setExpandedModelId(data.models[0]!.id)
-            runAutoConfig(data.models[0]!.id)
+          const filteredRaw = data.models.filter((m) => !claimed.has(m.id))
+          const combined = [...preservedMerged, ...filteredRaw]
+          setModels(combined)
+          setExpandedModelId(combined[0]?.id ?? null)
+          setModelConfigs((current) => {
+            const next: Record<string, ModelConfig> = { ...current }
+            for (const m of filteredRaw) {
+              if (next[m.id]) continue
+              next[m.id] = {
+                contextWindow: m.contextWindow,
+                supportsVision: m.supportsVision,
+                thinkingEnabled: true,
+                thinkingLevel: defaultReasoningEffort(m.reasoningEfforts),
+                defaultTemperature: (m as { defaultTemperature?: number }).defaultTemperature,
+                defaultTopP: (m as { defaultTopP?: number }).defaultTopP,
+                defaultTopK: (m as { defaultTopK?: number }).defaultTopK,
+                defaultMaxTokens: (m as { defaultMaxTokens?: number }).defaultMaxTokens,
+              }
+            }
+            return next
+          })
+          if (combined.length === 1) {
+            setSelectedModelIds(new Set([combined[0]!.id]))
+            setExpandedModelId(combined[0]!.id)
+            runAutoConfig(combined[0]!.id)
           }
         }
       } else {
@@ -1166,6 +1292,7 @@ export function ProviderModal({
         requestBody: m.requestBody,
         reasoningEfforts: modelConfigs[m.id]?.reasoningEfforts ?? m.reasoningEfforts,
         reasoningEffortOverride: modelConfigs[m.id]?.reasoningEffortOverride ?? m.reasoningEffortOverride,
+        modes: m.modes,
         contextWindow: modelConfigs[m.id]?.contextWindow ?? m.contextWindow,
         selected: selectedModelIds.has(m.id) || undefined,
         supportsVision: modelConfigs[m.id]?.supportsVision,
@@ -1689,6 +1816,60 @@ export function ProviderModal({
                         </button>
                       )}
                     </div>
+
+                    {mergedModeModels.length > 0 && (
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-text-secondary">
+                          {mergedModeModels.length} model
+                          {mergedModeModels.length > 1 ? 's are' : ' is'} merged into mode chips:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {mergedModeModels.map((model) => (
+                            <button
+                              key={model.id}
+                              type="button"
+                              onClick={() => unmergeModeFamily(model)}
+                              className="px-2.5 py-1 rounded border border-border text-text-secondary hover:border-accent-primary/40 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors"
+                            >
+                              Unmerge {model.name ?? model.id.split('/').pop()} (
+                              {model.modes!.map((mode) => mode.level).join(', ')})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {mergeableGroups.length > 0 && (
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-text-secondary">
+                          {mergeableGroups.length} model group{mergeableGroups.length > 1 ? 's' : ''} share the same
+                          base name with different modes:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {mergeableGroups.map((group) => (
+                            <button
+                              key={group.baseId}
+                              type="button"
+                              onClick={() =>
+                                mergeModeFamily(
+                                  group.baseId,
+                                  group.members
+                                    .map((m) => models.find((x) => x.id === m.id))
+                                    .filter((m): m is ModelInfo => Boolean(m)),
+                                )
+                              }
+                              className="px-2.5 py-1 rounded border border-accent-primary/40 text-accent-primary hover:bg-accent-primary/10 transition-colors"
+                            >
+                              Merge {group.baseId.split('/').pop()}:{' '}
+                              {group.members
+                                .map((m) => splitModeSuffix(m.id)?.level)
+                                .filter(Boolean)
+                                .join(', ')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs text-text-muted">
