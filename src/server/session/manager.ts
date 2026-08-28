@@ -116,14 +116,20 @@ type SessionEvents = {
 }
 
 // A workspace's origin is the original local repo (a --shared clone). Pushing a
-// branch the original repo has checked out is refused (receive.denyCurrentBranch);
-// a branch it is NOT on pushes directly. This recipe lands workspace commits there.
+// branch the original repo has checked out is refused (receive.denyCurrentBranch),
+// so the recipe always lands on a temporary branch — unconditional and
+// deterministic. After the work is merged back into the original repo the
+// workspace is deleted (it can be recreated at any time), then the remote is
+// reached from the original repo.
 const WORKSPACE_COMMIT_RECIPE = `
-To land changes from this workspace into the original repo (its origin is the local repo itself):
+To land changes from this workspace when the user asks to commit and push:
 1. Commit your work.
-2. If the original repo has this branch checked out, a direct push is refused — push to a temp branch, then in the original repo merge it back and clean up: \`git push origin HEAD:<feature-slug>\` then \`git merge --ff-only <feature-slug> && git branch -d <feature-slug>\`
-3. If the original repo is on a different branch, push directly instead: \`git push origin <branch>\`
-4. To reach the remote, push from the original repo: \`git push origin <branch>\``
+2. Push to the original repo on a temporary branch (its origin is the local repo itself): \`git push origin HEAD:<feature-slug>\`
+3. Switch back to the original project: \`workspace switch original\`
+4. Merge the temporary branch and delete it: \`git merge --ff-only <feature-slug> && git branch -d <feature-slug>\`
+5. Verify the work is present in the original repo.
+6. Delete the workspace — it can be recreated at any time: \`workspace delete <name> force=true\`
+7. Push to the remote from the original repo: \`git push origin <branch>\``
 
 // ============================================================================
 // Session Manager
