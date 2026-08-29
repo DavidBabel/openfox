@@ -133,7 +133,11 @@ export const MessageList = memo(function MessageList({
     activeWorkflowExecution?.status === 'running' || activeWorkflowExecution?.status === 'waiting'
   const showStartBuilding = hasNewCriteria && !isRunning && hasAssistantResponse && !isDone && !hasActiveWorkflow
   const showContinueWorkflow = activeWorkflowExecution?.status === 'waiting' && !isRunning
-  const blockedWorkflowStep = activeWorkflowExecution?.status === 'blocked' && !!activeWorkflowExecution.currentStepId
+  // The blocked-step affordance only makes sense when the session is idle: while
+  // a turn is running (e.g. a chat turn on a session with a stale blocked
+  // execution), it must not render a misleading "stopped before finishing".
+  const blockedWorkflowStep =
+    activeWorkflowExecution?.status === 'blocked' && !!activeWorkflowExecution.currentStepId && !isRunning
   const isWorkflowBlock = blockedWorkflowStep && llmRetry?.status !== 'failed'
 
   const projectId = useScopedPaneState(

@@ -120,6 +120,27 @@ export class QueueProcessor {
       return
     }
 
+    // A new queued turn (user message, slash command, auto-prompt, or
+    // completion) on a session with a blocked workflow execution abandons that
+    // workflow: the step can no longer be retried, so clear it (execution +
+    // phase) instead of leaving the stale "Retry step" affordance pinned while
+    // the turn runs.
+    const latestExec = sessionManager.getLatestWorkflowExecution(sessionId)
+    if (latestExec && latestExec.status === 'blocked') {
+      logger.info('Cancelling blocked workflow execution before chat turn', {
+        sessionId,
+        executionId: latestExec.id,
+        step: latestExec.currentStepId,
+      })
+      sessionManager.cancelWorkflow(
+        sessionId,
+        latestExec.id,
+        latestExec.workflowId,
+        latestExec.workflowName,
+        latestExec.workflowColor,
+      )
+    }
+
     const controller = new AbortController()
     this.activeAgents.set(sessionId, controller)
 

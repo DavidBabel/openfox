@@ -10,6 +10,8 @@ const mockContinueWorkflow = vi.fn()
 const mockState = {
   phase: 'waiting',
   hasWaitingWorkflow: true,
+  execStatus: 'waiting' as 'waiting' | 'blocked',
+  isRunning: false,
   criteriaPending: false,
   displayItems: [] as Array<Record<string, unknown>>,
   pendingChoices: undefined as Array<{ id: string; label: string; goto: string; nextStepName?: string }> | undefined,
@@ -21,6 +23,7 @@ function buildSessionState() {
       id: 's1',
       phase: mockState.phase,
       mode: 'planner',
+      isRunning: mockState.isRunning,
       criteria: [],
       metadata: {},
       metadataEntries: mockState.criteriaPending
@@ -45,7 +48,7 @@ function buildSessionState() {
           sessionId: 's1',
           workflowId: 'pr-review',
           workflowName: 'PR Review',
-          status: 'waiting' as const,
+          status: mockState.execStatus,
           currentStepId: 'user_test',
           currentStepName: 'Manual Testing',
           stepOutput: {} as Record<string, string>,
@@ -66,7 +69,7 @@ function buildSessionState() {
 
 vi.mock('../../stores/session', () => ({
   useSessionStore: (selector: (state: unknown) => unknown) => selector(buildSessionState()),
-  useIsRunning: () => false,
+  useIsRunning: () => mockState.isRunning,
 }))
 
 vi.mock('../../stores/workflows', () => ({
@@ -218,5 +221,35 @@ describe('MessageList continue workflow button', () => {
     mockState.hasWaitingWorkflow = false
     renderMessageList()
     expect(screen.getAllByTestId('workflow-run-button').length).toBeGreaterThan(0)
+  })
+})
+
+describe('MessageList blocked workflow step', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    mockState.hasWaitingWorkflow = true
+    mockState.execStatus = 'waiting'
+    mockState.isRunning = false
+    mockState.displayItems = []
+    mockState.pendingChoices = undefined
+  })
+
+  it('renders the blocked-step message with Retry step when blocked and idle', () => {
+    mockState.execStatus = 'blocked'
+    mockState.isRunning = false
+    renderMessageList()
+    expect(screen.getByText(/step stopped before finishing/i)).toBeDefined()
+    expect(screen.getByRole('button', { name: /retry step/i })).toBeDefined()
+  })
+
+  it('does not render the blocked-step message while the session is running', () => {
+    mockState.execStatus = 'blocked'
+    mockState.isRunning = true
+    renderMessageList()
+    expect(screen.queryByText(/step stopped before finishing/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /resuming/i })).toBeNull()
   })
 })
