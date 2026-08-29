@@ -1,7 +1,7 @@
 import { ScrollArea } from '../../shared/ScrollArea'
 import { useState, useEffect, useMemo } from 'react'
-import { SETTINGS_KEYS } from '../../../stores/settings'
-import { useSettingsStoreState } from '../useSettingsStore'
+import { SETTINGS_KEYS, setSetting } from '../../../lib/resources'
+import { useSetting } from '../../../hooks/useSetting'
 import { ThemeEditor } from '../ThemeEditor'
 import {
   detectAvailableFonts,
@@ -16,25 +16,34 @@ function ThemePicker() {
 }
 
 export function DisplayTab() {
-  const { settings, loading, getSetting, setSetting } = useSettingsStoreState()
-  const isLoading = loading[SETTINGS_KEYS.DISPLAY_SHOW_THINKING] ?? false
+  const showThinking = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_THINKING, 'true')
+  const showVerboseToolOutput = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_VERBOSE_TOOL_OUTPUT, 'true')
+  const showStats = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_STATS, 'true')
+  const showAgentDefinitions = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_AGENT_DEFINITIONS, 'true')
+  const showWorkflowBars = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_WORKFLOW_BARS, 'true')
+  const nativeScrollbars = useSetting(SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS, 'false')
+  const nativeScrollbarsCodeBlocks = useSetting(SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS_CODE_BLOCKS, 'false')
+  const collapseLargeToolCalls = useSetting(SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS, 'false')
+  const deferCodeHighlightWhileStreaming = useSetting(
+    SETTINGS_KEYS.DISPLAY_DEFER_CODE_HIGHLIGHT_WHILE_STREAMING,
+    'false',
+  )
+  const feedVirtualization = useSetting(SETTINGS_KEYS.DISPLAY_FEED_VIRTUALIZATION, 'false')
+  const syntaxHighlighting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_SYNTAX_HIGHLIGHTING, 'true')
+  const maxVisibleItems = useSetting(SETTINGS_KEYS.DISPLAY_MAX_VISIBLE_ITEMS, '300')
+  const isLoading = showThinking.loading
 
-  const maxItemsStr = settings[SETTINGS_KEYS.DISPLAY_MAX_VISIBLE_ITEMS] ?? '300'
-  const [maxItemsLocal, setMaxItemsLocal] = useState(maxItemsStr)
+  const [maxItemsLocal, setMaxItemsLocal] = useState(maxVisibleItems.value)
 
   useEffect(() => {
-    getSetting(SETTINGS_KEYS.DISPLAY_MAX_VISIBLE_ITEMS)
-  }, [getSetting])
-
-  useEffect(() => {
-    setMaxItemsLocal(maxItemsStr)
-  }, [maxItemsStr])
+    setMaxItemsLocal(maxVisibleItems.value)
+  }, [maxVisibleItems.value])
 
   const saveMaxItems = () => {
     const num = parseInt(maxItemsLocal, 10)
     const clamped = isNaN(num) || num < 0 ? 0 : Math.min(num, 9999)
     setMaxItemsLocal(String(clamped))
-    setSetting(SETTINGS_KEYS.DISPLAY_MAX_VISIBLE_ITEMS, String(clamped))
+    void setSetting(SETTINGS_KEYS.DISPLAY_MAX_VISIBLE_ITEMS, String(clamped))
   }
 
   const toggles = [
@@ -110,25 +119,31 @@ export function DisplayTab() {
 
   const allToggles = [...toggles, ...perfToggles]
 
-  const feedLocalValues = Object.fromEntries(toggles.map((t) => [t.key, settings[t.key] ?? 'true']))
-  const perfLocalValues = Object.fromEntries(perfToggles.map((t) => [t.key, settings[t.key] ?? t.defaultValue]))
-  const localValues = { ...feedLocalValues, ...perfLocalValues } as Record<(typeof allToggles)[number]['key'], string>
+  const localValues: Record<string, string> = {
+    [SETTINGS_KEYS.DISPLAY_SHOW_THINKING]: showThinking.value,
+    [SETTINGS_KEYS.DISPLAY_SHOW_VERBOSE_TOOL_OUTPUT]: showVerboseToolOutput.value,
+    [SETTINGS_KEYS.DISPLAY_SHOW_STATS]: showStats.value,
+    [SETTINGS_KEYS.DISPLAY_SHOW_AGENT_DEFINITIONS]: showAgentDefinitions.value,
+    [SETTINGS_KEYS.DISPLAY_SHOW_WORKFLOW_BARS]: showWorkflowBars.value,
+    [SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS]: nativeScrollbars.value,
+    [SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS_CODE_BLOCKS]: nativeScrollbarsCodeBlocks.value,
+    [SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS]: collapseLargeToolCalls.value,
+    [SETTINGS_KEYS.DISPLAY_DEFER_CODE_HIGHLIGHT_WHILE_STREAMING]: deferCodeHighlightWhileStreaming.value,
+    [SETTINGS_KEYS.DISPLAY_FEED_VIRTUALIZATION]: feedVirtualization.value,
+    [SETTINGS_KEYS.DISPLAY_SHOW_SYNTAX_HIGHLIGHTING]: syntaxHighlighting.value,
+  }
   const [local, setLocal] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(allToggles.map((t) => [t.key, localValues[t.key] === 'true'])),
   )
 
   useEffect(() => {
-    allToggles.forEach((t) => getSetting(t.key))
-  }, [getSetting])
-
-  useEffect(() => {
     setLocal(Object.fromEntries(allToggles.map((t) => [t.key, localValues[t.key] === 'true'])))
   }, [JSON.stringify(localValues)])
 
-  const handleToggle = async (key: string) => {
+  const handleToggle = (key: string) => {
     const newValue = String(!local[key as keyof typeof local])
     setLocal((prev) => ({ ...prev, [key]: !prev[key as keyof typeof local] }))
-    await setSetting(key, newValue)
+    void setSetting(key, newValue)
   }
 
   if (isLoading) {
@@ -228,16 +243,11 @@ function ToggleList({
 }
 
 function TerminalFontEditor() {
-  const { settings, getSetting, setSetting } = useSettingsStoreState()
-  const savedValue = settings[SETTINGS_KEYS.DISPLAY_TERMINAL_FONT] ?? DEFAULT_TERMINAL_FONT
+  const savedValue = useSetting(SETTINGS_KEYS.DISPLAY_TERMINAL_FONT, DEFAULT_TERMINAL_FONT).value
   const [localValue, setLocalValue] = useState(savedValue)
 
   const availableFonts = useMemo(() => detectAvailableFonts(), [])
   const resolvedDefault = useMemo(() => resolveDefaultFamily(), [])
-
-  useEffect(() => {
-    getSetting(SETTINGS_KEYS.DISPLAY_TERMINAL_FONT)
-  }, [getSetting])
 
   useEffect(() => {
     setLocalValue(savedValue)
@@ -252,11 +262,11 @@ function TerminalFontEditor() {
   const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const family = e.target.value
     if (!family) return
-    setSetting(SETTINGS_KEYS.DISPLAY_TERMINAL_FONT, toFontFamilyValue(family))
+    void setSetting(SETTINGS_KEYS.DISPLAY_TERMINAL_FONT, toFontFamilyValue(family))
   }
 
   const saveCustom = () => {
-    setSetting(SETTINGS_KEYS.DISPLAY_TERMINAL_FONT, localValue.trim() || DEFAULT_TERMINAL_FONT)
+    void setSetting(SETTINGS_KEYS.DISPLAY_TERMINAL_FONT, localValue.trim() || DEFAULT_TERMINAL_FONT)
   }
 
   return (
@@ -309,20 +319,15 @@ function TerminalFontEditor() {
 }
 
 function CustomCssEditor() {
-  const { settings, getSetting, setSetting } = useSettingsStoreState()
-  const savedCss = settings[SETTINGS_KEYS.DISPLAY_CUSTOM_CSS] ?? ''
+  const savedCss = useSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS).value
   const [localCss, setLocalCss] = useState(savedCss)
-
-  useEffect(() => {
-    getSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS)
-  }, [getSetting])
 
   useEffect(() => {
     setLocalCss(savedCss)
   }, [savedCss])
 
   const handleSave = () => {
-    setSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS, localCss)
+    void setSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS, localCss)
   }
 
   return (

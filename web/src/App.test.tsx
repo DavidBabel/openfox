@@ -84,39 +84,22 @@ vi.mock('./stores/session', () => ({
   },
 }))
 
-vi.mock('./stores/project', () => ({
-  useProjectStore: (selector?: any) => {
-    const state = {
-      currentProject: { id: 'test-project', name: 'Test Project', workdir: '/test' },
-      loadProject: vi.fn(),
-      handleServerMessage: vi.fn(),
-    }
-    return selector ? selector(state) : state
-  },
+vi.mock('./hooks/useCurrentProject', () => ({
+  useCurrentProject: () => ({ id: 'test-project', name: 'Test Project', workdir: '/test' }),
+}))
+
+const configStoreState = vi.hoisted(() => ({
+  providers: [],
+  activeProviderId: null,
+  configFetched: true,
+  fetchConfig: vi.fn(async () => {}),
+  refreshProviderModels: vi.fn(async () => {}),
 }))
 
 vi.mock('./stores/config', () => ({
   useConfigStore: (selector?: any) => {
-    const state = {
-      providers: [],
-      activeProviderId: null,
-      configFetched: true,
-      fetchConfig: vi.fn(async () => {}),
-      refreshProviderModels: vi.fn(async () => {}),
-    }
-    return selector ? selector(state) : state
+    return selector ? selector(configStoreState) : configStoreState
   },
-}))
-
-vi.mock('./stores/mcp', () => ({
-  useMcpStore: Object.assign(
-    (selector?: any) => {
-      return selector ? selector({}) : {}
-    },
-    {
-      getState: () => ({ fetchServers: vi.fn() }),
-    },
-  ),
 }))
 
 const themeStoreState = vi.hoisted(() => ({
@@ -139,27 +122,6 @@ vi.mock('./stores/theme', () => ({
     },
     {
       getState: () => themeStoreState,
-      setState: vi.fn(),
-    },
-  ),
-}))
-
-vi.mock('./stores/settings', () => ({
-  SETTINGS_KEYS: [],
-  DISPLAY_SETTINGS_KEYS: [],
-  useSettingsStore: Object.assign(
-    (selector?: any) => {
-      const state = {
-        settings: {},
-        fetchDisplaySettings: vi.fn(),
-      }
-      return selector ? selector(state) : state
-    },
-    {
-      getState: () => ({
-        settings: {},
-        getSettings: vi.fn(),
-      }),
       setState: vi.fn(),
     },
   ),

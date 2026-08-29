@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { useShallow } from 'zustand/react/shallow'
 import { authFetch } from '../lib/api'
 import { saveEntity, duplicateEntity } from './utils'
+import { workflowsResource, workflowResource } from '../lib/resources'
 import type { WorkflowParameter, WorkflowScope } from '@shared/types.js'
 
 export type { WorkflowParameter }
@@ -66,19 +66,6 @@ export interface TemplateVariable {
 }
 
 interface WorkflowsState {
-  defaults: WorkflowInfo[]
-  userItems: WorkflowInfo[]
-  projectItems: WorkflowInfo[]
-  activeWorkflowId: string
-  loading: boolean
-  templateVariables: TemplateVariable[]
-  /** Project root workdir to scope project workflows (ambient default, syncs from the active session). */
-  workdir?: string
-  setWorkdir: (workdir?: string) => void
-  fetchWorkflows: (workdir?: string) => Promise<void>
-  fetchTemplateVariables: () => Promise<void>
-  fetchWorkflow: (id: string, workdir?: string, scope?: WorkflowScope) => Promise<WorkflowFull | null>
-  fetchDefaultContent: (id: string, workdir?: string) => Promise<WorkflowFull | null>
   createWorkflow: (
     workflow: WorkflowFull,
     destination?: 'project' | 'user',
@@ -106,110 +93,38 @@ const workdirQuery = (workdir: string | undefined): string => (workdir ? `?workd
 
 const scopeQuery = (scope: WorkflowScope | undefined): string => (scope ? `&scope=${scope}` : '')
 
-/** Flat list of every workflow across scopes, preserving all scope variants. */
-export const selectAllWorkflows = (state: WorkflowsState): WorkflowInfo[] => [
-  ...state.defaults,
-  ...state.userItems,
-  ...state.projectItems,
-]
-
-/**
- * Hook-safe version of {@link selectAllWorkflows}: selectAllWorkflows builds a
- * fresh array on every call, which zustand's useStore (Object.is) treats as a
- * state change and re-renders forever. useShallow keeps the snapshot stable
- * between actual changes.
- */
-export const useAllWorkflows = () => useWorkflowsStore(useShallow(selectAllWorkflows))
-
-export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
-  defaults: [],
-  userItems: [],
-  projectItems: [],
-  activeWorkflowId: 'default',
-  loading: false,
-  templateVariables: [],
-
-  setWorkdir: (workdir) => set({ workdir }),
-
-  fetchTemplateVariables: async () => {
-    try {
-      const res = await authFetch('/api/workflows/template-variables')
-      const data = await res.json()
-      set({ templateVariables: data.variables ?? [] })
-    } catch {
-      /* ignore */
-    }
-  },
-
-  fetchWorkflows: async (workdir) => {
-    set({ loading: true })
-    try {
-      const res = await authFetch(`/api/workflows${workdirQuery(workdir ?? get().workdir)}`)
-      const data = await res.json()
-      set({
-        defaults: data.defaults ?? [],
-        userItems: data.userItems ?? [],
-        projectItems: data.projectItems ?? [],
-        activeWorkflowId: data.activeWorkflowId ?? 'default',
-        loading: false,
-      })
-    } catch {
-      set({ loading: false })
-    }
-  },
-
-  fetchWorkflow: async (id: string, workdir, scope) => {
-    try {
-      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}${scopeQuery(scope)}`)
-      if (!res.ok) return null
-      return (await res.json()) as WorkflowFull
-    } catch {
-      return null
-    }
-  },
-
-  fetchDefaultContent: async (id: string, workdir) => {
-    try {
-      const res = await authFetch(`/api/workflows/defaults/${id}${workdirQuery(workdir ?? get().workdir)}`)
-      if (!res.ok) return null
-      return (await res.json()) as WorkflowFull
-    } catch {
-      return null
-    }
-  },
-
-  createWorkflow: async (workflow: WorkflowFull, destination, workdir) => {
-    const wd = workdir ?? get().workdir
-    const result = await saveEntity('POST', `/api/workflows${workdirQuery(wd)}`, {
+export const useWorkflowsStore = create<WorkflowsState>(() => ({
+  createWorkflow: async (workflow: WorkflowFull, destination?: 'project' | 'user', workdir?: string) => {
+    const result = await saveEntity('POST', `/api/workflows${workdirQuery(workdir)}`, {
       ...workflow,
       destination,
     } as unknown as Record<string, unknown>)
-    if (result.success) await get().fetchWorkflows(wd)
+    if (result.success) await workflowsResource.refresh(workdir)
     return result
   },
 
-  updateWorkflow: async (id: string, workflow: Partial<WorkflowFull>, workdir, scope) => {
-    const wd = workdir ?? get().workdir
+  updateWorkflow: async (id: string, workflow: Partial<WorkflowFull>, workdir?: string, scope?: WorkflowScope) => {
     const result = await saveEntity(
       'PUT',
-      `/api/workflows/${id}${workdirQuery(wd)}${scopeQuery(scope)}`,
+      `/api/workflows/${id}${workdirQuery(workdir)}${scopeQuery(scope)}`,
       workflow as unknown as Record<string, unknown>,
     )
-    if (result.success) await get().fetchWorkflows(wd)
+    if (result.success) {
+      await workflowsResource.refresh(workdir)
+      workflowResource.invalidate(id, workdir, scope)
+    }
     return result
   },
 
-  deleteWorkflow: async (id: string, scope, workdir) => {
+  deleteWorkflow: async (id: string, scope: WorkflowScope, workdir?: string) => {
     try {
-      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir ?? get().workdir)}${scopeQuery(scope)}`, {
+      const res = await authFetch(`/api/workflows/${id}${workdirQuery(workdir)}${scopeQuery(scope)}`, {
         method: 'DELETE',
       })
       const data = await res.json()
       if (res.ok) {
-        set((state) => ({
-          ...(scope === 'user' ? { userItems: state.userItems.filter((p) => p.id !== id) } : {}),
-          ...(scope === 'project' ? { projectItems: state.projectItems.filter((p) => p.id !== id) } : {}),
-        }))
+        await workflowsResource.refresh(workdir)
+        workflowResource.invalidate(id, workdir, scope)
         return { success: true }
       }
       return { success: false, error: data.error ?? 'Failed to delete' }
@@ -218,11 +133,12 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     }
   },
 
-  duplicateWorkflow: async (id: string, destination, workdir) => {
-    const wd = workdir ?? get().workdir
+  duplicateWorkflow: async (id: string, destination?: 'project' | 'user', workdir?: string) => {
     return duplicateEntity(
-      `/api/workflows/${id}/duplicate${workdirQuery(wd)}`,
-      () => get().fetchWorkflows(wd),
+      `/api/workflows/${id}/duplicate${workdirQuery(workdir)}`,
+      async () => {
+        await workflowsResource.refresh(workdir)
+      },
       destination,
     )
   },

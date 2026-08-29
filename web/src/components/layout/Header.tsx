@@ -13,7 +13,10 @@ import {
 } from '../shared/icons'
 import { Link, useLocation } from 'wouter'
 import { useSessionStore } from '../../stores/session'
-import { useProjectStore } from '../../stores/project'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
+import { useProjects } from '../../hooks/useProjects'
+import { useResource } from '../../hooks/useResource'
+import { summariesResource } from '../../lib/resources'
 import { useConfigStore } from '../../stores/config'
 import { useTerminalStore } from '../../stores/terminal'
 import { useUpdateStore } from '../../stores/update'
@@ -42,9 +45,6 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement)
   const [location, setLocation] = useLocation()
   const [tasksModalOpen, setTasksModalOpen] = useState(false)
-  const runningTaskCount = useTasksStore((state) => state.counts.running)
-  const loadCounts = useTasksStore((state) => state.loadCounts)
-  const activeProjectId = useTasksStore((state) => state.activeProjectId)
   const lastAutoLaunch = useTasksStore((state) => state.lastAutoLaunch)
   const clearAutoLaunch = useTasksStore((state) => state.clearAutoLaunch)
 
@@ -59,8 +59,10 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
   const openSessionCount = useSessionStore((state) => state.openSessionIds.length)
   const session = useSessionStore((state) => state.currentSession)
   const sessions = useSessionStore((state) => state.sessions)
-  const project = useProjectStore((state) => state.currentProject)
-  const projects = useProjectStore((state) => state.projects)
+  const project = useCurrentProject()
+  const { projects } = useProjects()
+  const { data: countsData } = useResource(summariesResource, project?.id ?? '')
+  const runningTaskCount = countsData?.counts.running ?? 0
   const startAutoRefresh = useConfigStore((state) => state.startAutoRefresh)
   const stopAutoRefresh = useConfigStore((state) => state.stopAutoRefresh)
   const setTerminalOpen = useTerminalStore((state) => state.setOpen)
@@ -88,12 +90,6 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     },
     { capture: true },
   )
-
-  useEffect(() => {
-    if (project?.id && activeProjectId !== project.id) {
-      void loadCounts(project.id)
-    }
-  }, [project?.id, activeProjectId, loadCounts])
 
   useEffect(() => {
     startAutoRefresh()

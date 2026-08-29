@@ -1,13 +1,20 @@
 import { ScrollArea } from './components/shared/ScrollArea'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { SETTINGS_KEYS, DISPLAY_SETTINGS_KEYS, useSettingsStore } from './stores/settings'
+import {
+  SETTINGS_KEYS,
+  DISPLAY_SETTINGS_KEYS,
+  fetchSettingsBulk,
+  mcpServersResource,
+  readConfig,
+} from './lib/resources'
+import { useSetting } from './hooks/useSetting'
 import { useVisualViewport } from './hooks/useVisualViewport'
 import { Route, Switch, useRoute, useLocation } from 'wouter'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useSessionStore } from './stores/session'
-import { useProjectStore } from './stores/project'
 import { useConfigStore } from './stores/config'
-import { useMcpStore } from './stores/mcp'
+import { useCurrentProject } from './hooks/useCurrentProject'
+import { useProviders } from './hooks/useProviders'
 import { useThemeStore } from './stores/theme'
 import { useProjectLoader } from './hooks/useProjectLoader'
 import { useSessionLoader } from './hooks/useSessionLoader'
@@ -66,7 +73,7 @@ function ProjectView({
   const projectId = params?.projectId
 
   const connectionStatus = useSessionStore((state) => state.connectionStatus)
-  const currentProject = useProjectStore((state) => state.currentProject)
+  const currentProject = useCurrentProject()
 
   const hasToken = hasStoredToken()
   const canLoad = connectionStatus === 'connected' || hasToken
@@ -111,7 +118,7 @@ function ProjectSessionView({
   const session = useSessionStore((state) => state.currentSession)
   const error = useSessionStore((state) => state.error)
   const clearError = useSessionStore((state) => state.clearError)
-  const currentProject = useProjectStore((state) => state.currentProject)
+  const currentProject = useCurrentProject()
 
   const hasToken = hasStoredToken()
   const canLoad = connectionStatus === 'connected' || hasToken
@@ -170,8 +177,7 @@ function App() {
   const { connectionStatus } = useWebSocket()
   const fetchConfig = useConfigStore((state) => state.fetchConfig)
   const refreshProviderModels = useConfigStore((state) => state.refreshProviderModels)
-  const providers = useConfigStore((state) => state.providers)
-  const activeProviderId = useConfigStore((state) => state.activeProviderId)
+  const { providers, activeProviderId } = useProviders()
   const [, navigate] = useLocation()
 
   const hasToken = hasStoredToken()
@@ -182,19 +188,18 @@ function App() {
     if (connectionStatus === 'connected' || hasToken) {
       fetchConfig().then(() => {
         setConfigFetched(true)
-        // Batch load all display settings and keybindings in a single API call
-        useSettingsStore
-          .getState()
-          .getSettings([
-            ...DISPLAY_SETTINGS_KEYS,
-            SETTINGS_KEYS.DISPLAY_THEME,
-            SETTINGS_KEYS.DISPLAY_USER_PRESETS,
-            SETTINGS_KEYS.DISPLAY_CUSTOM_CSS,
-            SETTINGS_KEYS.KEYBINDINGS,
-            SETTINGS_KEYS.FEATURES_PER_SESSION_MCP,
-          ])
-        // Eagerly load MCP servers for the chat MCP indicator
-        useMcpStore.getState().fetchServers()
+        // Warm the settings cache in one batched request (write-through into
+        // the per-key entries) so display prefs land together, no flash of
+        // defaults. MCP servers are eager-loaded for the chat MCP indicator.
+        void fetchSettingsBulk([
+          ...DISPLAY_SETTINGS_KEYS,
+          SETTINGS_KEYS.DISPLAY_THEME,
+          SETTINGS_KEYS.DISPLAY_USER_PRESETS,
+          SETTINGS_KEYS.DISPLAY_CUSTOM_CSS,
+          SETTINGS_KEYS.KEYBINDINGS,
+          SETTINGS_KEYS.FEATURES_PER_SESSION_MCP,
+        ])
+        void mcpServersResource.refresh()
       })
     }
   }, [connectionStatus, hasToken, fetchConfig])
@@ -204,7 +209,7 @@ function App() {
       refreshProviderModels(activeProviderId).then(() => {
         // Only refresh config if we don't already have a valid defaultModelSelection
         // for this provider (avoids overwriting optimistic updates)
-        const currentSelection = useConfigStore.getState().defaultModelSelection
+        const currentSelection = readConfig()?.defaultModelSelection
         const selectionProvider = currentSelection ? currentSelection.split('/')[0] : null
         if (selectionProvider !== activeProviderId) {
           fetchConfig()
@@ -213,7 +218,11 @@ function App() {
     }
   }, [configFetched, activeProviderId, refreshProviderModels, fetchConfig])
 
-  const displaySettings = useSettingsStore((state) => state.settings)
+  const themeSetting = useSetting(SETTINGS_KEYS.DISPLAY_THEME).value
+  const userPresetsSetting = useSetting(SETTINGS_KEYS.DISPLAY_USER_PRESETS).value
+  const followSystemSetting = useSetting(SETTINGS_KEYS.DISPLAY_FOLLOW_SYSTEM_THEME).value
+  const customCssSetting = useSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS).value
+  const showChangelogSetting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE).value
 
   useEffect(() => {
     if (configFetched && providers.length === 0) {
@@ -223,9 +232,9 @@ function App() {
 
   useEffect(() => {
     const { applyPreset, applyTokens, setFollowSystemTheme, initSystemThemeListener } = useThemeStore.getState()
-    const serverTheme = displaySettings[SETTINGS_KEYS.DISPLAY_THEME]
-    const serverPresets = displaySettings[SETTINGS_KEYS.DISPLAY_USER_PRESETS]
-    const serverFollowSystem = displaySettings[SETTINGS_KEYS.DISPLAY_FOLLOW_SYSTEM_THEME]
+    const serverTheme = themeSetting
+    const serverPresets = userPresetsSetting
+    const serverFollowSystem = followSystemSetting
 
     if (serverPresets) {
       localStorage.setItem('openfox:userPresets', serverPresets)
@@ -261,11 +270,11 @@ function App() {
 
     const cleanup = initSystemThemeListener()
     return () => cleanup()
-  }, [displaySettings[SETTINGS_KEYS.DISPLAY_THEME], displaySettings[SETTINGS_KEYS.DISPLAY_USER_PRESETS]])
+  }, [themeSetting, userPresetsSetting])
 
   // Inject custom CSS into a <style> tag
   useEffect(() => {
-    const css = displaySettings[SETTINGS_KEYS.DISPLAY_CUSTOM_CSS] ?? ''
+    const css = customCssSetting
     let styleTag = document.getElementById('custom-css') as HTMLStyleElement | null
     if (!styleTag) {
       styleTag = document.createElement('style')
@@ -273,13 +282,13 @@ function App() {
       document.head.appendChild(styleTag)
     }
     styleTag.textContent = css
-  }, [displaySettings[SETTINGS_KEYS.DISPLAY_CUSTOM_CSS]])
+  }, [customCssSetting])
 
   const [showChangelog, setShowChangelog] = useState(false)
 
   useEffect(() => {
-    const setting = useSettingsStore.getState().settings[SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE]
-    if (setting === undefined) return
+    const setting = showChangelogSetting
+    if (setting === '') return
     if (setting === 'false') return
 
     let shouldShow = false
@@ -297,7 +306,7 @@ function App() {
     // changelog trim boundary survives even if a different window performed
     // or observed the update.
     if (configFetched) {
-      const currentVersion = useConfigStore.getState().version
+      const currentVersion = readConfig()?.version ?? null
       const lastVersion = getStoredLastVersion()
       if (isVersionNewerThan(currentVersion, lastVersion)) {
         shouldShow = true
@@ -308,7 +317,7 @@ function App() {
     if (shouldShow) {
       setShowChangelog(true)
     }
-  }, [displaySettings[SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE], configFetched])
+  }, [showChangelogSetting, configFetched])
 
   const getInitialLeftSidebar = () => {
     const saved = localStorage.getItem('openfox:leftSidebar')

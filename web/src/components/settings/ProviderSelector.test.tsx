@@ -49,9 +49,6 @@ vi.mock('../../stores/session', () => ({
 
 vi.mock('../../stores/config', () => ({
   useConfigStore: mockStore({
-    providers: [],
-    activeProviderId: null,
-    defaultModelSelection: null,
     activating: false,
     activateProvider: vi.fn(),
     refreshModel: vi.fn(),
@@ -74,6 +71,29 @@ vi.mock('../../stores/config', () => ({
     }
     return map[backend] ?? backend
   },
+}))
+
+const providerHookState = {
+  providers: [] as any[],
+  activeProviderId: null as string | null,
+  defaultModelSelection: null as string | null,
+}
+
+vi.mock('../../hooks/useProviders', () => ({
+  useProviders: () => ({
+    providers: providerHookState.providers,
+    activeProviderId: providerHookState.activeProviderId,
+    refresh: vi.fn(),
+    loading: false,
+  }),
+}))
+
+vi.mock('../../hooks/useConfig', () => ({
+  useConfig: () => ({
+    config: { defaultModelSelection: providerHookState.defaultModelSelection },
+    refresh: vi.fn(),
+    loading: false,
+  }),
 }))
 
 vi.mock('../../lib/api', () => ({
@@ -169,6 +189,9 @@ import { ProviderSelector } from './ProviderSelector'
 async function setConfigState(partial: Record<string, any>) {
   const { useConfigStore } = await import('../../stores/config')
   ;(useConfigStore as unknown as MockStore).setState(partial)
+  if ('providers' in partial) providerHookState.providers = partial.providers
+  if ('activeProviderId' in partial) providerHookState.activeProviderId = partial.activeProviderId
+  if ('defaultModelSelection' in partial) providerHookState.defaultModelSelection = partial.defaultModelSelection
 }
 
 async function setSessionState(partial: Record<string, any>) {

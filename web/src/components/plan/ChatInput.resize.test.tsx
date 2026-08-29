@@ -42,14 +42,6 @@ vi.mock('../../stores/workflows', () => ({
   useAllWorkflows: () => [],
 }))
 
-vi.mock('../../stores/commands', () => ({
-  useCommandsStore: Object.assign(
-    (selector: (state: unknown) => unknown) =>
-      selector({ defaults: [], userItems: [], projectItems: [], fetchCommands: vi.fn() }),
-    { getState: () => ({ defaults: [], userItems: [], projectItems: [], fetchCommands: vi.fn() }) },
-  ),
-}))
-
 vi.mock('../../hooks/useScrolledSend', () => ({
   useScrolledSend: () => ({ sendMessage: vi.fn(), launchWorkflow: vi.fn() }),
 }))
@@ -69,14 +61,9 @@ vi.mock('../../components/plan/EffortChangeGate', () => ({
   useEffortChangeGate: () => ({ requestEffortSwitch: vi.fn() }),
 }))
 
-vi.mock('../../stores/settings', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  return {
-    ...actual,
-    useSettingsStore: (selector: (state: unknown) => unknown) =>
-      selector({ settings: { 'features.perSessionMcp': 'false' } }),
-  }
-})
+vi.mock('../../hooks/useSetting', () => ({
+  useSetting: (_key: string, fallback = '') => ({ value: fallback, loading: false }),
+}))
 
 const SCROLL_HEIGHT_DESC = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight')
 

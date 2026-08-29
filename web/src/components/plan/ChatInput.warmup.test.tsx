@@ -69,14 +69,9 @@ vi.mock('../../components/plan/EffortChangeGate', () => ({
   EffortChangeGateProvider: (props: { children?: unknown }) => <>{props.children}</>,
   useEffortChangeGate: () => ({ requestEffortSwitch: vi.fn() }),
 }))
-vi.mock('../../stores/settings', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  return {
-    ...actual,
-    useSettingsStore: (selector: (state: unknown) => unknown) =>
-      selector({ settings: { 'features.perSessionMcp': 'false' } }),
-  }
-})
+vi.mock('../../hooks/useSetting', () => ({
+  useSetting: (_key: string, fallback = '') => ({ value: fallback, loading: false }),
+}))
 
 function renderChatInput() {
   return render(

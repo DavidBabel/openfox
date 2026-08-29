@@ -4,13 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWorkflowsStore } from '../../stores/workflows'
 import { WorkflowsModal } from './WorkflowsModal'
 
-vi.mock('../../hooks/useResource', () => ({
-  useResource: () => ({
-    data: { defaults: [], userItems: [], projectItems: [], modelOverrides: {} },
+const { mockResourceState } = vi.hoisted(() => ({
+  mockResourceState: {
+    data: { defaults: [], userItems: [], projectItems: [] } as {
+      defaults: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
+      userItems: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
+      projectItems: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
+    },
     loading: false,
     error: undefined,
     refresh: vi.fn(),
-  }),
+  },
+}))
+
+vi.mock('../../hooks/useResource', () => ({
+  useResource: () => mockResourceState,
 }))
 
 const reviewUser = {
@@ -41,17 +49,12 @@ describe('WorkflowsModal confirm-delete scoping', () => {
   afterEach(cleanup)
 
   beforeEach(() => {
-    useWorkflowsStore.setState({
+    mockResourceState.data = {
       defaults: [],
       userItems: [reviewUser],
       projectItems: [reviewProject],
-      loading: false,
-      activeWorkflowId: 'default',
-      templateVariables: [],
-      fetchWorkflows: vi.fn(async () => undefined),
-      fetchTemplateVariables: vi.fn(async () => undefined),
-      fetchWorkflow: vi.fn(async () => null),
-      fetchDefaultContent: vi.fn(async () => null),
+    }
+    useWorkflowsStore.setState({
       createWorkflow: vi.fn(async () => ({ success: true })),
       updateWorkflow: vi.fn(async () => ({ success: true })),
       deleteWorkflow: vi.fn(async () => ({ success: true })),

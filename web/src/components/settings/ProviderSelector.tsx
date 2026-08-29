@@ -1,6 +1,8 @@
 import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect } from 'react'
 import { useConfigStore, getBackendDisplayName, type Provider } from '../../stores/config'
+import { useProviders } from '../../hooks/useProviders'
+import { useConfig } from '../../hooks/useConfig'
 import { useSessionStore } from '../../stores/session'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 import { useResource } from '../../hooks/useResource'
@@ -125,9 +127,8 @@ export function ProviderSelector() {
   const codeCopiedTimerRef = useRef<number | null>(null)
   const [devicePageOpened, setDevicePageOpened] = useState(false)
   const loadedProvidersRef = useRef<Set<string>>(new Set())
-  const providers = useConfigStore((state) => state.providers)
-  const activeProviderId = useConfigStore((state) => state.activeProviderId)
-  const defaultModelSelection = useConfigStore((state) => state.defaultModelSelection)
+  const { providers, activeProviderId } = useProviders()
+  const defaultModelSelection = useConfig().config?.defaultModelSelection ?? null
   const activating = useConfigStore((state) => state.activating)
   const activateProvider = useConfigStore((state) => state.activateProvider)
   const refreshModel = useConfigStore((state) => state.refreshModel)
@@ -390,6 +391,7 @@ export function ProviderSelector() {
   }
 
   const refreshAuthStatus = async (providerId: string) => {
+    // Authorized transient read: provider auth status is a one-shot check, not shared state.
     const response = await authFetch(`/api/provider-auth/${providerId}/status`)
     if (!response.ok) return 'error' as const
     const data = (await response.json()) as { state: 'disconnected' | 'pending' | 'connected' | 'expired' | 'error' }

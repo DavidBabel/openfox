@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Button } from '../shared/Button'
 import { useSkillsStore, type SkillFull, type SkillInfo } from '../../stores/skills'
+import { useResource } from '../../hooks/useResource'
+import { skillsResource, skillResource, skillDefaultResource } from '../../lib/resources'
 import { useSessionStore } from '../../stores/session/store'
 import { useConfirmDialog, FormField, ErrorBanner, DestinationSelector } from './CRUDModal'
 import { ItemsHeader } from '../shared/ItemsHeader'
@@ -23,17 +25,15 @@ type SkillFormData = {
 }
 
 export function SkillsContent({ isOpen }: { isOpen: boolean }) {
-  const defaults = useSkillsStore((state) => state.defaults)
-  const userItems = useSkillsStore((state) => state.userItems)
-  const projectItems = useSkillsStore((state) => state.projectItems)
-  const items = useSkillsStore((state) => state.items)
-  const selectedDirectory = useSkillsStore((state) => state.selectedDirectory)
-  const diagnostics = useSkillsStore((state) => state.diagnostics)
-  const loading = useSkillsStore((state) => state.loading)
-  const fetchSkills = useSkillsStore((state) => state.fetchSkills)
-  const setWorkdir = useSkillsStore((state) => state.setWorkdir)
-  const fetchSkill = useSkillsStore((state) => state.fetchSkill)
-  const fetchDefaultContent = useSkillsStore((state) => state.fetchDefaultContent)
+  const currentSession = useSessionStore((state) => state.currentSession)
+  const workdir = currentSession?.workdir
+  const { data, refresh, loading } = useResource(skillsResource, workdir)
+  const defaults = data?.defaults ?? []
+  const userItems = data?.userItems ?? []
+  const projectItems = data?.projectItems ?? []
+  const items = data?.items ?? []
+  const selectedDirectory = data?.selectedDirectory ?? null
+  const diagnostics = data?.diagnostics ?? []
   const createSkill = useSkillsStore((state) => state.createSkill)
   const updateSkill = useSkillsStore((state) => state.updateSkill)
   const deleteSkillAction = useSkillsStore((state) => state.deleteSkill)
@@ -41,7 +41,6 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
   const removeDirectory = useSkillsStore((state) => state.removeDirectory)
   const installSkill = useSkillsStore((state) => state.installSkill)
   const toggleSkill = useSkillsStore((state) => state.toggleSkill)
-  const currentSession = useSessionStore((state) => state.currentSession)
   const [pendingDelete, setPendingDelete] = useState<SkillInfo | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -53,14 +52,11 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
 
   useEffect(() => {
     if (isOpen) {
-      const sessionWorkdir = currentSession?.workdir ?? null
-      setWorkdir(sessionWorkdir)
-      fetchSkills(sessionWorkdir)
       setView('list')
       setEditingId(null)
       clearConfirm()
     }
-  }, [isOpen, fetchSkills, setWorkdir, clearConfirm, currentSession?.workdir])
+  }, [isOpen, clearConfirm])
 
   const setSkillFormData = (skill: SkillFull, readOnly: boolean, newId?: string, newName?: string) => {
     setFormData({
@@ -77,14 +73,14 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
   const handleView = async (skillId: string) => {
     const isDefault = defaults.some((d) => d.id === skillId)
     if (isDefault) {
-      const content = await fetchDefaultContent(skillId)
+      const content = await skillDefaultResource.refresh(skillId)
       if (!content) return
       setSkillFormData(content, true)
       setEditingId(skillId)
       setFormError('')
       setView('edit')
     } else {
-      const skill = await fetchSkill(skillId)
+      const skill = await skillResource.refresh(skillId, workdir)
       if (!skill) return
       setSkillFormData(skill, true)
       setEditingId(skillId)
@@ -95,7 +91,9 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
 
   const handleDuplicate = async (skillId: string) => {
     const isDefault = defaults.some((d) => d.id === skillId)
-    const content = isDefault ? await fetchDefaultContent(skillId) : await fetchSkill(skillId)
+    const content = isDefault
+      ? await skillDefaultResource.refresh(skillId)
+      : await skillResource.refresh(skillId, workdir)
     if (!content) return
     const newId = `${skillId}-copy-${Date.now()}`
     setSkillFormData(content, false, newId, `${content.metadata.name} (copy)`)
@@ -118,7 +116,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
   }
 
   const handleEdit = async (skillId: string) => {
-    const skill = await fetchSkill(skillId)
+    const skill = await skillResource.refresh(skillId, workdir)
     if (!skill) return
     setSkillFormData(skill, false)
     setEditingId(skillId)
@@ -130,13 +128,13 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
     if (!pendingDelete) return
     setDeleting(true)
     setDeleteError('')
-    const result = await deleteSkillAction(pendingDelete.id)
+    const result = await deleteSkillAction(pendingDelete.id, workdir)
     setDeleting(false)
     if (!result.success) {
       setDeleteError(result.error ?? 'Failed to delete skill.')
       return
     }
-    await fetchSkills()
+    await refresh()
     setPendingDelete(null)
     clearConfirm()
   }
@@ -162,8 +160,8 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
     }
 
     const result = editingId
-      ? await updateSkill(editingId, skill)
-      : await createSkill(skill, formData.destination as 'project' | 'user')
+      ? await updateSkill(editingId, skill, workdir)
+      : await createSkill(skill, formData.destination as 'project' | 'user', workdir)
 
     setSaving(false)
 
@@ -300,7 +298,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
           setDeleteError('')
           setPendingDelete(skill)
         }}
-        onToggle={() => toggleSkill(skill.id)}
+        onToggle={() => toggleSkill(skill.id, workdir)}
         readOnly={skill.readOnly}
       />
     ))
@@ -319,10 +317,10 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
       />
       <SkillLibraryPanel
         selectedDirectory={selectedDirectory}
-        onSelect={selectDirectory}
-        onRemove={removeDirectory}
-        onRefresh={fetchSkills}
-        onInstall={installSkill}
+        onSelect={(path) => selectDirectory(path, workdir)}
+        onRemove={() => removeDirectory(workdir)}
+        onRefresh={() => void refresh()}
+        onInstall={(skillPackage) => installSkill(skillPackage, workdir)}
       />
       {diagnostics.length > 0 && (
         <div className="mb-3 rounded border border-accent-warning/40 bg-accent-warning/10 p-2 text-xs text-text-secondary">
@@ -354,7 +352,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
                   isConfirmingDelete={false}
                   onView={() => handleView(skill.id)}
                   onDuplicate={() => handleDuplicate(skill.id)}
-                  onToggle={() => toggleSkill(skill.id)}
+                  onToggle={() => toggleSkill(skill.id, workdir)}
                 />
               ))}
             </div>

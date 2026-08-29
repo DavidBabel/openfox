@@ -33,8 +33,6 @@ export function getAgentColor(agents: AgentInfo[], agentId: string): string {
 }
 
 interface AgentsState {
-  fetchAgent: (agentId: string, workdir?: string) => Promise<AgentFull | null>
-  fetchDefaultContent: (agentId: string) => Promise<AgentFull | null>
   createAgent: (
     agent: AgentFull,
     destination?: 'project' | 'user',
@@ -54,26 +52,6 @@ interface AgentsState {
 }
 
 export const useAgentsStore = create<AgentsState>(() => ({
-  fetchAgent: async (agentId: string, workdir?: string) => {
-    try {
-      const res = await authFetch(agentsUrl(`/api/agents/${agentId}`, workdir))
-      if (!res.ok) return null
-      return (await res.json()) as AgentFull
-    } catch {
-      return null
-    }
-  },
-
-  fetchDefaultContent: async (agentId: string) => {
-    try {
-      const res = await authFetch(`/api/agents/defaults/${agentId}`)
-      if (!res.ok) return null
-      return (await res.json()) as AgentFull
-    } catch {
-      return null
-    }
-  },
-
   createAgent: async (agent: AgentFull, destination?: 'project' | 'user', workdir?: string) => {
     const result = await saveEntity('POST', agentsUrl('/api/agents', workdir), {
       ...agent,

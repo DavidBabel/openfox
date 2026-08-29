@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, renderHook } from '@testing-library/react'
+import { act, render, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GRACE_MS, clearCache, resource } from '../lib/resourceCache'
 import { useResource } from './useResource'
@@ -82,5 +82,57 @@ describe('useResource', () => {
     })
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(result.current.data).toBe('data-b')
+  })
+
+  it('propagates a mutation refresh to every subscriber on the same key (discrepancy test)', async () => {
+    let counter = 0
+    const fetch = vi.fn(async () => `v${++counter}`)
+    const res = resource<string, []>({ key: () => 'shared:key', fetch })
+
+    function Consumer({ label }: { label: string }) {
+      const { data } = useResource(res)
+      return (
+        <div>
+          {label}:{data ?? 'empty'}
+        </div>
+      )
+    }
+
+    const a = render(<Consumer label="A" />)
+    const b = render(<Consumer label="B" />)
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(a.container.textContent).toBe('A:v1')
+    expect(b.container.textContent).toBe('B:v1')
+
+    // Component A mutates and refreshes the shared resource; component B must
+    // see the fresh data on its next render with no remount and no extra fetch.
+    await act(async () => {
+      await res.refresh()
+    })
+    expect(b.container.textContent).toBe('B:v2')
+    expect(a.container.textContent).toBe('A:v2')
+    expect(fetch).toHaveBeenCalledTimes(2)
+
+    a.unmount()
+    b.unmount()
+  })
+
+  it('does not refetch on an unrelated re-render of the consumer', async () => {
+    const { fetch, res } = makeResource()
+    const { result, rerender } = renderHook(() => useResource(res))
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    rerender()
+    rerender()
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(result.current.data).toBe('loaded')
   })
 })

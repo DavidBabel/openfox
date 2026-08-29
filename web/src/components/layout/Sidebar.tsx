@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useLocation, Link } from 'wouter'
 import { useSessionStore } from '../../stores/session'
 import type { PendingPathConfirmation } from '../../stores/session/types'
-import { useProjectStore } from '../../stores/project'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
 import type { SessionSummary } from '@shared/types.js'
 import { ProjectSettingsModal } from '../settings/ProjectSettingsModal'
 import { DropdownMenu } from '../shared/DropdownMenu'
@@ -48,7 +48,7 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
   const pendingPathConfirmations = useSessionStore((state) => state.pendingPathConfirmations)
   const toggleFavorite = useSessionStore((state) => state.toggleFavorite)
 
-  const currentProject = useProjectStore((state) => state.currentProject)
+  const currentProject = useCurrentProject()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [focusedIndex, setFocusedIndex] = useState(-1)

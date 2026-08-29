@@ -67,8 +67,6 @@ vi.mock('../../stores/agents', () => ({
     modelOverrides: {},
     loading: false,
     fetchAgents: vi.fn(),
-    fetchAgent: vi.fn(),
-    fetchDefaultContent: vi.fn(),
     createAgent: vi.fn(),
     updateAgent: vi.fn(),
     deleteAgent: vi.fn(),

@@ -5,7 +5,7 @@ import { EditButton } from '../shared/IconButton'
 import { EyeIcon } from '../shared/icons'
 import { useCommandsStore, type CommandInfo, type CommandFull } from '../../stores/commands'
 import { useResource } from '../../hooks/useResource'
-import { agentsResource } from '../../lib/resources'
+import { agentsResource, commandsResource, commandResource, commandDefaultResource } from '../../lib/resources'
 import {
   useConfirmDialog,
   ConfirmButton,
@@ -60,13 +60,10 @@ function ViewButton({ onClick }: { onClick: () => void }) {
 }
 
 export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: CommandsModalProps) {
-  const defaults = useCommandsStore((state) => state.defaults)
-  const userItems = useCommandsStore((state) => state.userItems)
-  const projectItems = useCommandsStore((state) => state.projectItems)
-  const loading = useCommandsStore((state) => state.loading)
-  const fetchCommands = useCommandsStore((state) => state.fetchCommands)
-  const fetchCommand = useCommandsStore((state) => state.fetchCommand)
-  const fetchDefaultContent = useCommandsStore((state) => state.fetchDefaultContent)
+  const { data: commandsData, loading } = useResource(commandsResource, projectDir)
+  const defaults = commandsData?.defaults ?? []
+  const userItems = commandsData?.userItems ?? []
+  const projectItems = commandsData?.projectItems ?? []
   const createCommand = useCommandsStore((state) => state.createCommand)
   const updateCommand = useCommandsStore((state) => state.updateCommand)
   const deleteCommandAction = useCommandsStore((state) => state.deleteCommand)
@@ -80,14 +77,10 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
   const { requestDelete, clearConfirm, isConfirming } = useConfirmDialog()
   const clearConfirmCalled = useRef(false)
 
-  const { data, refresh } = useResource(agentsResource, projectDir)
+  const { data } = useResource(agentsResource, projectDir)
   const allAgents = data ? [...data.defaults, ...data.userItems] : []
   const topLevelAgents = allAgents.filter((a) => !a.subagent)
 
-  const fetchCommandsRef = useRef(fetchCommands)
-  const refreshAgentsRef = useRef(refresh)
-  const fetchCommandRef = useRef(fetchCommand)
-  const fetchDefaultContentRef = useRef(fetchDefaultContent)
   const projectDirRef = useRef(projectDir)
   const initialEditIdRef = useRef(initialEditId)
   const setViewRef = useRef(setView)
@@ -96,10 +89,6 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
   const clearConfirmRef = useRef(clearConfirm)
 
   useEffect(() => {
-    fetchCommandsRef.current = fetchCommands
-    refreshAgentsRef.current = refresh
-    fetchCommandRef.current = fetchCommand
-    fetchDefaultContentRef.current = fetchDefaultContent
     projectDirRef.current = projectDir
     initialEditIdRef.current = initialEditId
     setViewRef.current = setView
@@ -110,8 +99,6 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
 
   useEffect(() => {
     if (isOpen) {
-      fetchCommandsRef.current(projectDirRef.current)
-      refreshAgentsRef.current()
       if (!clearConfirmCalled.current) {
         clearConfirmRef.current()
         clearConfirmCalled.current = true
@@ -122,7 +109,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
         setEditingIdRef.current(initialEditIdRef.current)
         setFormErrorRef.current('')
         if (isDefaultItem) {
-          fetchDefaultContentRef.current(initialEditIdRef.current).then((content) => {
+          commandDefaultResource.refresh(initialEditIdRef.current).then((content) => {
             if (!content) return
             setFormData({
               name: content.metadata.name + ' (copy)',
@@ -134,7 +121,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
             })
           })
         } else {
-          fetchCommandRef.current(initialEditIdRef.current, projectDirRef.current).then((command) => {
+          commandResource.refresh(initialEditIdRef.current, projectDirRef.current).then((command) => {
             if (!command) return
             setFormData({
               name: command.metadata.name,
@@ -157,14 +144,14 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
 
   const handleViewDefault = async (commandId: string) => {
     setViewingDefaultId(commandId)
-    const content = await fetchDefaultContent(commandId)
+    const content = await commandDefaultResource.refresh(commandId)
     setDefaultContent(content?.prompt ?? null)
   }
 
   const handleDuplicate = async (commandId: string) => {
     const isDefault = defaults.some((d) => d.id === commandId)
     if (isDefault) {
-      const content = await fetchDefaultContent(commandId)
+      const content = await commandDefaultResource.refresh(commandId)
       if (content) {
         setEditingId(null)
         setFormData({
@@ -179,7 +166,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
         setView('edit')
       }
     } else {
-      const command = await fetchCommand(commandId, projectDir)
+      const command = await commandResource.refresh(commandId, projectDir)
       if (command) {
         setEditingId(null)
         setFormData({
@@ -203,7 +190,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
   }
 
   const handleEdit = async (commandId: string) => {
-    const command = await fetchCommand(commandId, projectDir)
+    const command = await commandResource.refresh(commandId, projectDir)
     if (!command) return
     setEditingId(commandId)
     setFormData({
@@ -281,7 +268,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
     setViewingDefaultId(null)
     setView('edit')
     setEditingId(viewingDefaultId)
-    fetchDefaultContent(viewingDefaultId).then((content) => {
+    commandDefaultResource.refresh(viewingDefaultId).then((content) => {
       if (!content) return
       setFormData({
         name: `${content.metadata.name} (copy)`,

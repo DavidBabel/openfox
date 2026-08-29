@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { authFetch } from '../lib/api'
 import { saveEntity, duplicateEntity } from './utils'
+import { skillsResource, skillResource, scopedUrl } from '../lib/resources'
 
 export type SkillSource =
   'bundled' | 'global-shared' | 'global-openfox' | 'selected' | 'project-shared' | 'project-openfox'
@@ -31,29 +32,35 @@ export interface SkillFull {
 }
 
 interface SkillsState {
-  defaults: SkillInfo[]
-  userItems: SkillInfo[]
-  projectItems: SkillInfo[]
-  items: SkillInfo[]
-  selectedDirectory: SelectedSkillDirectory | null
-  diagnostics: string[]
-  loading: boolean
-  workdir: string | null
-  setWorkdir: (workdir: string | null) => void
-  fetchSkills: (workdir?: string | null) => Promise<void>
-  toggleSkill: (skillId: string) => Promise<void>
-  fetchSkill: (skillId: string) => Promise<SkillFull | null>
-  fetchDefaultContent: (skillId: string) => Promise<SkillFull | null>
-  createSkill: (skill: SkillFull, destination?: 'project' | 'user') => Promise<{ success: boolean; error?: string }>
-  updateSkill: (id: string, skill: Partial<SkillFull>) => Promise<{ success: boolean; error?: string }>
-  deleteSkill: (skillId: string) => Promise<{ success: boolean; error?: string; reason?: string }>
-  duplicateSkill: (skillId: string, destination?: 'project' | 'user') => Promise<{ success: boolean; error?: string }>
-  selectDirectory: (path: string) => Promise<{ success: boolean; error?: string }>
-  removeDirectory: () => Promise<void>
-  installSkill: (skillPackage: {
-    packageName: string
-    files: Array<{ path: string; file: File }>
-  }) => Promise<{ success: boolean; error?: string }>
+  toggleSkill: (skillId: string, workdir?: string | null) => Promise<void>
+  createSkill: (
+    skill: SkillFull,
+    destination?: 'project' | 'user',
+    workdir?: string | null,
+  ) => Promise<{ success: boolean; error?: string }>
+  updateSkill: (
+    id: string,
+    skill: Partial<SkillFull>,
+    workdir?: string | null,
+  ) => Promise<{ success: boolean; error?: string }>
+  deleteSkill: (
+    skillId: string,
+    workdir?: string | null,
+  ) => Promise<{ success: boolean; error?: string; reason?: string }>
+  duplicateSkill: (
+    skillId: string,
+    destination?: 'project' | 'user',
+    workdir?: string | null,
+  ) => Promise<{ success: boolean; error?: string }>
+  selectDirectory: (path: string, workdir?: string | null) => Promise<{ success: boolean; error?: string }>
+  removeDirectory: (workdir?: string | null) => Promise<void>
+  installSkill: (
+    skillPackage: {
+      packageName: string
+      files: Array<{ path: string; file: File }>
+    },
+    workdir?: string | null,
+  ) => Promise<{ success: boolean; error?: string }>
 }
 
 async function mutateSkills(
@@ -71,107 +78,45 @@ async function mutateSkills(
   }
 }
 
-function skillsUrl(path: string, workdir?: string | null): string {
-  if (workdir) return `${path}?workdir=${encodeURIComponent(workdir)}`
-  return path
-}
-
-export const useSkillsStore = create<SkillsState>((set, get) => ({
-  defaults: [],
-  userItems: [],
-  projectItems: [],
-  items: [],
-  selectedDirectory: null,
-  diagnostics: [],
-  loading: false,
-  workdir: null,
-
-  setWorkdir: (workdir) => {
-    set({ workdir })
-  },
-
-  fetchSkills: async (workdir?: string | null) => {
-    const wd = workdir ?? get().workdir
-    set({ loading: true })
+export const useSkillsStore = create<SkillsState>(() => ({
+  toggleSkill: async (skillId: string, workdir?: string | null) => {
     try {
-      const res = await authFetch(skillsUrl('/api/skills', wd))
-      const data = await res.json()
-      set({
-        defaults: data.defaults ?? [],
-        userItems: data.userItems ?? [],
-        projectItems: data.projectItems ?? [],
-        items: data.items ?? [],
-        selectedDirectory: data.selectedDirectory ?? null,
-        diagnostics: data.diagnostics ?? [],
-        loading: false,
-      })
-    } catch {
-      set({ loading: false })
-    }
-  },
-
-  toggleSkill: async (skillId: string) => {
-    try {
-      const res = await authFetch(skillsUrl(`/api/skills/${skillId}/toggle`, get().workdir), { method: 'POST' })
-      const data = await res.json()
-      set((state) => ({
-        defaults: state.defaults.map((s) => (s.id === skillId ? { ...s, enabled: data.enabled } : s)),
-        userItems: state.userItems.map((s) => (s.id === skillId ? { ...s, enabled: data.enabled } : s)),
-        projectItems: state.projectItems.map((s) => (s.id === skillId ? { ...s, enabled: data.enabled } : s)),
-        items: state.items.map((s) => (s.id === skillId ? { ...s, enabled: data.enabled } : s)),
-      }))
+      await authFetch(scopedUrl(`/api/skills/${skillId}/toggle`, workdir ?? undefined), { method: 'POST' })
+      await skillsResource.refresh(workdir ?? undefined)
     } catch {
       // silently fail
     }
   },
 
-  fetchSkill: async (skillId: string) => {
-    try {
-      const res = await authFetch(skillsUrl(`/api/skills/${skillId}`, get().workdir))
-      if (!res.ok) return null
-      return (await res.json()) as SkillFull
-    } catch {
-      return null
-    }
-  },
-
-  fetchDefaultContent: async (skillId: string) => {
-    try {
-      const res = await authFetch(`/api/skills/defaults/${skillId}`)
-      if (!res.ok) return null
-      return (await res.json()) as SkillFull
-    } catch {
-      return null
-    }
-  },
-
-  createSkill: async (skill: SkillFull, destination?: 'project' | 'user') => {
-    const result = await saveEntity('POST', skillsUrl('/api/skills', get().workdir), {
+  createSkill: async (skill: SkillFull, destination?: 'project' | 'user', workdir?: string | null) => {
+    const result = await saveEntity('POST', scopedUrl('/api/skills', workdir ?? undefined), {
       ...skill,
       destination,
     } as unknown as Record<string, unknown>)
-    if (result.success) await get().fetchSkills()
+    if (result.success) await skillsResource.refresh(workdir ?? undefined)
     return result
   },
 
-  updateSkill: async (id: string, skill: Partial<SkillFull>) => {
+  updateSkill: async (id: string, skill: Partial<SkillFull>, workdir?: string | null) => {
     const result = await saveEntity(
       'PUT',
-      skillsUrl(`/api/skills/${id}`, get().workdir),
+      scopedUrl(`/api/skills/${id}`, workdir ?? undefined),
       skill as unknown as Record<string, unknown>,
     )
-    if (result.success) await get().fetchSkills()
+    if (result.success) {
+      await skillsResource.refresh(workdir ?? undefined)
+      skillResource.invalidate(id, workdir ?? undefined)
+    }
     return result
   },
 
-  deleteSkill: async (skillId: string) => {
+  deleteSkill: async (skillId: string, workdir?: string | null) => {
     try {
-      const res = await authFetch(skillsUrl(`/api/skills/${skillId}`, get().workdir), { method: 'DELETE' })
+      const res = await authFetch(scopedUrl(`/api/skills/${skillId}`, workdir ?? undefined), { method: 'DELETE' })
       const data = await res.json()
       if (res.ok) {
-        set((state) => ({
-          userItems: state.userItems.filter((s) => s.id !== skillId),
-        }))
+        await skillsResource.refresh(workdir ?? undefined)
+        skillResource.invalidate(skillId, workdir ?? undefined)
         return { success: true }
       }
       return { success: false, error: data.error ?? 'Failed to delete' }
@@ -180,15 +125,17 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     }
   },
 
-  duplicateSkill: async (skillId: string, destination?: 'project' | 'user') => {
+  duplicateSkill: async (skillId: string, destination?: 'project' | 'user', workdir?: string | null) => {
     return duplicateEntity(
-      skillsUrl(`/api/skills/${skillId}/duplicate`, get().workdir),
-      () => get().fetchSkills(),
+      scopedUrl(`/api/skills/${skillId}/duplicate`, workdir ?? undefined),
+      async () => {
+        await skillsResource.refresh(workdir ?? undefined)
+      },
       destination,
     )
   },
 
-  selectDirectory: async (path) => {
+  selectDirectory: async (path, workdir?: string | null) => {
     return mutateSkills(
       '/api/skills/library',
       {
@@ -196,20 +143,24 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
       },
-      get().fetchSkills,
+      async () => {
+        await skillsResource.refresh(workdir ?? undefined)
+      },
     )
   },
 
-  removeDirectory: async () => {
+  removeDirectory: async (workdir?: string | null) => {
     await authFetch('/api/skills/library', { method: 'DELETE' })
-    await get().fetchSkills()
+    await skillsResource.refresh(workdir ?? undefined)
   },
 
-  installSkill: async (skillPackage) => {
+  installSkill: async (skillPackage, workdir?: string | null) => {
     const body = new FormData()
     body.append('packageName', skillPackage.packageName)
     body.append('paths', JSON.stringify(skillPackage.files.map((file) => file.path)))
     for (const file of skillPackage.files) body.append('files', file.file, file.file.name)
-    return mutateSkills('/api/skills/install', { method: 'POST', body }, get().fetchSkills)
+    return mutateSkills('/api/skills/install', { method: 'POST', body }, async () => {
+      await skillsResource.refresh(workdir ?? undefined)
+    })
   },
 }))

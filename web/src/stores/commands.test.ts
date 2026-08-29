@@ -1,17 +1,15 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authFetch } from '../lib/api'
-import { useCommandsStore, type CommandFull, type CommandInfo } from './commands'
+import { clearCache, snapshot } from '../lib/resourceCache'
+import { commandResource, commandsResource } from '../lib/resources'
+import { useCommandsStore, type CommandFull } from './commands'
 
 vi.mock('../lib/api', () => ({
   authFetch: vi.fn(),
 }))
 
 const mockedAuthFetch = vi.mocked(authFetch)
-
-function command(id: string): CommandInfo {
-  return { id, name: id }
-}
 
 const commandFull: CommandFull = {
   metadata: { id: 'custom-review', name: 'Review' },
@@ -25,46 +23,14 @@ function jsonResponse(data: unknown = {}): Response {
   } as Response
 }
 
-describe('commands store deletion', () => {
+describe('CommandsStore mutations', () => {
   beforeEach(() => {
     mockedAuthFetch.mockReset()
-    useCommandsStore.setState({
-      defaults: [],
-      userItems: [command('user-command')],
-      projectItems: [command('project-command')],
-      loading: false,
-    })
-  })
-
-  it('removes a deleted project command from client state', async () => {
-    mockedAuthFetch.mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
-
-    const result = await useCommandsStore.getState().deleteCommand('project-command')
-
-    expect(result).toEqual({ success: true })
-    expect(useCommandsStore.getState().userItems).toEqual([command('user-command')])
-    expect(useCommandsStore.getState().projectItems).toEqual([])
-  })
-})
-
-describe('CommandsStore project scoping', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    useCommandsStore.setState({
-      defaults: [],
-      userItems: [],
-      projectItems: [],
-      loading: false,
-    })
+    clearCache()
     mockedAuthFetch.mockResolvedValue(jsonResponse())
   })
 
-  it('sends the project workdir when creating a command and refreshing the list', async () => {
+  it('sends the project workdir when creating a command and refreshes the list resource', async () => {
     await useCommandsStore.getState().createCommand(commandFull, 'project', '/projects/client app')
 
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(
@@ -75,7 +41,7 @@ describe('CommandsStore project scoping', () => {
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(2, '/api/commands?workdir=%2Fprojects%2Fclient%20app')
   })
 
-  it('sends the project workdir when updating a command and refreshing the list', async () => {
+  it('sends the project workdir when updating a command and refreshes + invalidates the resources', async () => {
     await useCommandsStore.getState().updateCommand(commandFull.metadata.id, commandFull, 'C:\\projects\\client')
 
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(
@@ -84,6 +50,7 @@ describe('CommandsStore project scoping', () => {
       expect.objectContaining({ method: 'PUT' }),
     )
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(2, '/api/commands?workdir=C%3A%5Cprojects%5Cclient')
+    expect(snapshot(commandResource.keyOf('custom-review', 'C:\\projects\\client')).data).toBeUndefined()
   })
 
   it('keeps global requests unchanged when no project workdir is available', async () => {
@@ -91,5 +58,30 @@ describe('CommandsStore project scoping', () => {
 
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(1, '/api/commands', expect.objectContaining({ method: 'POST' }))
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(2, '/api/commands')
+  })
+
+  it('deletes a command then refreshes the scoped list resource', async () => {
+    const result = await useCommandsStore.getState().deleteCommand('custom-review', '/repo/a')
+
+    expect(result).toEqual({ success: true })
+    expect(mockedAuthFetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/commands/custom-review?workdir=%2Frepo%2Fa',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+    expect(mockedAuthFetch).toHaveBeenNthCalledWith(2, '/api/commands?workdir=%2Frepo%2Fa')
+  })
+
+  it('duplicates a command to the project scope and refreshes the list', async () => {
+    mockedAuthFetch.mockResolvedValue(jsonResponse({}))
+    await useCommandsStore.getState().duplicateCommand('custom-review', 'project', '/repo/a')
+
+    expect(mockedAuthFetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/commands/custom-review/duplicate?workdir=%2Frepo%2Fa',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ destination: 'project' }) }),
+    )
+    expect(mockedAuthFetch).toHaveBeenLastCalledWith('/api/commands?workdir=%2Frepo%2Fa')
+    expect(commandsResource.keyOf('/repo/a')).toBe('commands:/repo/a')
   })
 })
