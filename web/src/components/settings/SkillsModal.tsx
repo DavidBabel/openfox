@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Button } from '../shared/Button'
-import { useSkillsStore, type SkillFull, type SkillInfo } from '../../stores/skills'
+import {
+  createSkill,
+  updateSkill,
+  deleteSkill,
+  toggleSkill,
+  selectDirectory,
+  removeDirectory,
+  installSkill,
+  type SkillFull,
+  type SkillInfo,
+} from '../../lib/skills-actions'
 import { useResource } from '../../hooks/useResource'
 import { skillsResource, skillResource, skillDefaultResource } from '../../lib/resources'
 import { useSessionStore } from '../../stores/session/store'
@@ -34,13 +44,6 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
   const items = data?.items ?? []
   const selectedDirectory = data?.selectedDirectory ?? null
   const diagnostics = data?.diagnostics ?? []
-  const createSkill = useSkillsStore((state) => state.createSkill)
-  const updateSkill = useSkillsStore((state) => state.updateSkill)
-  const deleteSkillAction = useSkillsStore((state) => state.deleteSkill)
-  const selectDirectory = useSkillsStore((state) => state.selectDirectory)
-  const removeDirectory = useSkillsStore((state) => state.removeDirectory)
-  const installSkill = useSkillsStore((state) => state.installSkill)
-  const toggleSkill = useSkillsStore((state) => state.toggleSkill)
   const [pendingDelete, setPendingDelete] = useState<SkillInfo | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -128,7 +131,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
     if (!pendingDelete) return
     setDeleting(true)
     setDeleteError('')
-    const result = await deleteSkillAction(pendingDelete.id, workdir)
+    const result = await deleteSkill(pendingDelete.id, workdir)
     setDeleting(false)
     if (!result.success) {
       setDeleteError(result.error ?? 'Failed to delete skill.')

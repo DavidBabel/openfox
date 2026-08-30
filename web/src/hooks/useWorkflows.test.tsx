@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authFetch } from '../lib/api'
 import { clearCache } from '../lib/resourceCache'
 import { workflowsResource } from '../lib/resources'
-import type { WorkflowInfo } from '../stores/workflows'
+import type { WorkflowInfo } from '../lib/workflows-actions'
 import { useWorkflows } from './useWorkflows'
 
 vi.mock('../lib/api', () => ({

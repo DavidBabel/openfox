@@ -160,7 +160,7 @@ const { mockAgentsData } = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('../../stores/agents', () => ({
+vi.mock('../../lib/agents-actions', () => ({
   getAgentColor: () => '#a855f7',
 }))
 

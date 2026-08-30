@@ -29,28 +29,6 @@ vi.mock('../../stores/session', () => ({
   useQueuedMessages: () => [],
 }))
 
-vi.mock('../../stores/workflows', () => ({
-  useWorkflowsStore: Object.assign(
-    (selector: (state: unknown) => unknown) =>
-      selector({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() }),
-    { getState: () => ({ defaults: [], userItems: [], projectItems: [], fetchWorkflows: vi.fn() }) },
-  ),
-  selectAllWorkflows: (state: { defaults: unknown[]; userItems: unknown[]; projectItems: unknown[] }) => [
-    ...state.defaults,
-    ...state.userItems,
-    ...state.projectItems,
-  ],
-  useAllWorkflows: () => [],
-}))
-
-vi.mock('../../stores/commands', () => ({
-  useCommandsStore: Object.assign(
-    (selector: (state: unknown) => unknown) =>
-      selector({ defaults: [], userItems: [], projectItems: [], fetchCommands: vi.fn() }),
-    { getState: () => ({ defaults: [], userItems: [], projectItems: [], fetchCommands: vi.fn() }) },
-  ),
-}))
-
 vi.mock('../../hooks/useScrolledSend', () => ({
   useScrolledSend: () => ({ sendMessage: vi.fn(), launchWorkflow: vi.fn() }),
 }))

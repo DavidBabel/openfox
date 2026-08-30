@@ -3,7 +3,13 @@ import { Modal } from '../shared/SelfContainedModal'
 import { Button } from '../shared/Button'
 import { EditButton } from '../shared/IconButton'
 import { EyeIcon } from '../shared/icons'
-import { useCommandsStore, type CommandInfo, type CommandFull } from '../../stores/commands'
+import {
+  createCommand,
+  updateCommand,
+  deleteCommand,
+  type CommandInfo,
+  type CommandFull,
+} from '../../lib/commands-actions'
 import { useResource } from '../../hooks/useResource'
 import { agentsResource, commandsResource, commandResource, commandDefaultResource } from '../../lib/resources'
 import {
@@ -64,10 +70,6 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
   const defaults = commandsData?.defaults ?? []
   const userItems = commandsData?.userItems ?? []
   const projectItems = commandsData?.projectItems ?? []
-  const createCommand = useCommandsStore((state) => state.createCommand)
-  const updateCommand = useCommandsStore((state) => state.updateCommand)
-  const deleteCommandAction = useCommandsStore((state) => state.deleteCommand)
-
   const [viewingDefaultId, setViewingDefaultId] = useState<string | null>(null)
   const [defaultContent, setDefaultContent] = useState<string | null>(null)
 
@@ -206,7 +208,7 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
   }
 
   const handleDelete = async (commandId: string) => {
-    await deleteCommandAction(commandId, projectDir)
+    await deleteCommand(commandId, projectDir)
     clearConfirm()
   }
 

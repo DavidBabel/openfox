@@ -4,12 +4,14 @@ import { Modal } from '../shared/SelfContainedModal'
 import { Button } from '../shared/Button'
 import { EditButton } from '../shared/IconButton'
 import {
-  useWorkflowsStore,
+  createWorkflow,
+  updateWorkflow,
+  deleteWorkflow,
   type WorkflowFull,
   type WorkflowStep,
   type WorkflowCondition,
   type WorkflowParameter,
-} from '../../stores/workflows'
+} from '../../lib/workflows-actions'
 import { useResource } from '../../hooks/useResource'
 import {
   agentsResource,
@@ -72,9 +74,6 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
   const projectItems = workflowsData?.projectItems ?? []
   const { data: templateVariablesData } = useResource(templateVariablesResource)
   const templateVariables = templateVariablesData?.variables ?? []
-  const createWorkflow = useWorkflowsStore((state) => state.createWorkflow)
-  const updateWorkflow = useWorkflowsStore((state) => state.updateWorkflow)
-  const deleteWorkflowAction = useWorkflowsStore((state) => state.deleteWorkflow)
 
   const { requestDelete, clearConfirm, isConfirming } = useConfirmDialog()
 
@@ -153,7 +152,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
       }
       entryStep: string
       settings: { maxIterations: number }
-      steps: import('../../stores/workflows').WorkflowStep[]
+      steps: import('../../lib/workflows-actions').WorkflowStep[]
       startCondition?: WorkflowCondition
     },
     extra?: Partial<{ editingId: string | null; isReadOnly: boolean; selectedNodeKey: null; selectedEdgeKey: null }>,
@@ -303,7 +302,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
   }
 
   const handleDelete = async (workflowId: string, scope: WorkflowScope) => {
-    await deleteWorkflowAction(workflowId, scope, projectDir)
+    await deleteWorkflow(workflowId, scope, projectDir)
     clearConfirm()
   }
 

@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useSkillsStore, type SkillInfo } from '../../stores/skills'
+import type { SkillInfo } from '../../lib/skills-actions'
 import { useSessionStore } from '../../stores/session/store'
 import { clearCache } from '../../lib/resourceCache'
 import { skillsResource } from '../../lib/resources'
@@ -14,6 +14,16 @@ import { SkillsContent } from './SkillsModal'
 vi.mock('../../lib/api', () => ({
   authFetch: vi.fn(),
 }))
+
+const { mockToggleSkill, mockDeleteSkill } = vi.hoisted(() => ({
+  mockToggleSkill: vi.fn(),
+  mockDeleteSkill: vi.fn(async () => ({ success: true })),
+}))
+
+vi.mock('../../lib/skills-actions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/skills-actions')>()
+  return { ...actual, toggleSkill: mockToggleSkill, deleteSkill: mockDeleteSkill }
+})
 
 const skill: SkillInfo = {
   id: 'my-skill',
@@ -63,9 +73,6 @@ describe('SkillsContent', () => {
   })
 
   it('shows activation next to delete and toggles the skill', () => {
-    const toggleSkill = vi.fn()
-    useSkillsStore.setState({ toggleSkill })
-
     render(<SkillsContent isOpen={false} />)
 
     const activation = screen.getByRole('switch', { name: 'Activation for My Skill' })
@@ -75,22 +82,19 @@ describe('SkillsContent', () => {
     expect(activation.parentElement?.lastElementChild).toBe(activation)
 
     fireEvent.click(activation)
-    expect(toggleSkill).toHaveBeenCalledWith('my-skill', undefined)
+    expect(mockToggleSkill).toHaveBeenCalledWith('my-skill', undefined)
   })
 
   it('requires modal confirmation before deleting the full skill folder', async () => {
-    const deleteSkill = vi.fn(async () => ({ success: true }))
-    useSkillsStore.setState({ deleteSkill })
-
     render(<SkillsContent isOpen={false} />)
     fireEvent.click(screen.getByTitle('Delete'))
 
     expect(screen.getByText('This skill files will be deleted.')).toBeTruthy()
     expect(screen.getByText('The full skill folder and all its contents will be removed.')).toBeTruthy()
-    expect(deleteSkill).not.toHaveBeenCalled()
+    expect(mockDeleteSkill).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete skill' }))
-    await vi.waitFor(() => expect(deleteSkill).toHaveBeenCalledWith('my-skill', undefined))
+    await vi.waitFor(() => expect(mockDeleteSkill).toHaveBeenCalledWith('my-skill', undefined))
   })
 
   it('loads skills scoped to the session project workdir even when a workspace is active', async () => {

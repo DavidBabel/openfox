@@ -1,10 +1,10 @@
 import { authFetch } from './api'
 import { resource, snapshot } from './resourceCache'
-import type { AgentInfo } from '../stores/agents'
-import type { AgentFull } from '../stores/agents'
-import type { CommandInfo, CommandFull } from '../stores/commands'
-import type { WorkflowInfo, WorkflowFull, TemplateVariable } from '../stores/workflows'
-import type { SkillInfo, SkillFull, SelectedSkillDirectory } from '../stores/skills'
+import type { AgentInfo } from './agents-actions'
+import type { AgentFull } from './agents-actions'
+import type { CommandInfo, CommandFull } from './commands-actions'
+import type { WorkflowInfo, WorkflowFull, TemplateVariable } from './workflows-actions'
+import type { SkillInfo, SkillFull, SelectedSkillDirectory } from './skills-actions'
 import type { Provider, PlatformInfo, LlmStatus, Backend } from '../stores/config'
 import type {
   WorkflowScope,

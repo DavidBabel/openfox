@@ -25,22 +25,6 @@ vi.mock('../../hooks/useAgents', () => ({
   useAgents: () => ({ agents: [], refresh: vi.fn() }),
 }))
 
-const mockFetchWorkflows = vi.fn()
-const mockWorkflowsState = {
-  defaults: [],
-  userItems: [],
-  projectItems: [],
-  fetchWorkflows: mockFetchWorkflows,
-  setWorkdir: vi.fn(),
-  getState: vi.fn(),
-}
-vi.mock('../../stores/workflows', () => ({
-  useWorkflowsStore: Object.assign(
-    (selector?: (state: unknown) => unknown) => (selector ? selector(mockWorkflowsState) : mockWorkflowsState),
-    { getState: vi.fn(() => mockWorkflowsState) },
-  ),
-}))
-
 vi.mock('../../hooks/useDisplaySettings', () => ({
   useDisplaySettings: () => ({
     showThinking: true,

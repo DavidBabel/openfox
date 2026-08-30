@@ -1,21 +1,36 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useWorkflowsStore } from '../../stores/workflows'
 import { WorkflowsModal } from './WorkflowsModal'
 
-const { mockResourceState } = vi.hoisted(() => ({
-  mockResourceState: {
-    data: { defaults: [], userItems: [], projectItems: [] } as {
-      defaults: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
-      userItems: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
-      projectItems: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
+const { mockResourceState, mockCreateWorkflow, mockUpdateWorkflow, mockDeleteWorkflow, mockDuplicateWorkflow } =
+  vi.hoisted(() => ({
+    mockResourceState: {
+      data: { defaults: [], userItems: [], projectItems: [] } as {
+        defaults: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
+        userItems: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
+        projectItems: Array<{ id: string; name: string; color?: string; scope: 'user' | 'project' | 'builtin' }>
+      },
+      loading: false,
+      error: undefined,
+      refresh: vi.fn(),
     },
-    loading: false,
-    error: undefined,
-    refresh: vi.fn(),
-  },
-}))
+    mockCreateWorkflow: vi.fn(async () => ({ success: true })),
+    mockUpdateWorkflow: vi.fn(async () => ({ success: true })),
+    mockDeleteWorkflow: vi.fn(async () => ({ success: true })),
+    mockDuplicateWorkflow: vi.fn(async () => ({ success: true })),
+  }))
+
+vi.mock('../../lib/workflows-actions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/workflows-actions')>()
+  return {
+    ...actual,
+    createWorkflow: mockCreateWorkflow,
+    updateWorkflow: mockUpdateWorkflow,
+    deleteWorkflow: mockDeleteWorkflow,
+    duplicateWorkflow: mockDuplicateWorkflow,
+  }
+})
 
 vi.mock('../../hooks/useResource', () => ({
   useResource: () => mockResourceState,
@@ -49,23 +64,15 @@ describe('WorkflowsModal confirm-delete scoping', () => {
   afterEach(cleanup)
 
   beforeEach(() => {
+    vi.clearAllMocks()
     mockResourceState.data = {
       defaults: [],
       userItems: [reviewUser],
       projectItems: [reviewProject],
     }
-    useWorkflowsStore.setState({
-      createWorkflow: vi.fn(async () => ({ success: true })),
-      updateWorkflow: vi.fn(async () => ({ success: true })),
-      deleteWorkflow: vi.fn(async () => ({ success: true })),
-      duplicateWorkflow: vi.fn(async () => ({ success: true })),
-    })
   })
 
   it('confirms delete on one same-id row without confirming the sibling scope', async () => {
-    const deleteWorkflow = vi.fn(async () => ({ success: true }))
-    useWorkflowsStore.setState({ deleteWorkflow })
-
     render(<WorkflowsModal isOpen onClose={vi.fn()} />)
 
     // Two rows share the id "review" (Custom + Project), each with its own trash icon.
@@ -80,19 +87,16 @@ describe('WorkflowsModal confirm-delete scoping', () => {
     expect(screen.getAllByTitle('Delete').length).toBe(1)
     const confirm = deleteConfirmButton()
     expect(confirm).toBeDefined()
-    expect(deleteWorkflow).not.toHaveBeenCalled()
+    expect(mockDeleteWorkflow).not.toHaveBeenCalled()
 
     fireEvent.click(confirm)
 
     await vi.waitFor(() => {
-      expect(deleteWorkflow).toHaveBeenCalledWith('review', 'user', undefined)
+      expect(mockDeleteWorkflow).toHaveBeenCalledWith('review', 'user', undefined)
     })
   })
 
   it('confirms delete on the project row with the project scope', async () => {
-    const deleteWorkflow = vi.fn(async () => ({ success: true }))
-    useWorkflowsStore.setState({ deleteWorkflow })
-
     render(<WorkflowsModal isOpen onClose={vi.fn()} />)
 
     const trashButtons = screen.getAllByTitle('Delete')
@@ -103,7 +107,7 @@ describe('WorkflowsModal confirm-delete scoping', () => {
     fireEvent.click(deleteConfirmButton())
 
     await vi.waitFor(() => {
-      expect(deleteWorkflow).toHaveBeenCalledWith('review', 'project', undefined)
+      expect(mockDeleteWorkflow).toHaveBeenCalledWith('review', 'project', undefined)
     })
   })
 })

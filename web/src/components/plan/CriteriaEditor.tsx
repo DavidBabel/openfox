@@ -6,7 +6,7 @@ import { PlusIcon, XCloseIcon, TrashIcon, InfoIcon } from '../shared/icons'
 import { Modal } from '../shared/Modal'
 import { MetadataStatusIcon, decodeHtmlEntities } from '../shared/MetadataStatusIcon'
 import { useAgents } from '../../hooks/useAgents'
-import { getAgentColor } from '../../stores/agents'
+import { getAgentColor } from '../../lib/agents-actions'
 import { useScopedPaneState } from '../../stores/session/session-scope'
 import { useWorkflows } from '../../hooks/useWorkflows'
 import { useSessionWorkdir } from '../../hooks/useSessionWorkdir'
@@ -31,7 +31,7 @@ async function putCriteria(sessionId: string, entries: MetadataEntry[]) {
   })
 }
 
-function AgentBadge({ id, agents }: { id: string; agents: import('../../stores/agents').AgentInfo[] }) {
+function AgentBadge({ id, agents }: { id: string; agents: import('../../lib/agents-actions').AgentInfo[] }) {
   const color = getAgentColor(agents, id)
   const agent = agents.find((a) => a.id === id)
   return (

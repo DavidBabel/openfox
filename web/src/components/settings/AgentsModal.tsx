@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
-import { useAgentsStore, type AgentFull } from '../../stores/agents'
+import { createAgent, updateAgent, deleteAgent, type AgentFull } from '../../lib/agents-actions'
 import { authFetch } from '../../lib/api'
 import { useResource } from '../../hooks/useResource'
 import { useProviders } from '../../hooks/useProviders'
@@ -33,9 +33,6 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
   const userItems = data?.userItems ?? []
   const projectItems = data?.projectItems ?? []
   const modelOverrides = data?.modelOverrides ?? {}
-  const createAgent = useAgentsStore((state) => state.createAgent)
-  const updateAgent = useAgentsStore((state) => state.updateAgent)
-  const deleteAgentAction = useAgentsStore((state) => state.deleteAgent)
 
   const [view, setView] = useState<'list' | 'edit'>('list')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -202,7 +199,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
   }
 
   const handleDelete = async (agentId: string) => {
-    await deleteAgentAction(agentId, projectDir)
+    await deleteAgent(agentId, projectDir)
   }
 
   const handleSave = async () => {

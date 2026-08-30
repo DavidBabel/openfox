@@ -38,7 +38,7 @@ vi.mock('../../lib/api', () => ({
   authFetch: mockAuthFetch,
 }))
 
-vi.mock('../../stores/agents', () => ({
+vi.mock('../../lib/agents-actions', () => ({
   getAgentColor: () => '#3b82f6',
 }))
 
