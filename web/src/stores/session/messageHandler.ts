@@ -727,7 +727,12 @@ export function handleServerMessage(
       applyChat(set, get, sessionId, (pane) => ({
         ...pane,
         error: null,
-        llmRetry: { status: 'retrying', attempt: payload.attempt, retryInMs: payload.retryInMs },
+        llmRetry: {
+          status: 'retrying',
+          attempt: payload.attempt,
+          retryInMs: payload.retryInMs,
+          error: payload.error,
+        },
       }))
       break
     }

@@ -10,22 +10,40 @@ import { SCOPE_LABELS } from '../../lib/workflow-scope'
 import { useDisplaySettings } from '../../hooks/useDisplaySettings'
 import { ChatFeedItems } from './ChatFeedItems'
 import { CloseButton } from '../shared/CloseButton'
-import { ChevronUpIcon } from '../shared/icons'
+import { Modal } from '../shared/Modal'
+import { ChevronUpIcon, InfoIcon } from '../shared/icons'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 import type { DisplayItem } from './groupMessages.js'
 import type { MetadataEntry, WorkflowScope } from '@shared/types.js'
 import type { LLMRetryState } from '../../stores/session/types'
+import { prettyPrintError } from '../../lib/prettyPrintError'
 
 const EMPTY_CRITERIA: MetadataEntry[] = []
+
+function ErrorInfoButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="View error details"
+      title="View error details"
+      className="shrink-0 p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-bg-primary transition-colors"
+    >
+      <InfoIcon className="w-3.5 h-3.5" />
+    </button>
+  )
+}
 
 /** Live countdown pill shown while an LLM call is backing off before its next retry. */
 function LLMRetryIndicator({
   retry,
   onRetryNow,
+  onShowError,
 }: {
   retry: Extract<LLMRetryState, { status: 'retrying' }>
   onRetryNow: () => void
+  onShowError: () => void
 }) {
   const [receivedAt] = useState(Date.now())
   const [now, setNow] = useState(Date.now())
@@ -44,6 +62,7 @@ function LLMRetryIndicator({
       <span>
         LLM call failed — retrying (attempt {retry.attempt}){suffix}
       </span>
+      <ErrorInfoButton onClick={onShowError} />
       <button
         onClick={onRetryNow}
         className="ml-1 px-2 py-0.5 rounded-full bg-accent-primary/15 text-accent-primary border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors"
@@ -122,6 +141,12 @@ export const MessageList = memo(function MessageList({
   )
   const retryLLMNow = useSessionStore((state) => state.retryLLMNow)
   const retryLLM = useSessionStore((state) => state.retryLLM)
+  const [showRetryError, setShowRetryError] = useState(false)
+  // The modal lives above the per-attempt keyed pill so it survives retries.
+  // Close it once the retry state clears (call succeeded, bubble gone).
+  useEffect(() => {
+    if (!llmRetry) setShowRetryError(false)
+  }, [llmRetry])
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
@@ -251,6 +276,7 @@ export const MessageList = memo(function MessageList({
                   key={llmRetry.attempt}
                   retry={llmRetry}
                   onRetryNow={() => sessionId && retryLLMNow(sessionId)}
+                  onShowError={() => setShowRetryError(true)}
                 />
               </div>
             )}
@@ -258,8 +284,9 @@ export const MessageList = memo(function MessageList({
             {(llmRetry?.status === 'failed' && !isRunning) || blockedWorkflowStep ? (
               <div className="flex flex-col items-center gap-2 feed-item flex-wrap">
                 {llmRetry?.status === 'failed' && (
-                  <div className="text-xs text-text-secondary max-w-md text-center">
-                    The LLM call failed: {llmRetry.error}
+                  <div className="flex items-center gap-1.5 text-xs text-text-secondary max-w-md">
+                    <span className="min-w-0 flex-1 truncate text-center">The LLM call failed: {llmRetry.error}</span>
+                    <ErrorInfoButton onClick={() => setShowRetryError(true)} />
                   </div>
                 )}
                 {isWorkflowBlock && (
@@ -278,6 +305,14 @@ export const MessageList = memo(function MessageList({
                 </button>
               </div>
             ) : null}
+
+            {llmRetry && (
+              <Modal isOpen={showRetryError} onClose={() => setShowRetryError(false)} title="LLM call failed" size="lg">
+                <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text-primary bg-bg-primary border border-border rounded p-3">
+                  {prettyPrintError(llmRetry.error)}
+                </pre>
+              </Modal>
+            )}
 
             {error && (
               <div className="feed-item bg-text-tool-error/10 border border-text-tool-error/50 rounded p-2">

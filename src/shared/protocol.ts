@@ -342,6 +342,8 @@ export interface ChatLLMRetryPayload {
   attempt: number
   /** Delay in ms until the next retry attempt (drives the UI countdown). */
   retryInMs: number
+  /** The error that triggered this retry. */
+  error: string
 }
 
 export interface ChatLLMRetryFailedPayload {

@@ -390,9 +390,9 @@ describe('ws/protocol', () => {
         type: 'chat.format_retry',
         payload: { attempt: 2, maxAttempts: 10 },
       })
-      expect(createChatLLMRetryMessage(2, 4000)).toEqual({
+      expect(createChatLLMRetryMessage(2, 4000, 'LLM boom')).toEqual({
         type: 'chat.llm_retry',
-        payload: { attempt: 2, retryInMs: 4000 },
+        payload: { attempt: 2, retryInMs: 4000, error: 'LLM boom' },
       })
       expect(createChatLLMRetryFailedMessage('LLM boom', 3)).toEqual({
         type: 'chat.llm_retry_failed',
