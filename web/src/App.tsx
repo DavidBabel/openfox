@@ -20,6 +20,7 @@ import { useProjectLoader } from './hooks/useProjectLoader'
 import { useSessionLoader } from './hooks/useSessionLoader'
 import { computeSidebarVisibility, FEED_MIN_WIDTH } from './lib/sidebar-visibility'
 import { useSidebarStore } from './stores/sidebar'
+import { hasStoredToken } from './lib/api'
 
 // Apply theme synchronously from localStorage before React renders
 // to prevent flash of default theme
@@ -46,11 +47,6 @@ import { CrossSessionConfirmationBanner } from './components/shared/CrossSession
 import { UpdateBanner } from './components/UpdateBanner'
 import { ChangelogModal } from './components/ChangelogModal'
 import { getStoredLastVersion, getStoredPreviousVersion, isVersionNewerThan, trackVersion } from './lib/versionTracking'
-
-function hasStoredToken(): boolean {
-  if (typeof window === 'undefined') return false
-  return localStorage.getItem('openfox_token') !== null
-}
 
 function LoadingSpinner() {
   return (
@@ -218,11 +214,15 @@ function App() {
     }
   }, [configFetched, activeProviderId, refreshProviderModels, fetchConfig])
 
-  const themeSetting = useSetting(SETTINGS_KEYS.DISPLAY_THEME).value
-  const userPresetsSetting = useSetting(SETTINGS_KEYS.DISPLAY_USER_PRESETS).value
-  const followSystemSetting = useSetting(SETTINGS_KEYS.DISPLAY_FOLLOW_SYSTEM_THEME).value
-  const customCssSetting = useSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS).value
-  const showChangelogSetting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE).value
+  // Theme-related settings are only fetched once the app is authenticated and
+  // the config has been loaded — the unauthenticated login page must not fire
+  // per-key settings requests (pre-login 401 noise). The batched warm-up below
+  // fills these same keys after connect, so gating here costs nothing once in.
+  const themeSetting = useSetting(SETTINGS_KEYS.DISPLAY_THEME, '', configFetched).value
+  const userPresetsSetting = useSetting(SETTINGS_KEYS.DISPLAY_USER_PRESETS, '', configFetched).value
+  const followSystemSetting = useSetting(SETTINGS_KEYS.DISPLAY_FOLLOW_SYSTEM_THEME, '', configFetched).value
+  const customCssSetting = useSetting(SETTINGS_KEYS.DISPLAY_CUSTOM_CSS, '', configFetched).value
+  const showChangelogSetting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE, '', configFetched).value
 
   useEffect(() => {
     if (configFetched && providers.length === 0) {
@@ -231,6 +231,11 @@ function App() {
   }, [configFetched, providers.length])
 
   useEffect(() => {
+    // Server-reconciled theme only matters once authenticated and the config
+    // (and the batched settings warm-up) have landed. Before that the store's
+    // synchronous localStorage theme already applies; running this early would
+    // treat the '' fallbacks as real values (e.g. PUT followSystemTheme=false).
+    if (!configFetched) return
     const { applyPreset, applyTokens, setFollowSystemTheme, initSystemThemeListener } = useThemeStore.getState()
     const serverTheme = themeSetting
     const serverPresets = userPresetsSetting
@@ -270,7 +275,7 @@ function App() {
 
     const cleanup = initSystemThemeListener()
     return () => cleanup()
-  }, [themeSetting, userPresetsSetting])
+  }, [configFetched, themeSetting, userPresetsSetting, followSystemSetting])
 
   // Inject custom CSS into a <style> tag
   useEffect(() => {

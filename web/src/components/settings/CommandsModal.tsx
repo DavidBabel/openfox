@@ -269,7 +269,9 @@ export function CommandsModal({ isOpen, onClose, initialEditId, projectDir }: Co
     if (!viewingDefaultId) return
     setViewingDefaultId(null)
     setView('edit')
-    setEditingId(viewingDefaultId)
+    // A duplicate is a NEW command: leave editingId null so Save creates a
+    // fresh copy instead of updating (and overwriting) the source default.
+    setEditingId(null)
     commandDefaultResource.refresh(viewingDefaultId).then((content) => {
       if (!content) return
       setFormData({

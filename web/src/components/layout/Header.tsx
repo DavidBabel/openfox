@@ -22,7 +22,7 @@ import { useTerminalStore } from '../../stores/terminal'
 import { useUpdateStore } from '../../stores/update'
 import { useKeybindings, useBinding } from '../../hooks/useKeybindings'
 import { formatKeybinding } from '../../lib/keybindings'
-import { authFetch } from '../../lib/api'
+import { authFetch, hasStoredToken } from '../../lib/api'
 import { GlobalSettingsModal } from '../settings/GlobalSettingsModal'
 import { TerminalDrawer } from '../terminal/TerminalDrawer'
 import { ProjectDropdown } from './ProjectDropdown'
@@ -82,7 +82,8 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     return () => window.removeEventListener('open-session-dropdown', handler)
   }, [])
 
-  const keybindings = useKeybindings()
+  const connectionStatus = useSessionStore((state) => state.connectionStatus)
+  const keybindings = useKeybindings(connectionStatus === 'connected' || hasStoredToken())
   useBinding(
     keybindings.terminalToggle,
     () => {

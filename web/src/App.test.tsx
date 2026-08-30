@@ -19,6 +19,15 @@ vi.mock('./lib/ws', () => ({
   },
 }))
 
+const mockAuthFetch = vi.fn()
+vi.mock('./lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./lib/api')>()
+  return {
+    ...actual,
+    authFetch: mockAuthFetch,
+  }
+})
+
 const mockNavigate = vi.fn()
 vi.mock('wouter', () => ({
   Route: ({ children, path }: { children: React.ReactNode; path: string }) => <div data-path={path}>{children}</div>,
@@ -222,6 +231,8 @@ beforeEach(() => {
   layoutProps.rightSidebar.overlay = undefined
   layoutProps.header.onMenuClick = undefined
   layoutProps.header.onCriteriaToggle = undefined
+  mockAuthFetch.mockReset()
+  mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({}) } as unknown as Response)
 })
 
 describe('App - imports', () => {
@@ -253,6 +264,17 @@ describe('App - Password modal rendering', () => {
 
     expect(container.querySelector('[data-testid="password-modal"]')).not.toBeNull()
     expect(container.textContent).toContain('Password Required')
+  })
+
+  it('does not fetch per-key settings while unauthenticated (no pre-login 401 noise)', async () => {
+    sessionState.connectionStatus = 'disconnected'
+    sessionState.showPasswordModal = true
+    localStorage.removeItem('openfox_token')
+
+    await renderAppAsync()
+
+    const settingsCalls = mockAuthFetch.mock.calls.filter((c) => String(c[0]).includes('/api/settings'))
+    expect(settingsCalls).toHaveLength(0)
   })
 })
 

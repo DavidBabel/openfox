@@ -120,6 +120,15 @@ describe('fetchSettingsBulk warm-up', () => {
     await fetchSettingsBulk([])
     expect(authFetch).not.toHaveBeenCalled()
   })
+
+  it('deduplicates concurrent calls for the same key set (single-flight)', async () => {
+    vi.mocked(authFetch).mockResolvedValue(jsonResponse({ 'display.theme': 'dark' }))
+
+    await Promise.all([fetchSettingsBulk(['display.theme']), fetchSettingsBulk(['display.theme'])])
+
+    expect(authFetch).toHaveBeenCalledTimes(1)
+    expect(snapshot<string>(settingResource.keyOf('display.theme')).data).toBe('dark')
+  })
 })
 
 describe('workspaceConfigResource', () => {

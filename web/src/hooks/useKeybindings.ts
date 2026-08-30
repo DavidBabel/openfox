@@ -42,8 +42,8 @@ function matchChord(e: KeyboardEvent, binding: ChordBinding): boolean {
   )
 }
 
-export function useKeybindings(): KeybindingsConfig {
-  const raw = useSetting(SETTINGS_KEYS.KEYBINDINGS).value
+export function useKeybindings(enabled = true): KeybindingsConfig {
+  const raw = useSetting(SETTINGS_KEYS.KEYBINDINGS, '', enabled).value
   return parseKeybindings(raw)
 }
 

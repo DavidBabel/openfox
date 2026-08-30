@@ -530,18 +530,37 @@ export async function setSetting(key: string, value: string): Promise<void> {
   settingResource.write(data.value ?? value, key)
 }
 
-/** Eager batch warm-up: fetch many setting keys in one request and write each
+/** In-flight batched settings request, keyed by the joined key list so two
+ * concurrent warm-ups with identical keys share one request. */
+let bulkInFlight: { keys: string; promise: Promise<void> } | null = null
+
+/**
+ * Eager batch warm-up: fetch many setting keys in one request and write each
  * value through into its per-key entry so per-key consumers converge without
- * N individual fetches or a flash of defaults. */
+ * N individual fetches or a flash of defaults. Single-flight for the same key
+ * set (concurrent duplicate warm-ups collapse into one request).
+ */
 export async function fetchSettingsBulk(keys: readonly string[]): Promise<void> {
   if (keys.length === 0) return
-  const res = await authFetch(`/api/settings?keys=${encodeURIComponent(keys.join(','))}`)
-  if (!res.ok) return
-  const data = (await res.json()) as Record<string, string | undefined>
-  for (const key of keys) {
-    const value = data[key]
-    if (value !== undefined) settingResource.write(value, key)
+  const keyList = keys.join(',')
+  if (bulkInFlight && bulkInFlight.keys === keyList) {
+    return bulkInFlight.promise
   }
+  const promise = (async () => {
+    try {
+      const res = await authFetch(`/api/settings?keys=${encodeURIComponent(keyList)}`)
+      if (!res.ok) return
+      const data = (await res.json()) as Record<string, string | undefined>
+      for (const key of keys) {
+        const value = data[key]
+        if (value !== undefined) settingResource.write(value, key)
+      }
+    } finally {
+      if (bulkInFlight && bulkInFlight.keys === keyList) bulkInFlight = null
+    }
+  })()
+  bulkInFlight = { keys: keyList, promise }
+  return promise
 }
 
 // Well-known settings keys (should match server's SETTINGS_KEYS)

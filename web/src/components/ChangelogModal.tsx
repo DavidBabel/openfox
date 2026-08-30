@@ -14,7 +14,7 @@ interface ChangelogModalProps {
 export function ChangelogModal({ isOpen, onClose, since }: ChangelogModalProps) {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const showOnUpdate = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE, 'true').value !== 'false'
+  const showOnUpdate = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE, 'true', isOpen).value !== 'false'
 
   useEffect(() => {
     if (!isOpen) return

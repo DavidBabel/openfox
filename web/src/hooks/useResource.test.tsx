@@ -2,7 +2,7 @@
 import { act, render, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GRACE_MS, clearCache, resource } from '../lib/resourceCache'
-import { useResource } from './useResource'
+import { useResource, useResourceWhen } from './useResource'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -129,6 +129,26 @@ describe('useResource', () => {
 
     rerender()
     rerender()
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(result.current.data).toBe('loaded')
+  })
+
+  it('skips the fetch while disabled and loads once enabled', async () => {
+    const { fetch, res } = makeResource()
+    const { result, rerender } = renderHook(({ enabled }) => useResourceWhen(enabled, res), {
+      initialProps: { enabled: false },
+    })
+
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(result.current.data).toBeUndefined()
+
+    rerender({ enabled: true })
     await act(async () => {
       await vi.runAllTimersAsync()
     })

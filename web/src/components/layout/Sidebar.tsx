@@ -16,6 +16,7 @@ import { groupSessionsByDate, formatDateHeader, formatTime } from '../../lib/for
 import { fuzzyMatch, highlightMatches } from '../../lib/modal-utils.js'
 import { shouldAutofocus } from '../../lib/device'
 import { useBinding, useKeybindings } from '../../hooks/useKeybindings.js'
+import { hasStoredToken } from '../../lib/api'
 import { useResizable } from '../../hooks/useResizable'
 import { ResizeHandle } from '../shared/ResizeHandle'
 import { useSidebarStore } from '../../stores/sidebar'
@@ -68,7 +69,8 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
 
   const wasAutoOpenedRef = useRef(false)
 
-  const keybindings = useKeybindings()
+  const connectionStatus = useSessionStore((state) => state.connectionStatus)
+  const keybindings = useKeybindings(connectionStatus === 'connected' || hasStoredToken())
   useBinding(keybindings.sessionSearch, () => {
     if (isOpen && document.activeElement === searchRef.current) {
       onClose?.()
