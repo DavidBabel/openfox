@@ -6,6 +6,7 @@ import { getDatabase } from './index.js'
 
 export const SETTINGS_KEYS = {
   GLOBAL_INSTRUCTIONS: 'global_instructions',
+  LANGUAGE: 'agent.language',
   DISPLAY_SHOW_THINKING: 'display.showThinking',
   DISPLAY_SHOW_VERBOSE_TOOL_OUTPUT: 'display.showVerboseToolOutput',
   DISPLAY_SHOW_STATS: 'display.showStats',
@@ -45,6 +46,7 @@ export const SETTINGS_KEYS = {
 } as const
 
 export const SETTINGS_DEFAULTS: Record<string, string> = {
+  [SETTINGS_KEYS.LANGUAGE]: 'automatic',
   [SETTINGS_KEYS.DISPLAY_SHOW_THINKING]: 'true',
   [SETTINGS_KEYS.DISPLAY_SHOW_VERBOSE_TOOL_OUTPUT]: 'true',
   [SETTINGS_KEYS.DISPLAY_SHOW_STATS]: 'true',

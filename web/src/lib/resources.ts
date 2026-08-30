@@ -566,6 +566,7 @@ export async function fetchSettingsBulk(keys: readonly string[]): Promise<void> 
 // Well-known settings keys (should match server's SETTINGS_KEYS)
 export const SETTINGS_KEYS = {
   GLOBAL_INSTRUCTIONS: 'global_instructions',
+  LANGUAGE: 'agent.language',
   NOTIFICATION_SETTINGS: 'notification_settings',
   DISPLAY_SHOW_THINKING: 'display.showThinking',
   DISPLAY_SHOW_VERBOSE_TOOL_OUTPUT: 'display.showVerboseToolOutput',
