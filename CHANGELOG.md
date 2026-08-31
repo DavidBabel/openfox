@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.134 - 2026-08-31
+
+### Features
+
+- **Interface language setting** — pick Automatic, English, or French to localize the web UI, server messages, and CLI
+- **Agent language setting** — the agent replies in your chosen language via injected instructions
+- **Create projects without git** — git init is skipped when git is missing, so git-less codebases work out of the box
+
+### Enhancements
+
+- **Full error on LLM failures** — an (i) button on failed bubbles and retry pills opens a modal with the details
+
 ## 2.0.133 - 2026-08-30
 
 ### Features
