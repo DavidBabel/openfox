@@ -183,7 +183,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
         <span className="text-accent-primary font-medium">{tool}</span>
         <span className="text-text-muted truncate flex-1">{formatToolArgsWithMetadata(tool, args, metadata)}</span>
         <span className={`${config.color} ${config.animate ? 'animate-pulse' : ''}`}>
-          {status === 'pending' ? '...' : 'done'}
+          {status === 'pending' ? '...' : t({ en: 'Done', fr: 'Terminé' })}
         </span>
       </div>
     )

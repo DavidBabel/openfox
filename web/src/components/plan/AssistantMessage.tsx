@@ -169,8 +169,6 @@ export const AssistantMessage = memo(function AssistantMessage({
   const [, navigate] = useLocation()
   const { onContextMenu, contextMenu } = useContextMenu()
 
-  if (elements.length === 0) return null
-
   const handleCopy = () => {
     void copyToClipboard(message.content)
   }
@@ -187,6 +185,14 @@ export const AssistantMessage = memo(function AssistantMessage({
       setForkError(t({ en: 'Failed to fork session', fr: 'Échec de la duplication de la session' }))
     }
   }
+
+  const contextMenuItems = useMessageContextMenu(
+    message,
+    () => handleCopy(),
+    () => void handleFork(),
+  )
+
+  if (elements.length === 0) return null
 
   return (
     <div className="feed-item" onContextMenu={(e) => onContextMenu(e, !!sessionId)}>
@@ -344,13 +350,7 @@ export const AssistantMessage = memo(function AssistantMessage({
         )}
       </div>
 
-      {contextMenu(
-        useMessageContextMenu(
-          message,
-          () => handleCopy(),
-          () => void handleFork(),
-        ),
-      )}
+      {contextMenu(contextMenuItems)}
     </div>
   )
 })

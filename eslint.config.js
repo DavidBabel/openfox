@@ -150,6 +150,13 @@ export default tseslint.config(
           'http://localhost:8000/v1',
           'qwen3.5:0.8b',
           'qwen3.5-27b',
+          '99+',
+          'MCP',
+          'ASAP',
+          '-',
+          'v',
+          '>',
+          '…',
         ],
         // Terminal commands and paths rendered verbatim in <code> stay English.
         elementOverrides: { code: { allowElement: true } },

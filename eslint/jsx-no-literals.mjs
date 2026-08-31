@@ -17,6 +17,19 @@ export function jsxNoLiterals(options = {}) {
       .map(([name]) => name),
   )
 
+  // Expression node types through which a string literal flows unchanged to
+  // become rendered JSX text content (e.g. `{cond ? 'a' : 'b'}`).
+  const TRANSPARENT_EXPRESSIONS = new Set([
+    'ConditionalExpression',
+    'LogicalExpression',
+    'ParenthesizedExpression',
+    'ChainExpression',
+    'SequenceExpression',
+    'TSAsExpression',
+    'TSTypeAssertion',
+    'TSNonNullExpression',
+  ])
+
   return (context) => {
     const isAllowed = (text) => allowed.has(text) || allowed.has(text.trim())
 
@@ -45,18 +58,30 @@ export function jsxNoLiterals(options = {}) {
       Literal(node) {
         if (typeof node.value !== 'string') return
         if (!noStrings) return
-        const parent = node.parent
-        if (parent?.type !== 'JSXExpressionContainer') return
-        const grandparent = parent.parent
-        if (grandparent?.type !== 'JSXElement' && grandparent?.type !== 'JSXFragment') return
-        // Whitespace-only literals are layout spacers, not user-facing text.
-        if (node.value.trim() === '') return
-        if (inAllowedElement(node)) return
-        if (isAllowed(node.value)) return
-        context.report({
-          node,
-          message: 'JSX string literal must go through t() so it can be translated (en + fr).',
-        })
+        // Walk up through expression wrappers (conditionals, logical ops,
+        // parens, TS casts) to the JSX expression. A literal that reaches a
+        // JSXExpressionContainer renders as text content; one that stops at a
+        // call/object/etc. is an argument or data, not user-facing text.
+        let current = node
+        while (current.parent) {
+          const parent = current.parent
+          if (parent.type === 'JSXExpressionContainer') {
+            if (parent.parent?.type !== 'JSXElement' && parent.parent?.type !== 'JSXFragment') return
+            if (node.value.trim() === '') return
+            if (inAllowedElement(node)) return
+            if (isAllowed(node.value)) return
+            context.report({
+              node,
+              message: 'JSX string literal must go through t() so it can be translated (en + fr).',
+            })
+            return
+          }
+          if (TRANSPARENT_EXPRESSIONS.has(parent.type)) {
+            current = parent
+            continue
+          }
+          return
+        }
       },
       JSXAttribute(node) {
         if (restrictedAttributes.length === 0) return
