@@ -1,5 +1,6 @@
 import { Link } from 'wouter'
 import type { SessionSummary } from '@shared/types.js'
+import { useT } from '../../hooks/useT'
 import { InlineDropdown, type InlineDropdownItem } from '../shared/InlineDropdown'
 import { PlusIcon, CheckIcon, ArchiveIcon } from '../shared/icons'
 import { trimContent } from '../../lib/cross-session-history'
@@ -12,6 +13,7 @@ interface MobileNavProps {
 }
 
 export function MobileNav({ currentProject, sessions, currentSession, projectIdFromUrl }: MobileNavProps) {
+  const t = useT()
   if (!currentProject?.id || currentProject.id !== projectIdFromUrl) {
     return null
   }
@@ -26,7 +28,7 @@ export function MobileNav({ currentProject, sessions, currentSession, projectIdF
       label: (
         <Link href={`/p/${currentProject.id}/new`} className="flex items-center gap-2">
           <PlusIcon className="w-3 h-3 text-accent-primary" />
-          <span className="text-sm">New Session</span>
+          <span className="text-sm">{t({ en: 'New Session', fr: 'Nouvelle session' })}</span>
         </Link>
       ),
     },
@@ -42,7 +44,7 @@ export function MobileNav({ currentProject, sessions, currentSession, projectIdF
       label: (
         <Link href="/" className="flex items-center gap-2 text-text-muted hover:text-text-primary">
           <ArchiveIcon className="w-3 h-3" />
-          <span className="text-sm">Projects</span>
+          <span className="text-sm">{t({ en: 'Projects', fr: 'Projets' })}</span>
         </Link>
       ),
     },

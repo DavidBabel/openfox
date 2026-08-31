@@ -13,6 +13,7 @@ export const SETTINGS_KEYS = {
   DISPLAY_SHOW_AGENT_DEFINITIONS: 'display.showAgentDefinitions',
   DISPLAY_SHOW_WORKFLOW_BARS: 'display.showWorkflowBars',
   DISPLAY_SHOW_SYNTAX_HIGHLIGHTING: 'display.showSyntaxHighlighting',
+  DISPLAY_LOCALE: 'display.locale',
   DISPLAY_THEME: 'display.theme',
   DISPLAY_USER_PRESETS: 'display.userPresets',
   DISPLAY_FOLLOW_SYSTEM_THEME: 'display.followSystemTheme',
@@ -47,6 +48,7 @@ export const SETTINGS_KEYS = {
 
 export const SETTINGS_DEFAULTS: Record<string, string> = {
   [SETTINGS_KEYS.LANGUAGE]: 'automatic',
+  [SETTINGS_KEYS.DISPLAY_LOCALE]: 'automatic',
   [SETTINGS_KEYS.DISPLAY_SHOW_THINKING]: 'true',
   [SETTINGS_KEYS.DISPLAY_SHOW_VERBOSE_TOOL_OUTPUT]: 'true',
   [SETTINGS_KEYS.DISPLAY_SHOW_STATS]: 'true',

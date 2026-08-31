@@ -1,14 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Button } from '../../shared/Button'
+import { useT } from '../../../hooks/useT'
 import { SETTINGS_KEYS, setSetting } from '../../../lib/resources'
 import { useSetting } from '../../../hooks/useSetting'
-
-const LANGUAGE_OPTIONS = [
-  { value: 'automatic', label: 'Automatic' },
-  { value: 'english', label: 'English' },
-  { value: 'french', label: 'French' },
-  { value: 'other', label: 'Other' },
-] as const
 
 const LANGUAGE_TO_VALUE: Record<string, string> = {
   automatic: 'automatic',
@@ -45,6 +39,7 @@ function computeSaveValue(preset: string, custom: string, current: string): stri
 }
 
 export function InstructionsTab() {
+  const t = useT()
   const { value: globalInstructions, loading } = useSetting(SETTINGS_KEYS.GLOBAL_INSTRUCTIONS)
   const { value: language, loading: languageLoading } = useSetting(SETTINGS_KEYS.LANGUAGE, 'automatic')
 
@@ -81,26 +76,32 @@ export function InstructionsTab() {
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-text-primary mb-2">Language</label>
-        <p className="text-sm text-text-muted mb-2">In what language should the agent talk to you?</p>
+        <label className="block text-sm font-medium text-text-primary mb-2">
+          {t({ en: 'Language', fr: 'Langue' })}
+        </label>
+        <p className="text-sm text-text-muted mb-2">
+          {t({
+            en: 'In what language should the agent talk to you?',
+            fr: 'Dans quelle langue l’agent doit-il s’adresser à vous ?',
+          })}
+        </p>
         <select
           value={preset}
           onChange={(e) => setPreset(e.target.value)}
           className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary"
           disabled={isBusy}
         >
-          {LANGUAGE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <option value="automatic">{t({ en: 'Automatic', fr: 'Automatique' })}</option>
+          <option value="english">{t({ en: 'English', fr: 'Anglais' })}</option>
+          <option value="french">{t({ en: 'French', fr: 'Français' })}</option>
+          <option value="other">{t({ en: 'Other', fr: 'Autre' })}</option>
         </select>
         {preset === 'other' && (
           <input
             type="text"
             value={customLanguage}
             onChange={(e) => setCustomLanguage(e.target.value)}
-            placeholder="e.g. German, Spanish, Japanese..."
+            placeholder={t({ en: 'e.g. German, Spanish, Japanese...', fr: 'ex. allemand, espagnol, japonais…' })}
             className="w-full mt-2 px-3 py-2 text-sm bg-bg-tertiary border border-border rounded text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
             disabled={isBusy}
           />
@@ -108,14 +109,22 @@ export function InstructionsTab() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-text-primary mb-2">Global Instructions</label>
+        <label className="block text-sm font-medium text-text-primary mb-2">
+          {t({ en: 'Global Instructions', fr: 'Instructions globales' })}
+        </label>
         <p className="text-sm text-text-muted mb-2">
-          These instructions are injected into every prompt, regardless of project.
+          {t({
+            en: 'These instructions are injected into every prompt, regardless of project.',
+            fr: 'Ces instructions sont injectées dans chaque prompt, quel que soit le projet.',
+          })}
         </p>
         <textarea
           value={localValue}
           onChange={(e) => setLocalValue(e.target.value)}
-          placeholder="Enter global instructions that apply to all projects..."
+          placeholder={t({
+            en: 'Enter global instructions that apply to all projects...',
+            fr: 'Saisissez des instructions globales applicables à tous les projets…',
+          })}
           className="w-full min-h-80 px-3 py-2 bg-bg-tertiary border border-border rounded text-sm font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-primary"
           disabled={isBusy}
         />
@@ -123,10 +132,10 @@ export function InstructionsTab() {
 
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={handleDiscard} disabled={!isDirty}>
-          Discard
+          {t({ en: 'Discard', fr: 'Annuler' })}
         </Button>
         <Button variant="primary" onClick={handleSave} disabled={!isDirty || isBusy}>
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? t({ en: 'Saving...', fr: 'Enregistrement…' }) : t({ en: 'Save', fr: 'Enregistrer' })}
         </Button>
       </div>
     </div>

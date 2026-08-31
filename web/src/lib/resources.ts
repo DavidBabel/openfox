@@ -386,6 +386,8 @@ export interface ConfigData {
   platform: PlatformInfo | null
   workdir: string | null
   visionFallback: VisionFallbackConfig | null
+  /** UI locale setting: 'automatic' | 'en' | 'fr' (resolved client-side). */
+  locale: string
 }
 
 function normalizePlatform(platform: unknown): PlatformInfo | null {
@@ -412,6 +414,7 @@ export async function fetchConfig(): Promise<ConfigData> {
     platform: normalizePlatform(data.platform),
     workdir: (data.workdir as string | undefined) ?? null,
     visionFallback: (data.visionFallback as VisionFallbackConfig | undefined) ?? null,
+    locale: (data.locale as string | undefined) ?? 'automatic',
   }
 }
 
@@ -570,6 +573,7 @@ export const SETTINGS_KEYS = {
   NOTIFICATION_SETTINGS: 'notification_settings',
   DISPLAY_SHOW_THINKING: 'display.showThinking',
   DISPLAY_SHOW_VERBOSE_TOOL_OUTPUT: 'display.showVerboseToolOutput',
+  DISPLAY_LOCALE: 'display.locale',
   DISPLAY_SHOW_STATS: 'display.showStats',
   DISPLAY_SHOW_AGENT_DEFINITIONS: 'display.showAgentDefinitions',
   DISPLAY_SHOW_WORKFLOW_BARS: 'display.showWorkflowBars',

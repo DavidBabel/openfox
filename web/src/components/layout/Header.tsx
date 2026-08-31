@@ -16,6 +16,7 @@ import { useSessionStore } from '../../stores/session'
 import { useCurrentProject } from '../../hooks/useCurrentProject'
 import { useProjects } from '../../hooks/useProjects'
 import { useResource } from '../../hooks/useResource'
+import { useT } from '../../hooks/useT'
 import { summariesResource } from '../../lib/resources'
 import { useConfigStore } from '../../stores/config'
 import { useTerminalStore } from '../../stores/terminal'
@@ -40,6 +41,7 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
+  const t = useT()
   const [showSettings, setShowSettings] = useState(false)
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement)
@@ -102,7 +104,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     mobileMenuItems.push({
       label: (
         <span className="flex items-center gap-2">
-          Tasks
+          {t({ en: 'Tasks', fr: 'Tâches' })}
           {runningTaskCount > 0 && (
             <span className="min-w-3.5 h-3.5 px-0.5 rounded-full bg-accent-success text-white text-[9px] font-semibold flex items-center justify-center">
               {runningTaskCount > 99 ? '99+' : runningTaskCount}
@@ -114,13 +116,13 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
       onClick: () => setTasksModalOpen(true),
     })
     mobileMenuItems.push({
-      label: 'Terminal',
+      label: t({ en: 'Terminal', fr: 'Terminal' }),
       icon: <TerminalIcon className={`w-4 h-4 ${terminalIsOpen ? 'text-accent-primary' : ''}`} />,
       onClick: () => setTerminalOpen(!terminalIsOpen),
     })
     if (project) {
       mobileMenuItems.push({
-        label: 'Open Folder',
+        label: t({ en: 'Open Folder', fr: 'Ouvrir le dossier' }),
         icon: <FolderIcon className="w-4 h-4" />,
         onClick: () => authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {}),
       })
@@ -129,7 +131,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
   mobileMenuItems.push({
     label: (
       <span className="flex items-center gap-2">
-        Settings
+        {t({ en: 'Settings', fr: 'Paramètres' })}
         {updateAvailable && <span className="w-1.5 h-1.5 rounded-full bg-accent-primary" />}
       </span>
     ),
@@ -137,7 +139,9 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     onClick: () => setShowSettings(true),
   })
   mobileMenuItems.push({
-    label: isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen',
+    label: isFullscreen
+      ? t({ en: 'Exit Fullscreen', fr: 'Quitter le plein écran' })
+      : t({ en: 'Enter Fullscreen', fr: 'Plein écran' }),
     icon: isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />,
     onClick: () => {
       if (document.fullscreenElement) {
@@ -148,7 +152,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
     },
   })
   mobileMenuItems.push({
-    label: 'Logout',
+    label: t({ en: 'Logout', fr: 'Se déconnecter' }),
     icon: <LogoutIcon />,
     danger: true,
     onClick: () => {
@@ -164,8 +168,16 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
           <button
             onClick={onMenuClick}
             className="flex-shrink-0 p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-            title={isSplit ? 'Toggle split view control panel' : 'Toggle session list'}
-            aria-label={isSplit ? 'Toggle split view control panel' : 'Toggle session list'}
+            title={
+              isSplit
+                ? t({ en: 'Toggle split view control panel', fr: 'Basculer le panneau de contrôle de la vue divisée' })
+                : t({ en: 'Toggle session list', fr: 'Basculer la liste des sessions' })
+            }
+            aria-label={
+              isSplit
+                ? t({ en: 'Toggle split view control panel', fr: 'Basculer le panneau de contrôle de la vue divisée' })
+                : t({ en: 'Toggle session list', fr: 'Basculer la liste des sessions' })
+            }
           >
             <MenuIcon />
           </button>
@@ -226,8 +238,8 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
                 setLocation('/split-view')
               }}
               className="p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
-              title="Open split view"
-              aria-label="Open split view"
+              title={t({ en: 'Open split view', fr: 'Ouvrir la vue divisée' })}
+              aria-label={t({ en: 'Open split view', fr: 'Ouvrir la vue divisée' })}
             >
               <ColumnsIcon className="w-4 h-4" />
             </button>
@@ -237,7 +249,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             <>
               <span
                 className="flex items-center gap-1 text-xs text-text-muted px-1.5"
-                title="Split view active"
+                title={t({ en: 'Split view active', fr: 'Vue divisée active' })}
                 data-testid="split-indicator"
               >
                 <ColumnsIcon className="w-3.5 h-3.5" />
@@ -249,8 +261,8 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
                   setLocation('/')
                 }}
                 className="p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
-                title="Exit split view"
-                aria-label="Exit split view"
+                title={t({ en: 'Exit split view', fr: 'Quitter la vue divisée' })}
+                aria-label={t({ en: 'Exit split view', fr: 'Quitter la vue divisée' })}
               >
                 <XCloseIcon className="w-4 h-4" />
               </button>
@@ -261,8 +273,8 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             <button
               onClick={() => setTasksModalOpen(true)}
               className="relative p-2.5 rounded hover:bg-bg-tertiary transition-colors text-text-muted hover:text-text-primary"
-              title="Project tasks"
-              aria-label="Open project tasks"
+              title={t({ en: 'Project tasks', fr: 'Tâches du projet' })}
+              aria-label={t({ en: 'Open project tasks', fr: 'Ouvrir les tâches du projet' })}
             >
               <TasksIcon className="w-4 h-4" />
               {runningTaskCount > 0 && (
@@ -279,7 +291,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
               className={`p-2.5 rounded hover:bg-bg-tertiary transition-colors ${
                 terminalIsOpen ? 'text-accent-primary' : 'text-text-muted hover:text-text-primary'
               }`}
-              title="Toggle terminal (double Ctrl)"
+              title={t({ en: 'Toggle terminal (double Ctrl)', fr: 'Basculer le terminal (Ctrl double)' })}
             >
               <TerminalIcon />
             </button>
@@ -289,7 +301,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             <button
               onClick={() => authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {})}
               className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-              title="Open project folder"
+              title={t({ en: 'Open project folder', fr: 'Ouvrir le dossier du projet' })}
             >
               <FolderIcon className="w-4 h-4" />
             </button>
@@ -298,7 +310,11 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
           <button
             onClick={() => setShowSettings(true)}
             className="relative p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-            title={updateAvailable ? 'Settings — update available' : 'Settings'}
+            title={
+              updateAvailable
+                ? t({ en: 'Settings — update available', fr: 'Paramètres — mise à jour disponible' })
+                : t({ en: 'Settings', fr: 'Paramètres' })
+            }
           >
             <SettingsIcon />
             {updateAvailable && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent-primary" />}
@@ -310,7 +326,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
               setLocation('/')
             }}
             className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-            title="Logout"
+            title={t({ en: 'Logout', fr: 'Se déconnecter' })}
           >
             <LogoutIcon />
           </button>
@@ -324,8 +340,8 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             trigger={
               <button
                 className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-                title="Menu"
-                aria-label="Open header menu"
+                title={t({ en: 'Menu', fr: 'Menu' })}
+                aria-label={t({ en: 'Open header menu', fr: 'Ouvrir le menu d’en-tête' })}
               >
                 <ChevronDownIcon className="w-4 h-4" />
               </button>
@@ -339,8 +355,13 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
             title={
               keybindings.criteriaSidebar
-                ? `Toggle criteria sidebar (${formatKeybinding(keybindings.criteriaSidebar)})`
-                : 'Toggle criteria sidebar'
+                ? t(
+                    { en: 'Toggle criteria sidebar ({{key}})', fr: 'Basculer la barre de critères ({{key}})' },
+                    {
+                      key: formatKeybinding(keybindings.criteriaSidebar),
+                    },
+                  )
+                : t({ en: 'Toggle criteria sidebar', fr: 'Basculer la barre de critères' })
             }
           >
             <MenuIcon />
@@ -355,7 +376,15 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
       )}
       {lastAutoLaunch && (
         <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-secondary border border-border shadow-xl text-sm text-text-primary">
-          <span>“{lastAutoLaunch.taskTitle}” auto-launched — a slot freed up.</span>
+          <span>
+            {t(
+              {
+                en: '“{{title}}” auto-launched — a slot freed up.',
+                fr: '« {{title}} » lancé automatiquement — un emplacement s’est libéré.',
+              },
+              { title: lastAutoLaunch.taskTitle },
+            )}
+          </span>
           <button
             type="button"
             onClick={() => {
@@ -366,10 +395,10 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             }}
             className="flex items-center gap-1 px-2.5 py-1 rounded bg-accent-primary/25 hover:bg-accent-primary/40 font-medium transition-colors"
           >
-            Open session <ArrowRightIcon className="w-3 h-3" />
+            {t({ en: 'Open session', fr: 'Ouvrir la session' })} <ArrowRightIcon className="w-3 h-3" />
           </button>
           <button type="button" onClick={clearAutoLaunch} className="text-xs text-text-muted underline">
-            Dismiss
+            {t({ en: 'Dismiss', fr: 'Fermer' })}
           </button>
         </div>
       )}

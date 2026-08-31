@@ -20,6 +20,7 @@ import { useModelSearch, ModelEntryRow, type ModelWithConfig } from './model-lis
 import { parseModelValue } from '../../lib/model-value'
 import { shouldGateEffortChange, resolveDisplayEffort } from '../../lib/effort-gate'
 import { useEffortChangeGate } from '../plan/EffortChangeGate'
+import { useT } from '../../hooks/useT'
 
 type ProviderLabelProps = {
   activeProvider: { name: string; isLocal?: boolean } | undefined
@@ -41,6 +42,7 @@ function ProviderLabel({
   agentName,
   pinned,
 }: ProviderLabelProps) {
+  const t = useT()
   return (
     <>
       <span className="text-sm text-accent-primary flex items-center gap-1">
@@ -48,12 +50,15 @@ function ProviderLabel({
           <span
             className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-border"
             style={{ backgroundColor: agentColor ?? '#6b7280' }}
-            title={`Model set by agent "${agentName ?? 'unknown'}". Change it in Settings > Agents.`}
+            title={t({
+              en: `Model set by agent "${agentName ?? 'unknown'}". Change it in Settings > Agents.`,
+              fr: `Modèle défini par l’agent « ${agentName ?? 'inconnu'} ». Modifiez-le dans Paramètres > Agents.`,
+            })}
           />
         )}
         {activeProvider ? (
           <>
-            <span className="hidden @sm:inline">{activeProvider.name} • </span>
+            <span className="hidden @sm:inline">{`${activeProvider.name} • `}</span>
             {shortModelName}
             {effort && <span className="text-text-muted">:{effort}</span>}
           </>
@@ -66,7 +71,10 @@ function ProviderLabel({
         {pinned && (
           <span
             className="flex-shrink-0 text-text-muted"
-            title={`Reasoning effort pinned for this session (chosen via "Keep current reasoning effort").`}
+            title={t({
+              en: 'Reasoning effort pinned for this session (chosen via "Keep current reasoning effort").',
+              fr: 'Niveau de raisonnement épinglé pour cette session (choisi via « Conserver le niveau de raisonnement actuel »).',
+            })}
           >
             <PinIcon className="w-3 h-3" />
           </span>
@@ -79,13 +87,14 @@ function ProviderLabel({
             : 'text-accent-warning bg-accent-warning/10'
         }`}
       >
-        {activeProvider?.isLocal ? 'local' : 'api'}
+        {activeProvider?.isLocal ? t({ en: 'local', fr: 'local' }) : t({ en: 'api', fr: 'api' })}
       </span>
     </>
   )
 }
 
 export function ProviderSelector() {
+  const t = useT()
   const sessionId = useSessionScope()
   const currentSession = useScopedPaneState(
     sessionId,
@@ -198,7 +207,7 @@ export function ProviderSelector() {
   const isEffortPinned = !!sessionPinnedEffort
   const shortModelName = effectiveModel
     ? (effectiveModel.split('/').pop()?.replace(/-/g, ' ') ?? effectiveModel)
-    : 'No model'
+    : t({ en: 'No model', fr: 'Aucun modèle' })
 
   // Fall back to the model's configured effort for display, so the label
   // reflects what will actually be sent even without an explicit session pick.
@@ -489,7 +498,7 @@ export function ProviderSelector() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(providerFormPayload(formData)),
       })
-      if (!res.ok) throw new Error('Failed to update provider')
+      if (!res.ok) throw new Error(t({ en: 'Failed to update provider', fr: 'Échec de la mise à jour du fournisseur' }))
       await useConfigStore.getState().fetchConfig()
     } catch {
       // Silently fail
@@ -641,10 +650,16 @@ export function ProviderSelector() {
         type="button"
         onClick={() => refreshModel()}
         className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-bg-tertiary transition-colors group"
-        title={isLlmOffline ? 'LLM server is offline. Click to retry.' : (shortModelName ?? 'Click to refresh model')}
+        title={
+          isLlmOffline
+            ? t({ en: 'LLM server is offline. Click to retry.', fr: 'Serveur LLM hors ligne. Cliquez pour réessayer.' })
+            : (shortModelName ?? t({ en: 'Click to refresh model', fr: 'Cliquez pour actualiser le modèle' }))
+        }
       >
         {isLlmOffline ? (
-          <span className="text-sm text-accent-error animate-pulse">LLM offline</span>
+          <span className="text-sm text-accent-error animate-pulse">
+            {t({ en: 'LLM offline', fr: 'LLM hors ligne' })}
+          </span>
         ) : (
           <ProviderLabel
             activeProvider={activeProvider}
@@ -667,10 +682,10 @@ export function ProviderSelector() {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-bg-tertiary transition-colors group"
-        title="Click to switch provider or model"
+        title={t({ en: 'Click to switch provider or model', fr: 'Cliquez pour changer de fournisseur ou de modèle' })}
       >
         {isLlmOffline ? (
-          <span className="text-sm text-accent-error animate-pulse">offline</span>
+          <span className="text-sm text-accent-error animate-pulse">{t({ en: 'offline', fr: 'hors ligne' })}</span>
         ) : (
           <ProviderLabel
             activeProvider={activeProvider}
@@ -698,7 +713,7 @@ export function ProviderSelector() {
                 setHighlightedIndex(-1)
               }}
               onKeyDown={handleProviderSearchKeyDown}
-              placeholder="Search models..."
+              placeholder={t({ en: 'Search models...', fr: 'Rechercher des modèles...' })}
               className="bg-transparent border-none outline-none text-sm text-text-primary w-full placeholder:text-text-muted"
             />
           </div>
@@ -736,9 +751,12 @@ export function ProviderSelector() {
                               onClick={(event) => handleDisconnectAccount(event, group.provider.id)}
                               disabled={authBusy === group.provider.id}
                               className="text-[10px] px-1.5 py-0.5 rounded border border-accent-success/40 text-accent-success hover:bg-accent-success/10 disabled:opacity-50"
-                              title="Disconnect provider account"
+                              title={t({
+                                en: 'Disconnect provider account',
+                                fr: 'Déconnecter le compte du fournisseur',
+                              })}
                             >
-                              Connected
+                              {t({ en: 'Connected', fr: 'Connecté' })}
                             </button>
                           ) : (
                             <button
@@ -746,18 +764,21 @@ export function ProviderSelector() {
                               onClick={(event) => handleConnectAccount(event, group.provider.id)}
                               disabled={authBusy === group.provider.id}
                               className="text-[10px] px-1.5 py-0.5 rounded border border-accent-primary/40 text-accent-primary hover:bg-accent-primary/10 disabled:opacity-50"
-                              title="Connect provider account"
+                              title={t({ en: 'Connect provider account', fr: 'Connecter le compte du fournisseur' })}
                             >
                               {authBusy === group.provider.id
-                                ? 'Starting…'
+                                ? t({ en: 'Starting…', fr: 'Démarrage…' })
                                 : authStates[group.provider.id] === 'error' ||
                                     authStates[group.provider.id] === 'expired'
-                                  ? 'Retry'
-                                  : 'Connect'}
+                                  ? t({ en: 'Retry', fr: 'Réessayer' })
+                                  : t({ en: 'Connect', fr: 'Connecter' })}
                             </button>
                           ))}
                         {group.provider.id === effectiveProviderId ? (
-                          <span className="text-accent-success" title="Active provider">
+                          <span
+                            className="text-accent-success"
+                            title={t({ en: 'Active provider', fr: 'Fournisseur actif' })}
+                          >
                             <CheckIcon className="w-4 h-4" />
                           </span>
                         ) : (
@@ -770,8 +791,11 @@ export function ProviderSelector() {
                             handleEditProvider(group.provider)
                           }}
                           className="p-0.5 hover:bg-bg-tertiary rounded transition-colors"
-                          title="Edit provider"
-                          aria-label={`Edit provider ${group.provider.name}`}
+                          title={t({ en: 'Edit provider', fr: 'Modifier le fournisseur' })}
+                          aria-label={t({
+                            en: `Edit provider ${group.provider.name}`,
+                            fr: `Modifier le fournisseur ${group.provider.name}`,
+                          })}
                         >
                           <EditSmallIcon className="w-4 h-4 text-text-muted" />
                         </button>
@@ -782,7 +806,7 @@ export function ProviderSelector() {
                             handleRefreshClick(e, group.provider.id)
                           }}
                           className="p-0.5 hover:bg-bg-tertiary rounded transition-colors"
-                          title="Refresh models"
+                          title={t({ en: 'Refresh models', fr: 'Actualiser les modèles' })}
                         >
                           <ReloadIcon
                             className={`w-4 h-4 ${loadingModels === group.provider.id ? 'animate-spin' : ''} ${
@@ -797,7 +821,7 @@ export function ProviderSelector() {
                             handleChevronClick(group.provider)
                           }}
                           className="p-0.5 hover:bg-bg-tertiary rounded transition-colors"
-                          title="Show models"
+                          title={t({ en: 'Show models', fr: 'Afficher les modèles' })}
                         >
                           <ChevronDownIcon
                             className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''} ${
@@ -811,7 +835,9 @@ export function ProviderSelector() {
                     {isExpanded && (
                       <ScrollArea className="bg-bg-primary border-t border-border max-h-40">
                         {loadingModels === group.provider.id ? (
-                          <div className="px-4 py-2 text-xs text-text-muted">Loading models...</div>
+                          <div className="px-4 py-2 text-xs text-text-muted">
+                            {t({ en: 'Loading models…', fr: 'Chargement des modèles…' })}
+                          </div>
                         ) : group.models.length > 0 ? (
                           group.models.map((modelConfig) => {
                             const modelFlatIndex = flatItems.findIndex(
@@ -843,7 +869,9 @@ export function ProviderSelector() {
                             )
                           })
                         ) : (
-                          <div className="px-4 py-2 text-xs text-text-muted">No models available</div>
+                          <div className="px-4 py-2 text-xs text-text-muted">
+                            {t({ en: 'No models available', fr: 'Aucun modèle disponible' })}
+                          </div>
                         )}
                       </ScrollArea>
                     )}
@@ -851,7 +879,9 @@ export function ProviderSelector() {
                 )
               })}
               {visibleGroups.length === 0 && searchQuery.trim() && (
-                <div className="px-4 py-3 text-sm text-text-muted text-center">No models match your search</div>
+                <div className="px-4 py-3 text-sm text-text-muted text-center">
+                  {t({ en: 'No models match your search', fr: 'Aucun modèle ne correspond à votre recherche' })}
+                </div>
               )}
             </div>
           </ScrollArea>
@@ -865,9 +895,12 @@ export function ProviderSelector() {
                 type="button"
                 onClick={handleUnpinEffort}
                 className="text-xs text-text-muted hover:text-text-primary hover:underline"
-                title="Stop pinning the reasoning effort so agent overrides and session picks apply again"
+                title={t({
+                  en: 'Stop pinning the reasoning effort so agent overrides and session picks apply again',
+                  fr: 'Arrêter d’épingler le niveau de raisonnement pour que les remplacements d’agent et les choix de session s’appliquent à nouveau',
+                })}
               >
-                Unpin reasoning effort
+                {t({ en: 'Unpin reasoning effort', fr: 'Désépingler le niveau de raisonnement' })}
               </button>
             )}
             {hasSessionPreference && (
@@ -875,9 +908,12 @@ export function ProviderSelector() {
                 type="button"
                 onClick={handleResetProvider}
                 className="text-xs text-text-muted hover:text-text-primary hover:underline"
-                title="Clear this session's manually picked model so agent overrides and the global default apply again"
+                title={t({
+                  en: "Clear this session's manually picked model so agent overrides and the global default apply again",
+                  fr: "Effacer le modèle choisi manuellement pour cette session afin que les remplacements d'agent et le défaut global s'appliquent à nouveau",
+                })}
               >
-                Reset to default
+                {t({ en: 'Reset to default', fr: 'Réinitialiser au défaut' })}
               </button>
             )}
             <button
@@ -887,14 +923,24 @@ export function ProviderSelector() {
               }}
               className="text-xs text-accent-primary hover:underline"
             >
-              Manage providers
+              {t({ en: 'Manage providers', fr: 'Gérer les fournisseurs' })}
             </button>
           </div>
         </div>
       )}
       {deviceChallenge && (
-        <Modal isOpen onClose={closeDeviceChallenge} title="Connect provider" size="md">
-          <p className="text-sm text-text-muted">Follow the provider instructions to complete authorization.</p>
+        <Modal
+          isOpen
+          onClose={closeDeviceChallenge}
+          title={t({ en: 'Connect provider', fr: 'Connecter le fournisseur' })}
+          size="md"
+        >
+          <p className="text-sm text-text-muted">
+            {t({
+              en: 'Follow the provider instructions to complete authorization.',
+              fr: 'Suivez les instructions du fournisseur pour finaliser l’autorisation.',
+            })}
+          </p>
 
           {deviceChallenge.mode !== 'browser' ? (
             <>
@@ -902,13 +948,15 @@ export function ProviderSelector() {
                 type="button"
                 onClick={copyDeviceCode}
                 className="mt-6 w-full select-all rounded-lg border border-accent-primary/40 bg-bg-primary px-4 py-5 font-mono text-3xl font-semibold tracking-[0.2em] text-accent-primary hover:bg-bg-tertiary"
-                title="Copy code"
+                title={t({ en: 'Copy code', fr: 'Copier le code' })}
               >
-                {deviceChallenge.userCode ?? 'Continue'}
+                {deviceChallenge.userCode ?? t({ en: 'Continue', fr: 'Continuer' })}
               </button>
 
               <div className="mt-3 text-center text-xs text-text-muted">
-                {codeCopied ? 'Copied to clipboard' : 'Click the code to copy it'}
+                {codeCopied
+                  ? t({ en: 'Copied to clipboard', fr: 'Copié dans le presse-papiers' })
+                  : t({ en: 'Click the code to copy it', fr: 'Cliquez sur le code pour le copier' })}
               </div>
 
               <div className="mt-6 flex gap-3">
@@ -917,21 +965,29 @@ export function ProviderSelector() {
                   onClick={copyDeviceCode}
                   className="flex-1 rounded-lg border border-border px-4 py-2 text-sm text-text-primary hover:bg-bg-tertiary"
                 >
-                  {codeCopied ? 'Copied' : 'Copy code'}
+                  {codeCopied ? t({ en: 'Copied', fr: 'Copié' }) : t({ en: 'Copy code', fr: 'Copier le code' })}
                 </button>
                 <button
                   type="button"
                   onClick={openDeviceAuthorization}
                   className="flex-1 rounded-lg bg-accent-primary px-4 py-2 text-sm font-medium text-text-primary hover:bg-accent-primary/90"
                 >
-                  {devicePageOpened ? 'Reopen authorization' : 'Open authorization'}
+                  {devicePageOpened
+                    ? t({ en: 'Reopen authorization', fr: 'Rouvrir l’autorisation' })
+                    : t({ en: 'Open authorization', fr: 'Ouvrir l’autorisation' })}
                 </button>
               </div>
 
               <p className="mt-4 text-center text-xs text-text-muted">
                 {devicePageOpened
-                  ? 'If the browser blocked or closed the tab, reopen authorization.'
-                  : 'OpenFox stays open while you complete authorization in the other tab.'}
+                  ? t({
+                      en: 'If the browser blocked or closed the tab, reopen authorization.',
+                      fr: 'Si le navigateur a bloqué ou fermé l’onglet, rouvrez l’autorisation.',
+                    })
+                  : t({
+                      en: 'OpenFox stays open while you complete authorization in the other tab.',
+                      fr: 'OpenFox reste ouvert pendant que vous finalisez l’autorisation dans l’autre onglet.',
+                    })}
               </p>
             </>
           ) : (
@@ -946,7 +1002,9 @@ export function ProviderSelector() {
                   onClick={openDeviceAuthorization}
                   className="w-full rounded-lg bg-accent-primary px-4 py-2 text-sm font-medium text-text-primary hover:bg-accent-primary/90"
                 >
-                  {devicePageOpened ? 'Reopen authorization' : 'Open authorization'}
+                  {devicePageOpened
+                    ? t({ en: 'Reopen authorization', fr: 'Rouvrir l’autorisation' })
+                    : t({ en: 'Open authorization', fr: 'Ouvrir l’autorisation' })}
                 </button>
               </div>
             </>

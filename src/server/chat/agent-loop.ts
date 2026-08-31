@@ -51,6 +51,7 @@ import { COMPACTION_PROMPT } from './prompts.js'
 import { logger } from '../utils/logger.js'
 import type { LLMRetryPolicy } from '../runner/types.js'
 import { DEFAULT_LLM_RETRY_POLICY } from '../runner/types.js'
+import { serverT } from '../i18n.js'
 
 function emitPartialDoneEvents(
   _sessionId: string,
@@ -465,7 +466,16 @@ export async function runTopLevelAgentLoop(
       if (!retryLimiter.canRetry()) {
         append({
           type: 'chat.error',
-          data: { error: `Auto-retry limit exceeded after ${retryLimiter.maxRetries()} retries`, recoverable: false },
+          data: {
+            error: serverT(
+              {
+                en: 'Auto-retry limit exceeded after {{count}} retries',
+                fr: 'Limite de relance automatique dépassée après {{count}} tentatives',
+              },
+              { count: retryLimiter.maxRetries() },
+            ),
+            recoverable: false,
+          },
         })
         append(createChatDoneEvent(assistantMsgId, 'error', undefined, agentType))
         throw new Error('Auto-retry limit exceeded')
@@ -726,7 +736,13 @@ ${COMPACTION_PROMPT}`,
       if (!summary) {
         append({
           type: 'chat.error',
-          data: { error: 'Compaction produced empty summary, continuing with full context', recoverable: true },
+          data: {
+            error: serverT({
+              en: 'Compaction produced empty summary, continuing with full context',
+              fr: 'La compaction a produit un résumé vide, poursuite avec le contexte complet',
+            }),
+            recoverable: true,
+          },
         })
         logger.warn('Compaction produced empty summary, continuing', { sessionId })
         compacting = false

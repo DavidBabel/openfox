@@ -84,6 +84,7 @@ import {
 } from '../events/index.js'
 import type { Message, CriterionStatus } from '../../shared/types.js'
 import { isInDangerZone, canCompact } from '../context/tokenizer.js'
+import { serverT } from '../i18n.js'
 
 // ============================================================================
 // Event Types (for backward compatibility with existing subscribers)
@@ -1693,13 +1694,33 @@ export class SessionManager {
             }
           } catch (innerErr) {
             throw new Error(
-              `Failed to create branch "${branch}" in workspace "${workspaceName}": ${innerErr instanceof Error ? innerErr.message : String(innerErr)}`,
+              serverT(
+                {
+                  en: 'Failed to create branch "{{branch}}" in workspace "{{workspace}}": {{reason}}',
+                  fr: 'Échec de création de la branche « {{branch}} » dans le workspace « {{workspace}} » : {{reason}}',
+                },
+                {
+                  branch,
+                  workspace: workspaceName,
+                  reason: innerErr instanceof Error ? innerErr.message : String(innerErr),
+                },
+              ),
             )
           }
         })
       } catch (err) {
         throw new Error(
-          `Failed to apply branch "${branch}" to workspace "${workspaceName}": ${err instanceof Error ? err.message : String(err)}`,
+          serverT(
+            {
+              en: 'Failed to apply branch "{{branch}}" to workspace "{{workspace}}": {{reason}}',
+              fr: 'Échec d’application de la branche « {{branch}} » au workspace « {{workspace}} » : {{reason}}',
+            },
+            {
+              branch,
+              workspace: workspaceName,
+              reason: err instanceof Error ? err.message : String(err),
+            },
+          ),
         )
       }
     }

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useT } from '../../hooks/useT'
 import { useSessionStore, useIsRunning, useQueuedMessages } from '../../stores/session'
 import { useScopedPaneState } from '../../stores/session/session-scope'
 import { useResource } from '../../hooks/useResource'
@@ -100,6 +101,7 @@ export function ChatInput({
   onSendCommand,
   clearInput,
 }: ChatInputProps) {
+  const t = useT()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const prevLenRef = useRef(0)
@@ -416,7 +418,15 @@ export function ChatInput({
         const missingRequired = (wf?.parameters ?? []).filter((p) => p.required && !(p.id in slashResult.params))
         if (missingRequired.length > 0) {
           const names = missingRequired.map((p) => p.label || p.id).join(', ')
-          setErrorMessage(`Missing required parameter${missingRequired.length > 1 ? 's' : ''}: ${names}`)
+          setErrorMessage(
+            t(
+              {
+                en: { one: 'Missing required parameter: {{names}}', other: 'Missing required parameters: {{names}}' },
+                fr: { one: 'Paramètre requis manquant : {{names}}', other: 'Paramètres requis manquants : {{names}}' },
+              },
+              { count: missingRequired.length, names },
+            ),
+          )
           sendingRef.current = false
           return
         }
@@ -552,10 +562,10 @@ export function ChatInput({
           type="button"
           onClick={onOpenMessageSearch}
           className="text-sm text-text-muted hover:text-text-primary flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-bg-tertiary transition-colors"
-          aria-label="Browse history"
+          aria-label={t({ en: 'Browse history', fr: 'Parcourir l’historique' })}
         >
           <SearchIcon />
-          Browse history
+          {t({ en: 'Browse history', fr: 'Parcourir l’historique' })}
         </button>
       </div>
 
@@ -623,7 +633,7 @@ export function ChatInput({
               onKeyDown={handleKeyDown}
               onSelect={handleSelect}
               onKeyUp={handleKeyUp}
-              placeholder="What would you like to build?"
+              placeholder={t({ en: 'What would you like to build?', fr: 'Que souhaitez-vous construire ?' })}
               data-testid="chat-input-textarea"
               className="w-full bg-transparent text-sm placeholder:text-text-muted resize-none overflow-y-auto focus:outline-none"
               style={{ minHeight: `${COMPOSER_MIN_HEIGHT}px`, maxHeight: `${COMPOSER_MAX_HEIGHT}px` }}
@@ -657,7 +667,7 @@ export function ChatInput({
                     className="absolute left-3 top-[26px] text-sm text-text-muted/40 pointer-events-none select-none"
                     aria-hidden
                   >
-                    {nextParam}=?
+                    {`${nextParam}=?`}
                   </span>
                 )
               })()}
@@ -671,7 +681,7 @@ export function ChatInput({
                 className="flex items-center gap-1 px-4 py-1.5 rounded bg-accent-error/20 text-sm text-accent-error font-medium hover:bg-accent-error/30 transition-colors whitespace-nowrap"
               >
                 <StopIcon />
-                Abort
+                {t({ en: 'Abort', fr: 'Interrompre' })}
               </button>
             )}
             <div className="flex items-center">
@@ -682,7 +692,7 @@ export function ChatInput({
                 data-testid="chat-send-button"
                 className="px-4 py-1.5 rounded-l bg-accent-primary/20 text-sm text-accent-primary font-medium hover:bg-accent-primary/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                Send
+                {t({ en: 'Send', fr: 'Envoyer' })}
               </button>
               <MoreMenu
                 onSendCommand={onSendCommand}

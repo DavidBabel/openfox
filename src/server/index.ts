@@ -1852,6 +1852,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       defaultModelSelection: config.defaultModelSelection,
       visionFallback,
       platform: platformInfo,
+      locale: (await import('./db/settings.js')).getSetting('display.locale') ?? 'automatic',
     })
   })
 

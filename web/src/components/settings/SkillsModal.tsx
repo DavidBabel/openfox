@@ -16,13 +16,13 @@ import { skillsResource, skillResource, skillDefaultResource } from '../../lib/r
 import { useSessionStore } from '../../stores/session/store'
 import { useConfirmDialog, FormField, ErrorBanner, DestinationSelector } from './CRUDModal'
 import { ItemsHeader } from '../shared/ItemsHeader'
-import { CRUDListHeader } from './CRUDListHeader'
-import { CRUDListView } from './CRUDListView'
+import { CRUDListScaffold } from './CRUDListScaffold'
 import { NameIdFields } from './FormFields'
 import { useCRUDForm } from './useCRUDForm'
 import { SkillLibraryPanel } from './SkillLibraryPanel'
 import { SkillListItem } from './SkillListItem'
 import { SkillDeleteModal } from './SkillDeleteModal'
+import { useT } from '../../hooks/useT'
 type SkillFormData = {
   name: string
   id: string
@@ -35,6 +35,7 @@ type SkillFormData = {
 }
 
 export function SkillsContent({ isOpen }: { isOpen: boolean }) {
+  const t = useT()
   const currentSession = useSessionStore((state) => state.currentSession)
   const workdir = currentSession?.workdir
   const { data, refresh, loading } = useResource(skillsResource, workdir)
@@ -99,7 +100,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
       : await skillResource.refresh(skillId, workdir)
     if (!content) return
     const newId = `${skillId}-copy-${Date.now()}`
-    setSkillFormData(content, false, newId, `${content.metadata.name} (copy)`)
+    setSkillFormData(content, false, newId, `${content.metadata.name} ${t({ en: '(copy)', fr: '(copie)' })}`)
     setEditingId(null)
     setFormError('')
     setView('edit')
@@ -134,7 +135,9 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
     const result = await deleteSkill(pendingDelete.id, workdir)
     setDeleting(false)
     if (!result.success) {
-      setDeleteError(result.error ?? 'Failed to delete skill.')
+      setDeleteError(
+        result.error ?? t({ en: 'Failed to delete skill.', fr: 'Échec de la suppression de la compétence.' }),
+      )
       return
     }
     await refresh()
@@ -145,7 +148,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
   const handleSave = async () => {
     const id = editingId ?? formData.id
     if (!id || !formData.name || !formData.prompt) {
-      setFormError('Name, ID, and prompt are required.')
+      setFormError(t({ en: 'Name, ID, and prompt are required.', fr: 'Le nom, l’ID et l’invite sont requis.' }))
       return
     }
 
@@ -169,7 +172,9 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
     setSaving(false)
 
     if (!result.success) {
-      setFormError(result.error ?? 'Failed to save skill.')
+      setFormError(
+        result.error ?? t({ en: 'Failed to save skill.', fr: 'Échec de l’enregistrement de la compétence.' }),
+      )
       return
     }
 
@@ -196,10 +201,14 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
       <div className="flex flex-col h-full">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-lg font-semibold text-text-primary">
-            {isReadOnly ? formData.name : editingId ? 'Edit Skill' : 'New Skill'}
+            {isReadOnly
+              ? formData.name
+              : editingId
+                ? t({ en: 'Edit Skill', fr: 'Modifier la compétence' })
+                : t({ en: 'New Skill', fr: 'Nouvelle compétence' })}
           </h2>
           <button onClick={() => setView('list')} className="text-text-muted hover:text-text-primary">
-            Cancel
+            {t({ en: 'Cancel', fr: 'Annuler' })}
           </button>
         </div>
 
@@ -209,9 +218,9 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
           <NameIdFields
             name={formData.name as string}
             id={formData.id as string}
-            nameLabel="Name"
-            idLabel="ID"
-            namePlaceholder="My Skill"
+            nameLabel={t({ en: 'Name', fr: 'Nom' })}
+            idLabel={t({ en: 'ID', fr: 'ID' })}
+            namePlaceholder={t({ en: 'My Skill', fr: 'Ma compétence' })}
             idPlaceholder="my-skill"
             readOnlyId={true}
             onNameChange={handleNameChange}
@@ -220,14 +229,14 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
 
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Description"
+              label={t({ en: 'Description', fr: 'Description' })}
               value={formData.description as string}
               onChange={(description) => setFormData((prev) => ({ ...prev, description }))}
-              placeholder="What this skill does..."
+              placeholder={t({ en: 'What this skill does...', fr: 'Ce que fait cette compétence...' })}
               readOnly={isReadOnly}
             />
             <FormField
-              label="Version"
+              label={t({ en: 'Version', fr: 'Version' })}
               value={formData.version as string}
               onChange={(version) => setFormData((prev) => ({ ...prev, version }))}
               placeholder="1.0.0"
@@ -237,12 +246,15 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
         </div>
 
         <div className="flex-1 min-h-[120px] border-t border-border pt-3 flex flex-col">
-          <label className="block text-xs text-text-secondary mb-1">Prompt</label>
+          <label className="block text-xs text-text-secondary mb-1">{t({ en: 'Prompt', fr: 'Invite' })}</label>
           <textarea
             value={formData.prompt}
             onChange={(e) => setFormData((prev) => ({ ...prev, prompt: e.target.value }))}
             readOnly={isReadOnly}
-            placeholder="The system prompt for this skill..."
+            placeholder={t({
+              en: 'The system prompt for this skill...',
+              fr: 'L’invite système pour cette compétence...',
+            })}
             className="h-80 w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-primary"
           />
         </div>
@@ -256,7 +268,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
 
         <div className="flex justify-end gap-2 pt-3 border-t border-border flex-shrink-0">
           <Button variant="secondary" onClick={() => setView('list')}>
-            Cancel
+            {t({ en: 'Cancel', fr: 'Annuler' })}
           </Button>
           {isReadOnly ? (
             <Button
@@ -264,14 +276,14 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
               onClick={() => {
                 setFormData((prev) => ({
                   ...prev,
-                  name: prev.name + ' (copy)',
+                  name: prev.name + ' ' + t({ en: '(copy)', fr: '(copie)' }),
                   id: `${editingId}-copy-${Date.now()}`,
                   isReadOnly: false,
                 }))
                 setEditingId(null)
               }}
             >
-              Duplicate & Customize
+              {t({ en: 'Duplicate & Customize', fr: 'Dupliquer et personnaliser' })}
             </Button>
           ) : (
             <Button
@@ -279,7 +291,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
               onClick={handleSave}
               disabled={saving || !formData.name || !formData.id || !formData.prompt}
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t({ en: 'Saving...', fr: 'Enregistrement...' }) : t({ en: 'Save', fr: 'Enregistrer' })}
             </Button>
           )}
         </div>
@@ -332,34 +344,31 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
           ))}
         </div>
       )}
-      <CRUDListHeader
-        description="Skills provide domain-specific knowledge that agents can load on demand."
+      <CRUDListScaffold
+        description={t({
+          en: 'Skills provide domain-specific knowledge that agents can load on demand.',
+          fr: 'Les compétences fournissent des connaissances spécifiques que les agents peuvent charger à la demande.',
+        })}
         onNew={handleNew}
-      />
-
-      <CRUDListView
         loading={loading}
         hasItems={defaults.length > 0 || userItems.length > 0}
-        loadingLabel="Loading skills..."
-        emptyLabel="No skills created yet."
+        loadingLabel={t({ en: 'Loading skills...', fr: 'Chargement des compétences...' })}
+        emptyLabel={t({ en: 'No skills created yet.', fr: 'Aucune compétence créée pour l’instant.' })}
       >
         {defaults.length > 0 && (
-          <div>
-            <h3 className="text-xs font-medium text-text-secondary mb-2 uppercase tracking-wide">Built-in</h3>
-            <div className="space-y-2">
-              {defaults.map((skill) => (
-                <SkillListItem
-                  key={skill.id}
-                  skill={skill}
-                  isBuiltIn={true}
-                  isConfirmingDelete={false}
-                  onView={() => handleView(skill.id)}
-                  onDuplicate={() => handleDuplicate(skill.id)}
-                  onToggle={() => toggleSkill(skill.id, workdir)}
-                />
-              ))}
-            </div>
-          </div>
+          <ItemsHeader label={t({ en: 'Built-in', fr: 'Intégrées' })}>
+            {defaults.map((skill) => (
+              <SkillListItem
+                key={skill.id}
+                skill={skill}
+                isBuiltIn={true}
+                isConfirmingDelete={false}
+                onView={() => handleView(skill.id)}
+                onDuplicate={() => handleDuplicate(skill.id)}
+                onToggle={() => toggleSkill(skill.id, workdir)}
+              />
+            ))}
+          </ItemsHeader>
         )}
 
         {userItems.length > 0 && (
@@ -370,24 +379,22 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
 
         {items.some((skill) => ['global-shared', 'selected', 'project-shared'].includes(skill.source)) && (
           <div className="mt-4">
-            <h3 className="text-xs font-medium text-text-secondary mb-2 uppercase tracking-wide">Shared</h3>
-            <div className="space-y-2">
+            <ItemsHeader label={t({ en: 'Shared', fr: 'Partagées' })}>
               <EditableSkillItems
                 items={items.filter((skill) => ['global-shared', 'selected', 'project-shared'].includes(skill.source))}
               />
-            </div>
+            </ItemsHeader>
           </div>
         )}
 
         {projectItems.length > 0 && (
           <div className="mt-4">
-            <h3 className="text-xs font-medium text-text-secondary mb-2 uppercase tracking-wide">Project</h3>
-            <div className="space-y-2">
+            <ItemsHeader label={t({ en: 'Project', fr: 'Projet' })}>
               <EditableSkillItems items={projectItems} />
-            </div>
+            </ItemsHeader>
           </div>
         )}
-      </CRUDListView>
+      </CRUDListScaffold>
     </div>
   )
 }

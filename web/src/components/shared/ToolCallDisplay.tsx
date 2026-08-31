@@ -21,6 +21,7 @@ import { useSetting } from '../../hooks/useSetting'
 import { buildEditorUrl } from '../../lib/editor-link'
 import { detectRemoteExecution } from '../../lib/remote-execution'
 import type { ToolStatus } from '../../lib/toolStatus'
+import { useT } from '../../hooks/useT'
 
 interface StreamingChunk {
   stream: 'stdout' | 'stderr'
@@ -120,6 +121,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
   truncated,
   callId,
 }: ToolCallDisplayProps) {
+  const t = useT()
   // Expand by default for parity — a call seen streaming stays visible once it
   // finishes and a reload shows the same content. When the collapseLargeToolCalls
   // performance setting is on, large finished calls start collapsed (pending
@@ -260,7 +262,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
               return (
                 <div>
                   <div className="text-[10px] text-accent-primary font-medium mb-1 uppercase tracking-wide">
-                    Sub-Agent Summary
+                    {t({ en: 'Sub-Agent Summary', fr: 'Résumé du sous-agent' })}
                   </div>
                   <div className="text-xs prose prose-invert prose-sm max-w-none">
                     <Markdown content={displayContent} />
@@ -273,7 +275,8 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
           {tool === 'call_sub_agent' && (
             <div>
               <div className="text-[10px] text-accent-primary font-medium mb-1 uppercase tracking-wide">
-                {String(args.subAgentType ?? 'Sub-Agent')} Prompt
+                {String(args.subAgentType ?? t({ en: 'Sub-Agent', fr: 'Sous-agent' }))}{' '}
+                {t({ en: 'Prompt', fr: 'Invite' })}
               </div>
               <OptionalScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={String(args.prompt ?? '')} />
@@ -295,7 +298,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
           {tool === 'load_skill' && status === 'success' && (
             <div>
               <div className="text-[10px] text-accent-primary font-medium mb-1 uppercase tracking-wide">
-                Skill: {String(args.skillId ?? '')}
+                {t({ en: 'Skill: {{skill}}', fr: 'Compétence : {{skill}}' }, { skill: String(args.skillId ?? '') })}
               </div>
               <OptionalScrollArea className="text-xs prose prose-invert prose-sm max-w-none max-h-[60vh]">
                 <Markdown content={result ?? ''} />
@@ -309,7 +312,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
             <div className="space-y-2">
               {Boolean(metadata?.url) && (
                 <div className="flex items-center gap-2 text-xs text-text-muted">
-                  <span>Source:</span>
+                  <span>{t({ en: 'Source:', fr: 'Source :' })}</span>
                   <a
                     href={String(metadata!.url)}
                     className="text-accent-primary hover:underline truncate"
@@ -322,7 +325,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                     <span className="text-text-muted flex-shrink-0">({String(metadata!.contentType)})</span>
                   )}
                   {metadata?.pageCount != null && (
-                    <span className="text-text-muted flex-shrink-0">· {String(metadata!.pageCount)} pages</span>
+                    <span className="text-text-muted flex-shrink-0">
+                      {t({ en: '· {{n}} pages', fr: '· {{n}} pages' }, { n: String(metadata!.pageCount) })}
+                    </span>
                   )}
                 </div>
               )}
@@ -373,7 +378,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                 {/* Show arguments only if there are meaningful keys */}
                 {Object.keys(args).length > 0 && (
                   <div>
-                    <div className="text-[10px] text-text-muted mb-0.5">Arguments:</div>
+                    <div className="text-[10px] text-text-muted mb-0.5">
+                      {t({ en: 'Arguments:', fr: 'Arguments :' })}
+                    </div>
                     <OptionalScrollArea horizontal>
                       <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{formatToolArgsFull(args)}</pre>
                     </OptionalScrollArea>
@@ -384,10 +391,14 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                 {status === 'success' && result !== undefined && (
                   <div>
                     <div className="text-[10px] text-text-muted mb-0.5">
-                      Result{durationMs !== undefined && ` (${durationMs}ms)`}:
+                      {durationMs !== undefined
+                        ? t({ en: 'Result ({{ms}}ms):', fr: 'Résultat ({{ms}} ms) :' }, { ms: durationMs })
+                        : t({ en: 'Result:', fr: 'Résultat :' })}
                     </div>
                     <OptionalScrollArea horizontal className="max-h-[60vh]">
-                      <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">{result || 'No output'}</pre>
+                      <pre className="text-xs bg-bg-primary p-1.5 rounded break-words">
+                        {result || t({ en: 'No output', fr: 'Aucune sortie' })}
+                      </pre>
                     </OptionalScrollArea>
                     {truncated && <TruncatedIndicator className="mt-1" />}
                   </div>
@@ -404,7 +415,9 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
               {status === 'success' &&
                 durationMs !== undefined &&
                 (tool === 'run_command' || tool === 'edit_file' || tool === 'write_file' || tool === 'read_file') && (
-                  <span>Completed in {(durationMs / 1000).toFixed(2)}s</span>
+                  <span>
+                    {t({ en: 'Completed in {{s}}s', fr: 'Terminé en {{s}} s' }, { s: (durationMs / 1000).toFixed(2) })}
+                  </span>
                 )}
               <span className="flex-1" />
               {showEditorLink &&
@@ -414,12 +427,12 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
                     href={buildEditorUrl(String(metadata?.path ?? args.path), editorLine)}
                     className="text-accent-primary hover:underline"
                   >
-                    Open in VSCode
+                    {t({ en: 'Open in VSCode', fr: 'Ouvrir dans VSCode' })}
                   </a>
                 )}
               {remoteProtocol && (
                 <span className="shrink-0 rounded border border-text-thinking/50 bg-text-thinking/15 px-1.5 py-0.5 font-semibold tracking-wide text-text-thinking">
-                  REMOTE · {remoteProtocol}
+                  {t({ en: 'REMOTE · {{protocol}}', fr: 'DISTANT · {{protocol}}' }, { protocol: remoteProtocol })}
                 </span>
               )}
             </div>
@@ -428,7 +441,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
           {/* Error display for non-run_command (run_command handles its own errors) */}
           {status === 'error' && error && tool !== 'run_command' && (
             <div>
-              <div className="text-[10px] text-accent-error mb-0.5">Error:</div>
+              <div className="text-[10px] text-accent-error mb-0.5">{t({ en: 'Error:', fr: 'Erreur :' })}</div>
               <pre className="text-xs bg-bg-primary p-1.5 rounded text-accent-error break-words">{error}</pre>
             </div>
           )}

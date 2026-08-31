@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, type RefObject } from 'react'
 import { CheckIcon, EditSmallIcon, EyeIcon, StarIcon, StarFilledIcon, WarningIcon } from '../shared/icons'
 import type { Provider } from '../../stores/config'
 import { isSmallContext } from '../../lib/context-warning'
+import { useT } from '../../hooks/useT'
 
 export function formatContextWindow(context: number): string {
   if (context >= 1000000) return `${(context / 1000000).toFixed(1)}M`
@@ -93,6 +94,7 @@ export function ModelEntryRow({
   selectedEffort,
   onSelectEffort,
 }: ModelEntryRowProps) {
+  const t = useT()
   const showEfforts = (reasoningEfforts?.length ?? 0) > 0 && !!onSelectEffort
   return (
     <div
@@ -113,7 +115,12 @@ export function ModelEntryRow({
         </button>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           {modelConfig.supportsVision && (
-            <span data-vision className="text-text-muted flex-shrink-0" title="Vision model" aria-label="Vision model">
+            <span
+              data-vision
+              className="text-text-muted flex-shrink-0"
+              title={t({ en: 'Vision model', fr: 'Modèle vision' })}
+              aria-label={t({ en: 'Vision model', fr: 'Modèle vision' })}
+            >
               <EyeIcon className="w-3.5 h-3.5" />
             </span>
           )}
@@ -122,7 +129,10 @@ export function ModelEntryRow({
             <span
               data-small-context
               className="text-accent-warning"
-              title="Small context window — agent prompts may be truncated by the provider"
+              title={t({
+                en: 'Small context window — agent prompts may be truncated by the provider',
+                fr: 'Fenêtre de contexte réduite — les invites de l’agent peuvent être tronquées par le fournisseur',
+              })}
             >
               <WarningIcon className="w-3.5 h-3.5" />
             </span>
@@ -133,7 +143,11 @@ export function ModelEntryRow({
               onClick={(e) => onSetDefault(e, providerId, modelConfig.id)}
               disabled={settingDefault}
               className="p-0.5 hover:bg-bg-tertiary rounded transition-colors disabled:opacity-40"
-              title={isDef ? 'Default model' : 'Set as default model'}
+              title={
+                isDef
+                  ? t({ en: 'Default model', fr: 'Modèle par défaut' })
+                  : t({ en: 'Set as default model', fr: 'Définir comme modèle par défaut' })
+              }
             >
               {isDef ? (
                 <StarFilledIcon className="w-3.5 h-3.5 text-accent-warning" />
@@ -150,13 +164,16 @@ export function ModelEntryRow({
                 onEditModel(providerId, modelConfig)
               }}
               className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-bg-tertiary rounded transition-opacity"
-              title="Edit model context"
+              title={t({ en: 'Edit model context', fr: 'Modifier le contexte du modèle' })}
             >
               <EditSmallIcon className="w-3 h-3 text-text-muted" />
             </button>
           )}
           {isActive && (
-            <span className="text-accent-success flex-shrink-0" title="Session model">
+            <span
+              className="text-accent-success flex-shrink-0"
+              title={t({ en: 'Session model', fr: 'Modèle de session' })}
+            >
               <CheckIcon className="w-3.5 h-3.5" />
             </span>
           )}
@@ -165,7 +182,10 @@ export function ModelEntryRow({
       {showEfforts && (
         <div
           className="flex flex-wrap items-center gap-1 px-4 pb-1.5"
-          aria-label={`Reasoning efforts for ${modelConfig.id}`}
+          aria-label={t({
+            en: `Reasoning efforts for ${modelConfig.id}`,
+            fr: `Niveaux de raisonnement pour ${modelConfig.id}`,
+          })}
         >
           {reasoningEfforts!.map((effort) => {
             const isEffortActive = selectedEffort === effort
