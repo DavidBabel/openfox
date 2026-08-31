@@ -388,9 +388,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     if (!name || !workdir) {
       return res.status(400).json({ error: 'name and workdir are required' })
     }
-    const { createDirectoryWithGit } = await import('./utils/project-creator.js')
+    const { createProjectDirectory } = await import('./utils/project-creator.js')
     try {
-      const project = await createDirectoryWithGit(name, workdir)
+      const project = await createProjectDirectory(name, workdir)
       res.status(201).json({ project })
     } catch (err) {
       const eaccError = err as Error & { code?: string; cause?: unknown }
@@ -3548,8 +3548,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     sessionManager,
     listProjects: () => listProjects(),
     createProject: async (name, workdir) => {
-      const { createDirectoryWithGit } = await import('./utils/project-creator.js')
-      return createDirectoryWithGit(name, workdir)
+      const { createProjectDirectory } = await import('./utils/project-creator.js')
+      return createProjectDirectory(name, workdir)
     },
     deleteProject: (projectId) => {
       const project = getProject(projectId)
