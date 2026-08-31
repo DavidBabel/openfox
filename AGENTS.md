@@ -156,6 +156,16 @@ return { success: false, error: error.message, durationMs, truncated: false }
 - Use Zod for runtime validation of config/external input
 - Event sourcing pattern for session state (EventStore)
 
+### Internationalization (en + fr)
+
+All user-facing strings ship in English AND French — no fallback, a missing `fr` entry is a type error.
+
+- Web UI strings go through `useT()`/`t({ en, fr })`; the `jsx-no-literals` lint gate enforces this — never bypass it with a disable.
+- The gate flags JSX text, string literals (including `cond ? 'a' : 'b'` and `a && 'b'`) and `aria-label`/`placeholder`/`title`/`alt`. Language-neutral glyphs and acronyms (e.g. `MCP`, `99+`) go in the `allowedStrings` allowlist in `eslint.config.js`, not in `t()`.
+- If the gate misses a string shape, extend `eslint/jsx-no-literals.mjs` and add a case to `eslint/jsx-no-literals.test.ts` first.
+- Never call `useT()` after a conditional early return — keep hooks at the top of the component.
+- Server/CLI use `serverT()`/`cliT()`; LLM-facing, external tool output, and dev-facing strings stay English. Full reference: `docs/I18N.md`.
+
 ## Design Principles
 
 ### Dumb Client, Smart Server
