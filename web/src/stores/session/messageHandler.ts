@@ -60,6 +60,12 @@ function removeUnreadSessionId(unreadSessionIds: string[], sessionId: string): s
   return unreadSessionIds.filter((id) => id !== sessionId)
 }
 
+function clearsLiveTurnStats(payload: ChatDonePayload): boolean {
+  // Sub-agent completions and waiting_for_user are mid-turn pauses: the live
+  // stats stay accurate and resume streaming once the turn continues.
+  return payload.agentType !== 'sub-agent' && payload.reason !== 'waiting_for_user'
+}
+
 function markBackgroundSessionUnread(
   set: (fn: (state: SessionState) => Partial<SessionState>) => void,
   message: ServerMessage,
@@ -697,9 +703,10 @@ export function handleServerMessage(
               : m,
           ),
           visionFallbackByMessage: {},
-          // Sub-agent completions arrive mid-turn — don't wipe the parent turn's
-          // live stats; they are replaced by the next top-level chat.stats.
-          ...(payload.agentType !== 'sub-agent' ? { liveTurnStats: null } : {}),
+          // Sub-agent completions and waiting_for_user arrive mid-turn — don't
+          // wipe the parent turn's live stats; they are replaced by the next
+          // top-level chat.stats / resumed streaming.
+          ...(clearsLiveTurnStats(payload) ? { liveTurnStats: null } : {}),
           ...(payload.reason !== 'error' ? { llmRetry: null } : {}),
         })),
       )
