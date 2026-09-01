@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.0.135 - 2026-09-01
+
+### Features
+
+- **Export and import sessions** — save a session to a JSON file and restore it elsewhere, preserving its cached layout
+
+### Enhancements
+
+- **Fuller mobile header navigation** — the project and session dropdowns from desktop now appear on mobile, with a Home shortcut back to the project list
+- **Shorter French UI labels** — history, stop, and related controls use more concise wording
+
+### Bug Fixes
+
+- **Live turn stats stay visible** — they no longer disappear while the assistant waits for your input
+- **Header dropdown closes on middle-click** — navigating via a link's middle-click now dismisses the menu
+- **Dev server status loads at startup** — the header no longer shows “Aucune config” until the popover is opened
+- **Missing French labels translated** — “No matches” and “Task Completed” now render in French
+
 ## 2.0.134 - 2026-08-31
 
 ### Features
