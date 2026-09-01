@@ -123,12 +123,12 @@ export function SessionDropdown({
       onOpenChange={onOpenChange}
       trigger={
         <button
-          className="text-text-secondary hover:text-text-primary hover:underline text-sm truncate flex items-center gap-1"
+          className="text-text-secondary hover:text-text-primary hover:underline text-sm w-full min-w-0 flex items-center gap-1"
           title={rawTitle ?? ''}
           data-testid="header-session-dropdown"
         >
-          {triggerLabel}
-          <ChevronDownIcon />
+          <span className="truncate min-w-[3ch]">{triggerLabel}</span>
+          <ChevronDownIcon className="w-3 h-3 flex-shrink-0" />
         </button>
       }
       minWidth="280px"
