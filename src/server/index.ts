@@ -811,6 +811,36 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     res.json({ sessions: sessionManager.listHomeSessions() })
   })
 
+  /**
+   * Build the session.created broadcast message shared by the create and
+   * import routes, so the payload shape cannot drift between them.
+   */
+  function buildSessionCreatedMessage(session: import('../shared/types.js').Session) {
+    return {
+      type: 'session.created' as const,
+      sessionId: session.id,
+      payload: {
+        session: {
+          id: session.id,
+          projectId: session.projectId,
+          title: session.metadata.title,
+          workdir: session.workdir,
+          workspace: session.workspace,
+          mode: session.mode,
+          phase: session.phase,
+          isRunning: session.isRunning,
+          providerId: session.providerId,
+          providerModel: session.providerModel,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          criteriaCount: session.criteria.length,
+          criteriaCompleted: session.criteria.filter((c) => c.status.type === 'passed').length,
+          messageCount: session.messageCount ?? session.messages.length,
+        },
+      },
+    }
+  }
+
   app.post('/api/sessions', async (req, res) => {
     const { projectId, title } = req.body
     if (!projectId) {
@@ -849,29 +879,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     } catch {
       // Non-critical — session works without MCP overrides
     }
-    wssExports.broadcastForProject(projectId, session.id, {
-      type: 'session.created',
-      sessionId: session.id,
-      payload: {
-        session: {
-          id: session.id,
-          projectId: session.projectId,
-          title: session.metadata.title,
-          workdir: session.workdir,
-          workspace: session.workspace,
-          mode: session.mode,
-          phase: session.phase,
-          isRunning: session.isRunning,
-          providerId: session.providerId,
-          providerModel: session.providerModel,
-          createdAt: session.createdAt,
-          updatedAt: session.updatedAt,
-          criteriaCount: session.criteria.length,
-          criteriaCompleted: session.criteria.filter((c) => c.status.type === 'passed').length,
-          messageCount: session.messageCount ?? session.messages.length,
-        },
-      },
-    })
+    wssExports.broadcastForProject(projectId, session.id, buildSessionCreatedMessage(session))
     res.status(201).json({ session: toClientSession(session) })
   })
 
@@ -1701,6 +1709,49 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         return res.status(404).json({ error: message })
       }
       return res.status(500).json({ error: message })
+    }
+  })
+
+  // Export: download a session as a self-contained JSON document
+  app.get('/api/sessions/:id/export', async (req, res) => {
+    const sessionId = req.params.id as string
+    const session = sessionManager.getSession(sessionId)
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    try {
+      const { buildSessionExport } = await import('./session/export-import.js')
+      const payload = buildSessionExport(sessionManager, sessionId)
+      const filename = `${(payload.session.title ?? 'session').replace(/[^a-zA-Z0-9-_]/g, '_')}.openfox-session.json`
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      return res.json(payload)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return res.status(500).json({ error: message })
+    }
+  })
+
+  // Import: create a session in a project from an export document
+  app.post('/api/sessions/import', async (req, res) => {
+    const { projectId, payload } = req.body
+    if (typeof projectId !== 'string' || !projectId) {
+      return res.status(400).json({ error: 'projectId is required' })
+    }
+    if (payload === undefined || payload === null) {
+      return res.status(400).json({ error: 'payload is required' })
+    }
+
+    try {
+      const newSession = await sessionManager.importSession(projectId, payload)
+      wssExports.broadcastForProject(projectId, newSession.id, buildSessionCreatedMessage(newSession))
+      return res.status(201).json({ session: toClientSession(newSession) })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (message.includes('Project not found')) {
+        return res.status(404).json({ error: message })
+      }
+      return res.status(400).json({ error: message })
     }
   })
 

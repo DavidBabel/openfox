@@ -12,12 +12,25 @@ import { CloseButton } from '../shared/CloseButton'
 import { ConfirmModal } from '../shared/ConfirmModal'
 import { Modal } from '../shared/Modal'
 import { ModalFooter } from '../shared/ModalFooter'
-import { EllipsisIcon, SpinIcon, StopIcon, SearchIcon, XCloseIcon, StarIcon, StarFilledIcon } from '../shared/icons'
+import {
+  EllipsisIcon,
+  SpinIcon,
+  StopIcon,
+  SearchIcon,
+  XCloseIcon,
+  StarIcon,
+  StarFilledIcon,
+  DownloadIcon,
+  UploadIcon,
+  GearIcon,
+  TrashIcon,
+  EditSmallIcon,
+} from '../shared/icons'
 import { groupSessionsByDate, formatDateHeader, formatTime } from '../../lib/format-date.js'
 import { fuzzyMatch, highlightMatches } from '../../lib/modal-utils.js'
 import { shouldAutofocus } from '../../lib/device'
 import { useBinding, useKeybindings } from '../../hooks/useKeybindings.js'
-import { hasStoredToken } from '../../lib/api'
+import { hasStoredToken, downloadSessionExport, importSession } from '../../lib/api'
 import { useResizable } from '../../hooks/useResizable'
 import { ResizeHandle } from '../shared/ResizeHandle'
 import { useSidebarStore } from '../../stores/sidebar'
@@ -38,6 +51,9 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
   const [sessionToRename, setSessionToRename] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [showDeleteAll, setShowDeleteAll] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const importFileInputRef = useRef<HTMLInputElement>(null)
 
   const sessions = useSessionStore((state) => state.sessions)
   const currentSession = useSessionStore((state) => state.currentSession)
@@ -199,6 +215,33 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
     toggleFavorite(sessionId, !isFavorite)
   }
 
+  const handleExportSession = async (sessionId: string) => {
+    const session = sessions.find((s) => s.id === sessionId)
+    setExportError(null)
+    const ok = await downloadSessionExport(sessionId, session?.title)
+    if (!ok) {
+      setExportError(t({ en: 'Failed to export session', fr: 'Échec de l’export de la session' }))
+    }
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImportError(null)
+    try {
+      const payload = JSON.parse(await file.text())
+      const result = await importSession(projectId, payload)
+      if (result.ok) {
+        navigate(`/p/${projectId}/s/${result.session.id}`)
+      } else {
+        setImportError(result.error)
+      }
+    } catch {
+      setImportError(t({ en: 'Invalid session file', fr: 'Fichier de session invalide' }))
+    }
+  }
+
   const handleSessionListClick = (e: React.MouseEvent) => {
     if (!wasAutoOpenedRef.current) return
     const link = (e.target as HTMLElement).closest('a[href*="/s/"]')
@@ -259,14 +302,28 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
               >
                 {t({ en: '+ New Session', fr: '+ Nouvelle session' })}
               </Link>
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleImportFile}
+              />
               <DropdownMenu
                 items={[
                   {
+                    label: t({ en: 'Import session', fr: 'Importer une session' }),
+                    icon: <UploadIcon className="w-3.5 h-3.5" />,
+                    onClick: () => importFileInputRef.current?.click(),
+                  },
+                  {
                     label: t({ en: 'Edit project settings', fr: 'Modifier les paramètres du projet' }),
+                    icon: <GearIcon className="w-3.5 h-3.5" />,
                     onClick: () => setShowSettings(true),
                   },
                   {
                     label: t({ en: 'Delete all sessions', fr: 'Supprimer toutes les sessions' }),
+                    icon: <TrashIcon className="w-3.5 h-3.5" />,
                     onClick: handleDeleteAllSessions,
                     danger: true,
                   },
@@ -283,6 +340,24 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
               {/* Overlay close button */}
               {onClose && overlay && <CloseButton onClick={onClose} variant="sidebar" size="md" />}
             </div>
+
+            {/* Transfer errors (import/export) */}
+            {(importError || exportError) && (
+              <div className="px-4 py-2 border-b border-border text-xs text-accent-error flex items-center justify-between gap-2">
+                <span className="break-words">{importError ?? exportError}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportError(null)
+                    setExportError(null)
+                  }}
+                  className="flex-shrink-0 p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+                  aria-label={t({ en: 'Dismiss', fr: 'Fermer' })}
+                >
+                  <XCloseIcon className="w-3 h-3" />
+                </button>
+              </div>
+            )}
 
             {/* Search bar */}
             <div className="px-4 py-2 border-b border-border">
@@ -408,6 +483,7 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
                       handleDeleteSession,
                       handleRenameSession,
                       handleToggleFavorite,
+                      handleExportSession,
                       projectId,
                       sessionsWithPendingConfirmations,
                       pendingPathConfirmations,
@@ -460,6 +536,7 @@ function renderSessionList(
   handleDeleteSession: (sessionId: string, e?: React.MouseEvent) => void,
   handleRenameSession: (sessionId: string, e?: React.MouseEvent) => void,
   handleToggleFavorite: (sessionId: string, isFavorite: boolean) => void,
+  handleExportSession: (sessionId: string) => void,
   projectId: string,
   sessionsWithPendingConfirmations: string[],
   pendingPathConfirmations: PendingPathConfirmation[],
@@ -516,10 +593,24 @@ function renderSessionList(
                   },
                   {
                     label: t({ en: 'Rename session', fr: 'Renommer la session' }),
+                    icon: <EditSmallIcon className="w-3.5 h-3.5" />,
                     onClick: (e?: React.MouseEvent) => handleRenameSession(session.id, e),
                   },
+                  ...(isRunning
+                    ? []
+                    : [
+                        {
+                          label: t({ en: 'Export session', fr: 'Exporter la session' }),
+                          icon: <DownloadIcon className="w-3.5 h-3.5" />,
+                          onClick: (e?: React.MouseEvent) => {
+                            e?.stopPropagation()
+                            handleExportSession(session.id)
+                          },
+                        },
+                      ]),
                   {
                     label: t({ en: 'Delete session', fr: 'Supprimer la session' }),
+                    icon: <TrashIcon className="w-3.5 h-3.5" />,
                     onClick: (e?: React.MouseEvent) => handleDeleteSession(session.id, e),
                     danger: true,
                   },

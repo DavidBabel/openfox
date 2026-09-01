@@ -36,6 +36,7 @@ import {
   updateSessionWorkdir,
   updateSessionBranch,
   updateSessionMessageCount,
+  setSessionMessageCount,
   getSessionCachedPrompt,
   createWorkflowExecution,
   updateWorkflowExecutionStatus,
@@ -505,6 +506,126 @@ export class SessionManager {
     this.emit({ type: 'session_updated', session: this.requireSession(newSession.id) })
 
     return this.requireSession(newSession.id)
+  }
+
+  /**
+   * Import a session from an export document into a target project.
+   *
+   * The cached layout (system prompt, tools, hash) is restored verbatim so the
+   * provider-side prefix cache stays valid, and the event history is replayed
+   * as-is. Drift between the original environment's cached layout and the
+   * target environment (system prompt, tools) is announced via injected
+   * <system-reminder> messages, followed by an import marker reminder.
+   *
+   * @param projectId - Target project (the session is created there)
+   * @param rawPayload - Exported session document (validated)
+   * @returns The imported session
+   * @throws Error for invalid payloads or unknown project
+   */
+  async importSession(projectId: string, rawPayload: unknown): Promise<Session> {
+    const { parseSessionExport, IMPORTED_SESSION_REMINDER, SESSION_EXPORT_VERSION } = await import('./export-import.js')
+    const { injectContextDriftReminders, getToolSetFingerprint } = await import('../chat/dynamic-context.js')
+    const { loadAllAgentsDefault, resolveDefaultAgentId } = await import('../agents/registry.js')
+
+    const payload = parseSessionExport(rawPayload)
+    if (payload.version !== SESSION_EXPORT_VERSION) {
+      throw new Error(`Unsupported session export version: ${payload.version}`)
+    }
+
+    const project = getProject(projectId)
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`)
+    }
+
+    if (!payload.events.some((event) => event.type === 'session.initialized')) {
+      throw new Error('Invalid session export: missing session.initialized event')
+    }
+
+    // Provider resolution: keep the exported sticky pick when the provider
+    // exists in the target environment. When it does not, match by backend +
+    // base URL so the same inference server is reused even under a different
+    // provider label (team scenario). Only when neither matches do we fall
+    // back to the environment defaults.
+    const providers = this.providerManager.getProviders()
+    const providerId = payload.session.providerId ?? null
+    const providerModel = payload.session.providerModel ?? null
+    let resolvedProviderId: string | null = null
+    let resolvedProviderModel: string | null = null
+    if (providerId && providers.some((p) => p.id === providerId)) {
+      resolvedProviderId = providerId
+      resolvedProviderModel = providerModel
+    } else if (providerId && payload.source?.providerBackend && payload.source.providerUrl) {
+      const normalizeUrl = (url: string) => url.replace(/\/+$/, '')
+      const sourceBackend = payload.source.providerBackend
+      const sourceUrl = normalizeUrl(payload.source.providerUrl)
+      const urlMatch = providers.find(
+        (p) =>
+          p.backend === sourceBackend &&
+          p.url !== undefined &&
+          normalizeUrl(p.url) === sourceUrl &&
+          providerModel !== null &&
+          p.models.some((m) => m.id === providerModel || m.apiModelId === providerModel),
+      )
+      if (urlMatch) {
+        resolvedProviderId = urlMatch.id
+        resolvedProviderModel = providerModel
+      }
+    }
+
+    const session = dbCreateSession(
+      projectId,
+      project.workdir,
+      payload.session.title,
+      resolvedProviderId,
+      resolvedProviderModel,
+    )
+
+    const eventStore = getEventStore()
+    eventStore.importEvents(session.id, payload.events as unknown as import('../events/types.js').StoredEvent[])
+
+    // Mode fallback: the restored source mode is only kept when the agent
+    // exists in the target environment; otherwise fall back to the project's
+    // default agent.
+    const agents = await loadAllAgentsDefault(project.workdir)
+    const restoredMode = getSessionState(session.id)?.mode ?? session.mode
+    if (!agents.some((agent) => agent.metadata.id === restoredMode)) {
+      this.setMode(session.id, resolveDefaultAgentId(projectId))
+    }
+
+    if (payload.cachedLayout) {
+      updateSessionCachedPrompt(
+        session.id,
+        payload.cachedLayout.systemPrompt,
+        payload.cachedLayout.tools,
+        payload.cachedLayout.hash,
+        payload.cachedLayout.promptHash,
+      )
+      this.setAnnouncedPromptHash(session.id, payload.cachedLayout.promptHash ?? payload.cachedLayout.hash)
+      this.setAnnouncedToolFingerprint(session.id, getToolSetFingerprint(payload.cachedLayout.tools))
+      // The imported prefix is a known-good cache prefix — mark the session
+      // warmed up so it behaves like a forked session.
+      this.markWarmedUp(session.id)
+    }
+
+    // Announce any drift between the original environment's cached layout and
+    // the target environment (system prompt, tools) exactly once.
+    await injectContextDriftReminders(this, session.id)
+
+    // Import marker: the latest system reminders are authoritative.
+    emitUserMessage(session.id, IMPORTED_SESSION_REMINDER, {
+      isSystemGenerated: true,
+      messageKind: 'auto-prompt',
+      metadata: { type: 'session-import', name: 'Session Imported', color: '#6b7280', kind: 'reminder' },
+    })
+
+    const state = getSessionState(session.id)
+    if (state) {
+      setSessionMessageCount(session.id, state.messages.length)
+    }
+
+    this.emit({ type: 'session_created', session: this.requireSession(session.id) })
+
+    return this.requireSession(session.id)
   }
 
   /**
