@@ -2,7 +2,8 @@ import { ScrollArea } from '../shared/ScrollArea'
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { useState, useEffect, useRef, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { useDevServerStore, useDevServerEntry } from '../../stores/dev-server'
+import { useDevServerStore } from '../../stores/dev-server'
+import { useDevServer } from '../../hooks/useDevServer'
 import { useT } from '../../hooks/useT'
 import { GearIcon, StopIcon, OpenExternalIcon } from '../shared/icons'
 import { DevServerConfigModal } from './DevServerConfigModal'
@@ -132,10 +133,9 @@ export const DevServerFooter = memo(function DevServerFooter({
   onConfigure,
 }: DevServerFooterProps) {
   const t = useT()
-  const { status, config, logs } = useDevServerEntry(workdir)
+  const { status, config, logs } = useDevServer(workdir)
   const start = useDevServerStore((s) => s.start)
   const stop = useDevServerStore((s) => s.stop)
-  const fetchLogs = useDevServerStore((s) => s.fetchLogs)
   const clearLogs = useDevServerStore((s) => s.clearLogs)
   const insertMarker = useDevServerStore((s) => s.insertMarker)
 
@@ -173,20 +173,6 @@ export const DevServerFooter = memo(function DevServerFooter({
   const state = status?.state ?? 'off'
   const hasConfig = config !== null
   const isAlive = state === 'running' || state === 'warning'
-
-  // Fetch status and config for this pane's workdir
-  useEffect(() => {
-    if (!workdir) return
-    void useDevServerStore.getState().fetchStatus(workdir)
-    void useDevServerStore.getState().fetchConfig(workdir)
-  }, [workdir])
-
-  // Fetch full log buffer when server starts
-  useEffect(() => {
-    if (isAlive && workdir) {
-      fetchLogs(workdir)
-    }
-  }, [isAlive, fetchLogs, workdir])
 
   const handleAction = () => {
     if (!workdir) return

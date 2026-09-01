@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { useT } from '../../hooks/useT'
-import { useDevServerStore, useDevServerEntry } from '../../stores/dev-server'
+import { useDevServerStore } from '../../stores/dev-server'
+import { useDevServer } from '../../hooks/useDevServer'
 
 interface DevServerConfigModalProps {
   isOpen: boolean
@@ -12,7 +13,7 @@ interface DevServerConfigModalProps {
 
 export function DevServerConfigModal({ isOpen, onClose, workdir }: DevServerConfigModalProps) {
   const t = useT()
-  const { config } = useDevServerEntry(workdir)
+  const { config } = useDevServer(workdir)
   const saveConfig = useDevServerStore((s) => s.saveConfig)
 
   const [command, setCommand] = useState('')

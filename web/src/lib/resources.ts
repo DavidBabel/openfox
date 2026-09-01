@@ -16,6 +16,7 @@ import type {
   TaskGateConfig,
 } from '@shared/types.js'
 import type { WorkspaceConfig as SharedWorkspaceConfig } from '@shared/workspace.js'
+import type { DevServerConfig, DevServerStatus } from '@shared/dev-server.js'
 
 export interface AgentsData {
   defaults: AgentInfo[]
@@ -756,6 +757,33 @@ export async function fetchBranch(workdir: string): Promise<BranchData> {
 export const branchResource = resource<BranchData, [string]>({
   key: (workdir) => `branch:${workdir}`,
   fetch: fetchBranch,
+  maxAgeMs: 0,
+})
+
+export async function fetchDevServerStatus(workdir: string): Promise<DevServerStatus> {
+  const res = await authFetch(`/api/dev-server?workdir=${encodeURIComponent(workdir)}`)
+  if (!res.ok) throw new Error(`Failed to load dev server status (${res.status})`)
+  return (await res.json()) as DevServerStatus
+}
+
+/** Live dev-server status per workdir. WS `devServer.state` pushes write through. */
+export const devServerStatusResource = resource<DevServerStatus, [string]>({
+  key: (workdir) => `dev-server:status:${workdir}`,
+  fetch: fetchDevServerStatus,
+  maxAgeMs: 0,
+})
+
+export async function fetchDevServerConfig(workdir: string): Promise<DevServerConfig | null> {
+  const res = await authFetch(`/api/dev-server/config?workdir=${encodeURIComponent(workdir)}`)
+  if (!res.ok) throw new Error(`Failed to load dev server config (${res.status})`)
+  const data = (await res.json()) as { config?: DevServerConfig | null }
+  return data.config ?? null
+}
+
+/** Per-workdir `.openfox/dev.json` config; saves POST then write through. */
+export const devServerConfigResource = resource<DevServerConfig | null, [string]>({
+  key: (workdir) => `dev-server:config:${workdir}`,
+  fetch: fetchDevServerConfig,
   maxAgeMs: 0,
 })
 

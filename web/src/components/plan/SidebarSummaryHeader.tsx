@@ -4,7 +4,8 @@ import { LogViewer } from './LogViewer'
 import { createPortal } from 'react-dom'
 import { useT } from '../../hooks/useT'
 import { useSessionStore } from '../../stores/session'
-import { useDevServerStore, useDevServerEntry } from '../../stores/dev-server'
+import { useDevServerStore } from '../../stores/dev-server'
+import { useDevServer } from '../../hooks/useDevServer'
 import { useGitStatus } from '../../hooks/useGitStatus'
 import { SETTINGS_KEYS } from '../../lib/resources'
 import { useSetting } from '../../hooks/useSetting'
@@ -190,10 +191,7 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
   const { contextState, currentSession: session } = useScopedContext()
   const queueUpdate = useSessionStore((state) => state.queueUpdate)
   const workdir = session ? (session.workspace ?? session.workdir) : undefined
-  const devServerEntry = useDevServerEntry(workdir)
-  const devServerStatus = devServerEntry.status
-  const devServerConfig = devServerEntry.config
-  const devServerLogs = devServerEntry.logs
+  const { status: devServerStatus, config: devServerConfig, logs: devServerLogs } = useDevServer(workdir)
   const devServerStart = useDevServerStore((s) => s.start)
   const { branch, diff } = useGitStatus()
   const [showLogModal, setShowLogModal] = useState(false)

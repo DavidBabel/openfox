@@ -188,6 +188,33 @@ Session state is derived from EventStore, not persisted directly:
 - EventStore replays events to reconstruct state
 - Enables time-travel debugging and audit trails
 
+### Resource Cache (Data Loading)
+
+REST/WS-driven data belongs to the data layer, never a component. Define a
+`xxxResource` in `web/src/lib/resources.ts` via the `resource()` factory
+(keyed, single-flight, freshness-aware) and consume it through
+`useResource`/`useResourceWhen` in `web/src/hooks/`. Mounting the hook loads +
+retains the cache entry; unmounting releases it — implicit loadership, no
+component `useEffect` fetch.
+
+**Do:**
+
+- Create one resource per data domain (keyed by its scope args) + a thin
+  `useXxx(scope)` hook; consumers just subscribe, whoever mounts first loads.
+- Write WS payloads and POST/PUT responses through `resource.write(data, ...)`
+  so every subscriber converges without refetching (see `mcpServersResource`,
+  `boardResource`).
+- Keep append-only, unbounded streams (e.g. dev-server logs) in a store with
+  rAF batching and a cap — replace-on-fetch resources don't fit streaming.
+
+**Don't:**
+
+- Don't fire fetches from a component `useEffect` — it makes the first consumer
+  responsible for loading. Real bug this caused: the compact sidebar showed
+  "Aucune config" until the dev-server popover mounted and fetched, because the
+  fetch lived in `DevServerFooter`. If a fetch is needed on mount, it belongs in
+  the data hook or the resource itself.
+
 ### `.openfox/` Directory Contract
 
 Every file in `.openfox/` must be **committable** and **meaningful in the project context** — it describes how OpenFox interacts with _this repository_ for any contributor.
