@@ -89,7 +89,7 @@ export function RunningIndicator() {
       </div>
       {!aborting && state === 'running' && (
         <span className="text-text-muted hidden sm:inline">
-          {t({ en: 'esc to interrupt', fr: 'échap pour interrompre' })}
+          {t({ en: 'esc to interrupt', fr: 'échap pour stopper' })}
         </span>
       )}
       {timerActive && lastPromptAtText && (

@@ -18,7 +18,7 @@ export function AutoScrollToggle({ isActive, onToggle, className, style }: AutoS
       ) : (
         <ChevronDownIcon className="w-3 h-3" />
       )}
-      {isActive ? t({ en: 'Live', fr: 'En direct' }) : t({ en: 'Scroll to bottom', fr: 'Défiler en bas' })}
+      {isActive ? t({ en: 'Live', fr: 'Live' }) : t({ en: 'Scroll to bottom', fr: 'Défiler en bas' })}
     </button>
   )
 }

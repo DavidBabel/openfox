@@ -562,10 +562,10 @@ export function ChatInput({
           type="button"
           onClick={onOpenMessageSearch}
           className="text-sm text-text-muted hover:text-text-primary flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-bg-tertiary transition-colors"
-          aria-label={t({ en: 'Browse history', fr: 'Parcourir l’historique' })}
+          aria-label={t({ en: 'Browse history', fr: 'Historique' })}
         >
           <SearchIcon />
-          {t({ en: 'Browse history', fr: 'Parcourir l’historique' })}
+          {t({ en: 'Browse history', fr: 'Historique' })}
         </button>
       </div>
 
@@ -681,7 +681,7 @@ export function ChatInput({
                 className="flex items-center gap-1 px-4 py-1.5 rounded bg-accent-error/20 text-sm text-accent-error font-medium hover:bg-accent-error/30 transition-colors whitespace-nowrap"
               >
                 <StopIcon />
-                {t({ en: 'Abort', fr: 'Interrompre' })}
+                {t({ en: 'Abort', fr: 'Stopper' })}
               </button>
             )}
             <div className="flex items-center">
