@@ -3,7 +3,7 @@ import { useLocation } from 'wouter'
 import { useProjectStore } from '../../stores/project'
 import { useT } from '../../hooks/useT'
 import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
-import { ChevronDownIcon, CheckIcon, StarIcon, StarFilledIcon, PlusMdIcon, FolderIcon } from '../shared/icons'
+import { ChevronDownIcon, CheckIcon, StarIcon, StarFilledIcon, PlusMdIcon, FolderIcon, HomeIcon } from '../shared/icons'
 import { CreateProjectModal } from '../CreateProjectModal.js'
 import { DirectoryBrowser } from '../shared/DirectoryBrowser.js'
 import { useWorkdir } from '../../hooks/useWorkdir.js'
@@ -82,6 +82,15 @@ export function ProjectDropdown({ projects, currentProject }: ProjectDropdownPro
     {
       label: (
         <div className="flex items-center gap-2">
+          <HomeIcon className="w-4 h-4" />
+          <span>{t({ en: 'Home', fr: 'Accueil' })}</span>
+        </div>
+      ),
+      href: '/',
+    },
+    {
+      label: (
+        <div className="flex items-center gap-2">
           <FolderIcon className="w-4 h-4" />
           <span>{t({ en: 'Open Project', fr: 'Ouvrir un projet' })}</span>
         </div>
@@ -106,13 +115,17 @@ export function ProjectDropdown({ projects, currentProject }: ProjectDropdownPro
         footerItems={footerItems}
         trigger={
           <button
-            className={`text-text-secondary hover:text-text-primary text-sm truncate flex items-center gap-1 ${currentProject ? 'hover:underline' : ''}`}
+            className={`text-text-secondary hover:text-text-primary text-sm min-w-0 flex items-center gap-1 ${currentProject ? 'hover:underline' : ''}`}
             title={currentProject?.name ?? t({ en: 'Select project', fr: 'Sélectionner un projet' })}
           >
-            {currentProject?.name ?? (
-              <span className="text-text-muted">{t({ en: 'Select project...', fr: 'Sélectionner un projet…' })}</span>
+            {currentProject ? (
+              <span className="truncate max-w-[120px]">{currentProject.name}</span>
+            ) : (
+              <span className="text-text-muted truncate max-w-[120px]">
+                {t({ en: 'Select project...', fr: 'Sélectionner un projet…' })}
+              </span>
             )}
-            <ChevronDownIcon />
+            <ChevronDownIcon className="w-3 h-3 flex-shrink-0" />
           </button>
         }
         minWidth="250px"

@@ -28,7 +28,6 @@ import { GlobalSettingsModal } from '../settings/GlobalSettingsModal'
 import { TerminalDrawer } from '../terminal/TerminalDrawer'
 import { ProjectDropdown } from './ProjectDropdown'
 import { SessionDropdown } from './SessionDropdown'
-import { MobileNav } from './MobileNav'
 import { TasksModal } from '../tasks/TasksModal'
 import { useTasksStore } from '../../stores/tasks'
 import { TasksIcon, ArrowRightIcon } from '../shared/icons'
@@ -163,7 +162,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
 
   return (
     <header className="h-8 bg-secondary border-b border-border flex items-center justify-between px-2">
-      <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
         {(onMenuClick && isSessionPage) || (onMenuClick && isSplit) ? (
           <button
             onClick={onMenuClick}
@@ -193,37 +192,22 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
         {!isSplit && project && (
           <>
             <span className="hidden md:inline text-text-muted flex-shrink-0">/</span>
-            <span className="hidden md:inline">
+            <div className="flex-shrink-0">
               <ProjectDropdown projects={projects} currentProject={project} />
-            </span>
+            </div>
 
-            <span className="md:hidden">
-              <MobileNav
-                key={project?.id}
-                currentProject={project}
-                sessions={sessions}
-                currentSession={session}
-                projectIdFromUrl={isProjectPage ? location.split('/')[2] || null : null}
-              />
-            </span>
-            <span className="hidden md:inline text-text-muted flex-shrink-0">/</span>
-            <span className="hidden md:inline">
-              <SessionDropdown
-                sessions={sessions}
-                currentProject={project}
-                currentSession={session}
-                isOpen={sessionDropdownOpen}
-                onOpenChange={setSessionDropdownOpen}
-              />
-            </span>
+            <span className="text-text-muted flex-shrink-0">/</span>
+            <SessionDropdown
+              sessions={sessions}
+              currentProject={project}
+              currentSession={session}
+              isOpen={sessionDropdownOpen}
+              onOpenChange={setSessionDropdownOpen}
+            />
           </>
         )}
 
-        {!isSplit && !project && (
-          <span className="hidden md:inline">
-            <ProjectDropdown projects={projects} />
-          </span>
-        )}
+        {!isSplit && !project && <ProjectDropdown projects={projects} />}
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
