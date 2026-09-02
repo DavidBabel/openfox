@@ -1217,6 +1217,7 @@ export function ProviderModal({
           thinkingConfig: Record<string, unknown> | null
           nonThinkingConfig: Record<string, unknown> | null
           sendReasoningInMessages?: boolean
+          thinkingField?: string
           rejectedParams?: string[]
           reasoningEfforts?: string[]
           defaultReasoningEffort?: string
@@ -1244,6 +1245,9 @@ export function ProviderModal({
         }
         if (m.sendReasoningInMessages === false) {
           setSendReasoningInMessages(false)
+        }
+        if (m.thinkingField) {
+          setThinkingField(m.thinkingField)
         }
         if (m.rejectedParams && m.rejectedParams.length > 0) {
           config.omitParams = m.rejectedParams

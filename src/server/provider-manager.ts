@@ -8,7 +8,12 @@ import { parseLmStudioModels } from './providers/lmstudio.js'
 import { ensureVersionPrefix, stripVersionPrefix, buildModelsUrl } from './llm/url-utils.js'
 import { getCatalogEntry } from './providers/model-catalog.js'
 import { hasVisionEvidence } from './providers/vision.js'
-import { detectBackendFromUrl, getBackendCapabilities, type Backend } from './llm/backend.js'
+import {
+  detectBackendFromUrl,
+  detectProviderDefaultsFromUrl,
+  getBackendCapabilities,
+  type Backend,
+} from './llm/backend.js'
 import { resolveEffortForModel, resolveModeModelId } from '../shared/reasoning-effort.js'
 
 /**
@@ -448,6 +453,14 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
     return effort ? { reasoningEffort: effort } : {}
   }
 
+  function resolveThinkingField(provider: Provider): string | undefined {
+    // Explicit provider config wins; otherwise fall back to the URL-derived
+    // default (rescues configs saved before the behavior existed, e.g. the
+    // DeepSeek reasoning_content contract).
+    if (provider.thinkingField) return provider.thinkingField
+    return detectProviderDefaultsFromUrl(provider.url)?.thinkingField
+  }
+
   function createConfigForProvider(provider: Provider, model: string, reasoningEffort?: string): Config {
     // An explicit effort (session pick, pin, or agent override) wins over the
     // model's configured default, clamped to the model's advertised preset
@@ -463,6 +476,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
       configureModel?.apiModelId,
       model,
     )
+    const thinkingField = resolveThinkingField(provider)
     return {
       ...config,
       llm: {
@@ -471,7 +485,7 @@ export function createProviderManager(config: Config, options: ProviderManagerOp
         model: send.modelId,
         backend: resolveBackend(provider),
         ...(provider.apiKey && { apiKey: provider.apiKey }),
-        ...(provider.thinkingField && { thinkingField: provider.thinkingField }),
+        ...(thinkingField ? { thinkingField } : {}),
         ...(provider.sendReasoningInMessages !== undefined
           ? { sendReasoningInMessages: provider.sendReasoningInMessages }
           : {}),
