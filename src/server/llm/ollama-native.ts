@@ -98,6 +98,27 @@ export function toOllamaThink(effort: string): boolean | string {
  * - Text parts are concatenated into the `content` string
  * - image_url parts are extracted as base64 strings into the `images` array
  */
+/**
+ * Ollama-native tool calls carry `function.arguments` as a parsed object, while
+ * OpenAI-shaped messages carry it as a JSON string. Parse it back into an
+ * object; a message without tool calls passes through untouched.
+ */
+function parseToolCalls(toolCalls: unknown): unknown[] | undefined {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) return undefined
+  return toolCalls.map((toolCall) => {
+    const fn = (toolCall as { function?: { arguments?: unknown } }).function
+    if (!fn || typeof fn.arguments !== 'string') return toolCall
+    try {
+      return {
+        ...toolCall,
+        function: { ...fn, arguments: JSON.parse(fn.arguments) },
+      }
+    } catch {
+      return toolCall
+    }
+  })
+}
+
 function toNativeMessage(message: ChatCompletionMessageParam): Record<string, unknown> {
   const raw = message as unknown as Record<string, unknown>
   const toolCalls = raw['tool_calls']
@@ -128,41 +149,20 @@ function toNativeMessage(message: ChatCompletionMessageParam): Record<string, un
       result['images'] = imageParts
     }
 
-    // If there are also tool_calls, convert their arguments
-    if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-      result['tool_calls'] = toolCalls.map((toolCall) => {
-        const fn = (toolCall as { function?: { arguments?: unknown } }).function
-        if (!fn || typeof fn.arguments !== 'string') return toolCall
-        try {
-          return {
-            ...toolCall,
-            function: { ...fn, arguments: JSON.parse(fn.arguments) },
-          }
-        } catch {
-          return toolCall
-        }
-      })
+    const parsedToolCalls = parseToolCalls(toolCalls)
+    if (parsedToolCalls !== undefined) {
+      result['tool_calls'] = parsedToolCalls
     }
 
     return result
   }
 
   // No content array - handle tool calls if present
-  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+  const parsedToolCalls = parseToolCalls(toolCalls)
+  if (parsedToolCalls !== undefined) {
     return {
       ...raw,
-      tool_calls: toolCalls.map((toolCall) => {
-        const fn = (toolCall as { function?: { arguments?: unknown } }).function
-        if (!fn || typeof fn.arguments !== 'string') return toolCall
-        try {
-          return {
-            ...toolCall,
-            function: { ...fn, arguments: JSON.parse(fn.arguments) },
-          }
-        } catch {
-          return toolCall
-        }
-      }),
+      tool_calls: parsedToolCalls,
     }
   }
 

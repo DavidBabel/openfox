@@ -2073,10 +2073,13 @@ export function ProviderModal({
                           onClick={() => formUrl && fetchModels(formUrl)}
                           disabled={fetchingModels || !formUrl}
                           className="text-xs text-accent-primary hover:underline flex items-center gap-1 disabled:opacity-50"
-                          title="Sync available models from provider"
+                          title={t({
+                            en: 'Sync available models from provider',
+                            fr: 'Synchroniser les modèles disponibles depuis le fournisseur',
+                          })}
                         >
                           <ReloadIcon className={`w-3 h-3 ${fetchingModels ? 'animate-spin' : ''}`} />
-                          Sync
+                          {t({ en: 'Sync', fr: 'Synchroniser' })}
                         </button>
                         <button
                           onClick={() => {
