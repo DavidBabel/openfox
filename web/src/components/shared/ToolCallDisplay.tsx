@@ -4,6 +4,7 @@ import { useDisplaySettings } from '../../hooks/useDisplaySettings'
 import type { Diagnostic, EditContextRegion } from '@shared/types.js'
 import { ToolIcon } from './ToolIcon'
 import { DiffView, FilePreview, EditContextView, ReadFileView } from './DiffView'
+import { DescribeImageView } from './DescribeImageView'
 import { DiagnosticsView } from './DiagnosticsView'
 import { RunCommandView } from './RunCommandView'
 import { Markdown } from './Markdown'
@@ -252,6 +253,11 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
             <ReadFileView result={result} metadata={metadata} filePath={String(args.path ?? '')} />
           )}
 
+          {/* Specialized rendering for describe_image (non-vision models w/ vision fallback) */}
+          {tool === 'describe_image' && (status === 'success' || status === 'pending') && (
+            <DescribeImageView args={args} result={result} metadata={metadata} pending={status === 'pending'} />
+          )}
+
           {/* Specialized rendering for return_value */}
           {tool === 'return_value' &&
             (() => {
@@ -363,6 +369,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
             tool !== 'write_file' &&
             tool !== 'run_command' &&
             tool !== 'read_file' &&
+            tool !== 'describe_image' &&
             tool !== 'return_value' &&
             tool !== 'call_sub_agent' &&
             tool !== 'web_search' &&
@@ -410,11 +417,19 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
           {(remoteProtocol ||
             (status === 'success' &&
               durationMs !== undefined &&
-              (tool === 'run_command' || tool === 'edit_file' || tool === 'write_file' || tool === 'read_file'))) && (
+              (tool === 'run_command' ||
+                tool === 'edit_file' ||
+                tool === 'write_file' ||
+                tool === 'read_file' ||
+                tool === 'describe_image'))) && (
             <div className="text-[10px] text-text-muted flex items-center gap-2">
               {status === 'success' &&
                 durationMs !== undefined &&
-                (tool === 'run_command' || tool === 'edit_file' || tool === 'write_file' || tool === 'read_file') && (
+                (tool === 'run_command' ||
+                  tool === 'edit_file' ||
+                  tool === 'write_file' ||
+                  tool === 'read_file' ||
+                  tool === 'describe_image') && (
                   <span>
                     {t({ en: 'Completed in {{s}}s', fr: 'Terminé en {{s}} s' }, { s: (durationMs / 1000).toFixed(2) })}
                   </span>
