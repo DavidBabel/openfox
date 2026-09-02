@@ -13,6 +13,7 @@ import { BackgroundProcessView } from './BackgroundProcessView'
 import { WorkspaceView } from './WorkspaceView'
 import { ProjectTasksView } from './ProjectTasksView'
 import { PathConfirmationButtons } from './PathConfirmationButtons'
+import { TruncatedTooltip } from './TruncatedTooltip'
 import { formatToolArgsFull, formatToolArgsWithMetadata } from '../../lib/formatToolArgs'
 import { type PendingPathConfirmation } from '../../stores/session'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
@@ -139,6 +140,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
   const config = statusConfig[status]
   const remoteProtocol = detectRemoteExecution(tool, args)
   const showEditorLink = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_OPEN_IN_EDITOR).value === 'true'
+  const argsLabel = formatToolArgsWithMetadata(tool, args, metadata)
 
   const editorLine =
     tool === 'edit_file'
@@ -181,7 +183,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
       >
         <ToolIcon tool={tool} />
         <span className="text-accent-primary font-medium">{tool}</span>
-        <span className="text-text-muted truncate flex-1">{formatToolArgsWithMetadata(tool, args, metadata)}</span>
+        <TruncatedTooltip text={argsLabel} className="flex-1 text-text-muted" />
         <span className={`${config.color} ${config.animate ? 'animate-pulse' : ''}`}>
           {status === 'pending' ? '...' : t({ en: 'Done', fr: 'Terminé' })}
         </span>
@@ -199,9 +201,7 @@ export const ToolCallDisplay = memo(function ToolCallDisplay({
       >
         <span className={`${config.color} ${config.animate ? 'animate-pulse' : ''}`}>{config.icon}</span>
         <span className="font-mono text-accent-primary text-sm">{tool}</span>
-        <span className="text-text-muted text-xs flex-1 truncate">
-          {formatToolArgsWithMetadata(tool, args, metadata)}
-        </span>
+        <TruncatedTooltip text={argsLabel} className="flex-1 text-text-muted text-xs" />
         <span className="text-text-muted text-xs">{expanded ? '▼' : '▶'}</span>
       </button>
 
