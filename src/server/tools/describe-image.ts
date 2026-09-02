@@ -32,8 +32,7 @@ export const describeImageTool = createTool<DescribeImageArgs>(
     type: 'function',
     function: {
       name: 'describe_image',
-      description:
-        'Ask a vision-capable fallback model a specific question about an image file, when the active model cannot see images. Use read_file to locate the image, then use this tool to inspect a precise detail (a label, a value, a piece of text, a layout or color detail). Only available when a vision fallback is configured and the active model does not support vision.',
+      description: 'Ask a vision fallback model a specific question about an image file.',
       parameters: {
         type: 'object',
         properties: {
