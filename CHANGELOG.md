@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.137 - 2026-09-03
+
+### Bug Fixes
+
+- **Image descriptions survive reloads** — vision details no longer drop from tool results after a page reload
+
 ## 2.0.136 - 2026-09-02
 
 ### Features
