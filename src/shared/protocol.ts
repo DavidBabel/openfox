@@ -32,6 +32,7 @@ export type ClientMessageType =
   | 'runner.launch' // Start the auto-loop runner (build → verify → done)
   // Workflow
   | 'workflow.exit' // Exit/cancel a paused workflow
+  | 'workflow.cancel_autolaunch' // Cancel the pending favorite-workflow auto-launch countdown
   // Chat
   | 'chat.retry' // Re-run the last turn after an LLM failure (no user message re-added)
   | 'chat.llm_retry_now' // Interrupt the current LLM-retry backoff wait and retry immediately
@@ -117,6 +118,7 @@ export type ServerMessageType =
   | 'phase.changed' // Workflow phase changed (plan/build/verification/done)
   // Workflow events
   | 'workflow.execution_changed' // Workflow execution state changed (status, step, etc.)
+  | 'workflow.autolaunch' // Favorite-workflow auto-launch countdown started/cancelled
   // Task completion
   | 'task.completed' // Task finished with summary stats
   // Criteria events
@@ -211,6 +213,16 @@ export interface WorkflowWaitingPayload {
   stepName: string
   stepOutput: Record<string, string>
   params?: Record<string, string>
+}
+
+// Favorite-workflow auto-launch countdown (server → client)
+export interface WorkflowAutoLaunchPayload {
+  active: boolean
+  workflowId?: string
+  workflowName?: string
+  scope?: import('./types.js').WorkflowScope
+  /** Epoch ms when the workflow auto-launches (only while active). */
+  deadline?: number
 }
 
 export interface PendingPathConfirmationPayload {

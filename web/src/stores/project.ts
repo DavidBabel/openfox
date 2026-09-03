@@ -25,6 +25,7 @@ interface ProjectState {
       customInstructions?: string | null
       dangerLevel?: string | null
       defaultAgent?: string | null
+      favoriteWorkflowId?: string | null
     },
   ) => Promise<Project | null>
   deleteProject: (projectId: string) => Promise<boolean>

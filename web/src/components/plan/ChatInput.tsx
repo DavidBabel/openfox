@@ -141,6 +141,7 @@ export function ChatInput({
   const selectedSlashScopeRef = useRef<{ id: string; scope: WorkflowLaunchScope } | null>(null)
 
   const { sendMessage, launchWorkflow } = useScrolledSend(setAutoScroll, sessionId)
+  const cancelAutoLaunch = useSessionStore((state) => state.cancelAutoLaunch)
 
   const { data: commandsData } = useResource(commandsResource, workdir)
   const commands = commandsData
@@ -512,6 +513,10 @@ export function ChatInput({
       if (showHistory) closeHistory()
       cursorPosRef.current = e.target.selectionStart
 
+      // Typing a prompt means the user is taking over: abort any pending
+      // favorite-workflow auto-launch countdown.
+      if (value && sessionId) cancelAutoLaunch(sessionId)
+
       // Drop a stale slash-scope selection when the typed slash target no longer
       // matches it (edited, cleared, or rewritten to a different id).
       const pending = selectedSlashScopeRef.current
@@ -534,7 +539,7 @@ export function ChatInput({
         authFetch(`/api/sessions/${sessionId}/warmup`, { method: 'POST' }).catch(() => {})
       }
     },
-    [setInput, showHistory, closeHistory, sessionId, currentSession, activeSlashParams],
+    [setInput, showHistory, closeHistory, sessionId, currentSession, activeSlashParams, cancelAutoLaunch],
   )
 
   const handleSelect = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {

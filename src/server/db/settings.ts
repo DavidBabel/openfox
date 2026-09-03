@@ -47,6 +47,7 @@ export const SETTINGS_KEYS = {
   MAINTENANCE_SNAPSHOT_STREAMS_MIGRATED: 'maintenance.snapshotStreamsMigratedV1',
   PROXY_URL: 'network.proxyUrl',
   DEFAULT_AGENT: 'agent.defaultAgent',
+  FAVORITE_WORKFLOW: 'workflow.favoriteWorkflow',
   AGENT_MODEL_OVERRIDES: 'agent.modelOverrides',
 } as const
 
@@ -93,6 +94,7 @@ export const SETTINGS_DEFAULTS: Record<string, string> = {
   [SETTINGS_KEYS.TOOLS_SHELL]: 'cmd',
   [SETTINGS_KEYS.CONFIRM_ON_WORKSPACE_ACTIONS]: 'false',
   [SETTINGS_KEYS.FEATURES_PER_SESSION_MCP]: 'false',
+  [SETTINGS_KEYS.FAVORITE_WORKFLOW]: '',
   [SETTINGS_KEYS.MAINTENANCE_SNAPSHOT_STREAMS_MIGRATED]: 'false',
 }
 

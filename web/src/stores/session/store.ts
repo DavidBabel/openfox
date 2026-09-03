@@ -315,6 +315,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           pendingQuestions: (data.pendingQuestions ?? []) as PendingQuestionPayload[],
           activeWorkflowExecution: (data.activeWorkflowExecution as WorkflowExecution | undefined) ?? null,
           llmRetry: null,
+          autoLaunch: null,
         }
         return {
           ...replacePane(s, sessionId, nextPane),
@@ -367,6 +368,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     error: null,
     activeWorkflowExecution: null,
     llmRetry: null,
+    autoLaunch: null,
     liveTurnStats: null,
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
@@ -987,6 +989,13 @@ export const useSessionStore = create<SessionState>((set, get) => {
     exitWorkflow: (sessionId) => {
       if (!paneFor(get(), sessionId)?.session) return
       wsClient.send('workflow.exit', { sessionId })
+    },
+
+    cancelAutoLaunch: (sessionId) => {
+      const pane = paneFor(get(), sessionId)
+      if (!pane?.autoLaunch) return
+      wsClient.send('workflow.cancel_autolaunch', { sessionId })
+      set((s) => updatePane(s, sessionId, (p) => ({ ...p, autoLaunch: null })))
     },
 
     switchMode: async (sessionId, mode) => {

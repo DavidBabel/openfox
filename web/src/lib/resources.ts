@@ -612,6 +612,7 @@ export const SETTINGS_KEYS = {
   FEATURES_PER_SESSION_MCP: 'features.perSessionMcp',
   PROXY_URL: 'network.proxyUrl',
   DEFAULT_AGENT: 'agent.defaultAgent',
+  FAVORITE_WORKFLOW: 'workflow.favoriteWorkflow',
 } as const
 
 export const DISPLAY_SETTINGS_KEYS = [

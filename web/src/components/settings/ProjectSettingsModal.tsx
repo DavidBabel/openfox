@@ -18,6 +18,8 @@ import { wsClient } from '../../lib/ws'
 import { authFetch } from '../../lib/api'
 import { formatRootDir, getRootDirBlockReason, suggestRootDirChild } from '@shared/workspace.js'
 import { dedupById } from '../../lib/modal-utils'
+import { useWorkflows } from '../../hooks/useWorkflows'
+import { SCOPE_LABELS } from '../../lib/workflow-scope'
 import { useT } from '../../hooks/useT'
 
 interface ProjectSettingsModalProps {
@@ -40,6 +42,11 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     project: projectAgents.filter((a) => !a.subagent),
   }
   const topLevelAgents = dedupById(dedupById(topLevelByScope.builtin, topLevelByScope.user), topLevelByScope.project)
+  const { workflows: scopedWorkflows } = useWorkflows(project.workdir)
+  // Dedup by id keeping the LAST entry (defaults → user → project), mirroring
+  // the server's effective catalog: for a favorite stored by id, the orchestrator
+  // launches the project definition when one exists (project > user > builtin).
+  const workflows = Array.from(new Map(scopedWorkflows.map((w) => [w.id, w])).values())
   const scopeOrder = [
     { label: 'Project', agents: topLevelByScope.project },
     { label: 'User', agents: topLevelByScope.user },
@@ -67,12 +74,15 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   const [customInstructions, setCustomInstructions] = useState(project.customInstructions ?? '')
   const [dangerLevel, setDangerLevel] = useState<DangerLevel | ''>(project.dangerLevel ?? '')
   const [defaultAgent, setDefaultAgent] = useState(project.defaultAgent ?? '')
+  const [favoriteWorkflow, setFavoriteWorkflow] = useState(project.favoriteWorkflowId ?? '')
   const [instructionsDirty, setInstructionsDirty] = useState(false)
   const [dangerLevelDirty, setDangerLevelDirty] = useState(false)
   const [defaultAgentDirty, setDefaultAgentDirty] = useState(false)
+  const [favoriteWorkflowDirty, setFavoriteWorkflowDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const currentAgentMissing = defaultAgent !== '' && !topLevelAgents.some((a) => a.id === defaultAgent)
+  const currentFavoriteMissing = favoriteWorkflow !== '' && !workflows.some((w) => w.id === favoriteWorkflow)
 
   const [setupCmd, setSetupCmd] = useState('')
   const [setupDirty, setSetupDirty] = useState(false)
@@ -89,22 +99,35 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   const [mcpDirty, setMcpDirty] = useState(false)
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set())
 
-  const isDirty = instructionsDirty || dangerLevelDirty || defaultAgentDirty || setupDirty || rootDirDirty || mcpDirty
+  const isDirty =
+    instructionsDirty ||
+    dangerLevelDirty ||
+    defaultAgentDirty ||
+    favoriteWorkflowDirty ||
+    setupDirty ||
+    rootDirDirty ||
+    mcpDirty
+
+  const resetForm = useCallback(() => {
+    setCustomInstructions(project.customInstructions ?? '')
+    setDangerLevel(project.dangerLevel ?? '')
+    setDefaultAgent(project.defaultAgent ?? '')
+    setFavoriteWorkflow(project.favoriteWorkflowId ?? '')
+    setInstructionsDirty(false)
+    setDangerLevelDirty(false)
+    setDefaultAgentDirty(false)
+    setFavoriteWorkflowDirty(false)
+    setSetupDirty(false)
+    setRootDirDirty(false)
+  }, [project])
 
   useEffect(() => {
     if (isOpen) {
-      setCustomInstructions(project.customInstructions ?? '')
-      setDangerLevel(project.dangerLevel ?? '')
-      setDefaultAgent(project.defaultAgent ?? '')
-      setInstructionsDirty(false)
-      setDangerLevelDirty(false)
-      setDefaultAgentDirty(false)
-      setSetupDirty(false)
-      setRootDirDirty(false)
+      resetForm()
       setMcpDirty(false)
       setExpandedServers(new Set())
     }
-  }, [isOpen, project])
+  }, [isOpen, project, resetForm])
 
   useEffect(() => {
     if (wsConfig?.setup && wsConfig.setup.length > 0) {
@@ -189,12 +212,16 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       customInstructions: string | null
       dangerLevel: DangerLevel | null
       defaultAgent?: string | null
+      favoriteWorkflowId?: string | null
     } = {
       customInstructions: customInstructions || null,
       dangerLevel: dangerLevelValue,
     }
     if (defaultAgentDirty) {
       projectUpdates.defaultAgent = defaultAgent === '' ? null : defaultAgent
+    }
+    if (favoriteWorkflowDirty) {
+      projectUpdates.favoriteWorkflowId = favoriteWorkflow === '' ? null : favoriteWorkflow
     }
     await updateProject(project.id, projectUpdates)
     if (setupDirty || rootDirDirty || mcpDirty) {
@@ -213,6 +240,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     setInstructionsDirty(false)
     setDangerLevelDirty(false)
     setDefaultAgentDirty(false)
+    setFavoriteWorkflowDirty(false)
     setSetupDirty(false)
     setRootDirDirty(false)
     setMcpDirty(false)
@@ -223,6 +251,8 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     customInstructions,
     defaultAgent,
     defaultAgentDirty,
+    favoriteWorkflow,
+    favoriteWorkflowDirty,
     setupCmd,
     rootDir,
     mcpOverrides,
@@ -393,14 +423,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   const handleCancel = () => {
     setShowCreateDirModal(false)
     setShowMigrationWarning(false)
-    setCustomInstructions(project.customInstructions ?? '')
-    setDangerLevel(project.dangerLevel ?? '')
-    setDefaultAgent(project.defaultAgent ?? '')
-    setInstructionsDirty(false)
-    setDangerLevelDirty(false)
-    setDefaultAgentDirty(false)
-    setSetupDirty(false)
-    setRootDirDirty(false)
+    resetForm()
     handleClose()
   }
 
@@ -530,6 +553,54 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
                 en: 'No agents available. Create one in the Agents modal.',
                 fr: 'Aucun agent disponible. Créez-en un dans la fenêtre Agents.',
               })}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="project-favorite-workflow"
+            className="block text-sm font-medium text-text-primary mb-1 flex-shrink-0"
+          >
+            {t({ en: 'Favorite Workflow', fr: 'Workflow favori' })}
+          </label>
+          <p className="text-sm text-text-muted mb-3">
+            {t({
+              en: 'When a task finishes planning, this workflow auto-launches after a 60s countdown instead of waiting for you to choose. Choose "Use system default" to follow the global favorite workflow; "No favorite" to always pick manually. Existing sessions are not affected.',
+              fr: 'Quand une tâche termine son plan, ce workflow se lance automatiquement après un compte à rebours de 60 s au lieu d’attendre votre choix. Choisissez « Utiliser le défaut système » pour suivre le workflow favori global ; « Aucun favori » pour choisir manuellement. Les sessions existantes ne sont pas affectées.',
+            })}
+          </p>
+          <select
+            id="project-favorite-workflow"
+            value={favoriteWorkflow}
+            onChange={(e) => {
+              setFavoriteWorkflow(e.target.value)
+              setFavoriteWorkflowDirty(true)
+            }}
+            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary"
+            disabled={saving}
+          >
+            <option value="">{t({ en: 'Use system default', fr: 'Utiliser le défaut système' })}</option>
+            {currentFavoriteMissing && (
+              <option value={favoriteWorkflow}>
+                {favoriteWorkflow} {t({ en: '(missing workflow)', fr: '(workflow manquant)' })}
+              </option>
+            )}
+            {workflows.map((w) => (
+              <option key={`${w.id}-${w.scope}`} value={w.id}>
+                {w.name} — {SCOPE_LABELS[w.scope]}
+              </option>
+            ))}
+          </select>
+          {currentFavoriteMissing && (
+            <p className="text-xs text-red-400 mt-1">
+              {t(
+                {
+                  en: 'The stored favorite workflow "{{workflow}}" no longer exists. Pick another workflow to restore a valid favorite.',
+                  fr: 'Le workflow favori enregistré « {{workflow}} » n’existe plus. Choisissez un autre workflow pour restaurer un favori valide.',
+                },
+                { workflow: favoriteWorkflow },
+              )}
             </p>
           )}
         </div>

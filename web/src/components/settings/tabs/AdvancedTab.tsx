@@ -14,6 +14,8 @@ import { useUpdateStore } from '../../../stores/update'
 import { AutoUpdateModal } from '../../AutoUpdateModal'
 import { ChangelogModal } from '../../ChangelogModal'
 import { useAgents } from '../../../hooks/useAgents'
+import { useWorkflows } from '../../../hooks/useWorkflows'
+import { SCOPE_LABELS } from '../../../lib/workflow-scope'
 
 export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const t = useT()
@@ -24,6 +26,10 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const retryPatternsSetting = useSetting(SETTINGS_KEYS.RETRY_PATTERNS).value
   const proxyUrlSetting = useSetting(SETTINGS_KEYS.PROXY_URL).value
   const defaultAgentSetting = useSetting(SETTINGS_KEYS.DEFAULT_AGENT).value
+  const favoriteWorkflowSetting = useSetting(SETTINGS_KEYS.FAVORITE_WORKFLOW).value
+  const { workflows: allWorkflows } = useWorkflows()
+  const currentFavoriteWorkflowMissing =
+    !!favoriteWorkflowSetting && !allWorkflows.some((w) => w.id === favoriteWorkflowSetting)
   const showChangelogSetting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE, 'true').value
 
   const [localToggles, setLocalToggles] = useState({
@@ -229,6 +235,46 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
               en: 'No agents available. Create one in the Agents modal.',
               fr: 'Aucun agent disponible. Créez-en un dans la fenêtre des agents.',
             })}
+          </p>
+        )}
+      </div>
+      <hr className="border-border" />
+      <div>
+        <h3 className="text-sm font-medium text-text-primary mb-1">
+          {t({ en: 'Favorite Workflow', fr: 'Workflow favori' })}
+        </h3>
+        <p className="text-sm text-text-muted mb-3">
+          {t({
+            en: 'When a task finishes planning, the favorite workflow auto-launches after a 60s countdown instead of waiting for you to choose. Leave empty to always pick manually.',
+            fr: 'Quand une tâche termine son plan, le workflow favori se lance automatiquement après un compte à rebours de 60 s au lieu d’attendre votre choix. Laissez vide pour choisir manuellement.',
+          })}
+        </p>
+        <select
+          value={favoriteWorkflowSetting ?? ''}
+          onChange={(e) => void setSetting(SETTINGS_KEYS.FAVORITE_WORKFLOW, e.target.value)}
+          className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary"
+        >
+          <option value="">{t({ en: 'No favorite (choose manually)', fr: 'Aucun favori (choix manuel)' })}</option>
+          {currentFavoriteWorkflowMissing && (
+            <option value={favoriteWorkflowSetting}>
+              {favoriteWorkflowSetting} {t({ en: '(missing workflow)', fr: '(workflow manquant)' })}
+            </option>
+          )}
+          {allWorkflows.map((w) => (
+            <option key={`${w.id}-${w.scope}`} value={w.id}>
+              {w.name} — {SCOPE_LABELS[w.scope]}
+            </option>
+          ))}
+        </select>
+        {currentFavoriteWorkflowMissing && (
+          <p className="text-xs text-red-400 mt-1">
+            {t(
+              {
+                en: 'The stored favorite workflow "{{workflow}}" no longer exists. Pick another workflow to restore a valid favorite.',
+                fr: 'Le workflow favori enregistré « {{workflow}} » n’existe plus. Choisissez un autre workflow pour restaurer un favori valide.',
+              },
+              { workflow: favoriteWorkflowSetting ?? '' },
+            )}
           </p>
         )}
       </div>

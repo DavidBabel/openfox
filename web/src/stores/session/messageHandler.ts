@@ -5,6 +5,7 @@ import type {
   GitDiffFile,
   SessionListPayload,
   SessionRunningPayload,
+  WorkflowAutoLaunchPayload,
   ChatAskUserPayload,
   ChatDeltaPayload,
   ChatThinkingPayload,
@@ -958,6 +959,26 @@ export function handleServerMessage(
       ) {
         markBackgroundSessionUnread(set, message)
       }
+      break
+    }
+
+    case 'workflow.autolaunch': {
+      const sessionId = message.sessionId
+      if (!sessionId) break
+      const payload = message.payload as WorkflowAutoLaunchPayload
+      set((state) =>
+        updatePane(state, sessionId, (p) => ({
+          ...p,
+          autoLaunch: payload.active
+            ? {
+                workflowId: payload.workflowId ?? '',
+                workflowName: payload.workflowName ?? payload.workflowId ?? '',
+                scope: payload.scope ?? 'auto',
+                deadline: payload.deadline ?? Date.now(),
+              }
+            : null,
+        })),
+      )
       break
     }
 
