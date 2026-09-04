@@ -30,6 +30,8 @@ On first run, OpenFox automatically detects your local LLM backend (vLLM, sglang
 - **Unified Image Handling** — Automatic vision model fallback for non-vision models. Images are described before each turn so any model can "see" them.
 - **Session Metadata** — Unified `session_metadata` tool replaces separate criterion/todo tools. Interactive criteria editor with CRUD and agent badges.
 - **Workflow Sub-Groups** — Run individual workflow steps in isolation. New code review phase in the build-verify pipeline.
+- **Favorite Workflow** — Pick a favorite workflow (global setting + per-project override, same rules as Default Agent) and OpenFox auto-launches it 60s after the planner finishes instead of waiting for the manual choice. Cancelling: picking another workflow, sending or typing a message, or the countdown's close button. Server-owned timer — reconnecting clients keep an accurate countdown.
+- **Auto-answer Questions** — Opt-in (global setting + per-project override, off by default): `ask_user` choice/confirmation questions auto-answer with the recommended answer (first option / "Yes") after a 120s backend countdown. Answering or typing cancels it; free-text questions are rejected while the mode is on.
 - **Parallel `edit_file` Safety** — Per-file mutex prevents race conditions when editing multiple files simultaneously.
 - **Firefox Support** — Custom thin scrollbars with hover behavior, cross-browser compatible.
 

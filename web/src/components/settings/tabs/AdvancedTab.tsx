@@ -27,9 +27,13 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const proxyUrlSetting = useSetting(SETTINGS_KEYS.PROXY_URL).value
   const defaultAgentSetting = useSetting(SETTINGS_KEYS.DEFAULT_AGENT).value
   const favoriteWorkflowSetting = useSetting(SETTINGS_KEYS.FAVORITE_WORKFLOW).value
+  const autoAnswerSetting = useSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'false').value
   const { workflows: allWorkflows } = useWorkflows()
+  // Global favorite may only reference global scopes (builtin + user): a
+  // project-scoped workflow must never be picked as the system-wide default.
+  const globalWorkflows = allWorkflows.filter((w) => w.scope !== 'project')
   const currentFavoriteWorkflowMissing =
-    !!favoriteWorkflowSetting && !allWorkflows.some((w) => w.id === favoriteWorkflowSetting)
+    !!favoriteWorkflowSetting && !globalWorkflows.some((w) => w.id === favoriteWorkflowSetting)
   const showChangelogSetting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE, 'true').value
 
   const [localToggles, setLocalToggles] = useState({
@@ -260,7 +264,7 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
               {favoriteWorkflowSetting} {t({ en: '(missing workflow)', fr: '(workflow manquant)' })}
             </option>
           )}
-          {allWorkflows.map((w) => (
+          {globalWorkflows.map((w) => (
             <option key={`${w.id}-${w.scope}`} value={w.id}>
               {w.name} — {SCOPE_LABELS[w.scope]}
             </option>
@@ -278,6 +282,18 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
           </p>
         )}
       </div>
+      <hr className="border-border" />
+      <SettingsToggle
+        title={t({ en: 'Auto-answer questions', fr: 'Réponse automatique aux questions' })}
+        description={t({
+          en: 'When the agent asks a choice or confirmation question, the recommended answer (the first option, or "Yes") is applied automatically after a 120s countdown. Cancel it by answering, or by starting to type. Free-text questions are disabled while this mode is on.',
+          fr: 'Quand l’agent pose une question à choix ou de confirmation, la réponse recommandée (la première option, ou « Oui ») est appliquée automatiquement après un compte à rebours de 120 s. Annulez-la en répondant ou en commençant à saisir. Les questions texte libres sont désactivées quand ce mode est activé.',
+        })}
+        enabled={autoAnswerSetting === 'true'}
+        onToggle={() =>
+          void setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, autoAnswerSetting === 'true' ? 'false' : 'true')
+        }
+      />
       <hr className="border-border" />
       <div>
         <h3 className="text-sm font-medium text-text-primary mb-1">{t({ en: 'Onboarding', fr: 'Prise en main' })}</h3>

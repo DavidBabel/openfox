@@ -616,6 +616,37 @@ describe('ProjectSettingsModal — rootDir validation (Criterion 0 & 1)', () => 
     expectNoSave()
   })
 
+  it('sends autoAnswerQuestions override when the project select changes', async () => {
+    const user = userEvent.setup()
+
+    render(<ProjectSettingsModal isOpen={true} onClose={vi.fn()} project={defaultProject} />)
+
+    const select = screen.getByLabelText('Auto-answer Questions') as HTMLSelectElement
+    expect(select.value).toBe('inherit')
+
+    await user.selectOptions(select, 'true')
+    await user.click(screen.getByTestId('save-btn'))
+
+    expect(mockUpdateProject).toHaveBeenCalledWith(
+      defaultProject.id,
+      expect.objectContaining({ autoAnswerQuestions: true }),
+    )
+  })
+
+  it('shows the stored project override and keeps save disabled when untouched', () => {
+    render(
+      <ProjectSettingsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        project={{ ...defaultProject, autoAnswerQuestions: true }}
+      />,
+    )
+
+    const select = screen.getByLabelText('Auto-answer Questions') as HTMLSelectElement
+    expect(select.value).toBe('true')
+    expect((screen.getByTestId('save-btn') as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('skips validation when rootDir field is empty', async () => {
     const user = userEvent.setup()
 

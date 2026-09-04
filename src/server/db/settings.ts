@@ -48,6 +48,7 @@ export const SETTINGS_KEYS = {
   PROXY_URL: 'network.proxyUrl',
   DEFAULT_AGENT: 'agent.defaultAgent',
   FAVORITE_WORKFLOW: 'workflow.favoriteWorkflow',
+  AUTO_ANSWER_QUESTIONS: 'agent.autoAnswerQuestions',
   AGENT_MODEL_OVERRIDES: 'agent.modelOverrides',
 } as const
 
@@ -95,6 +96,7 @@ export const SETTINGS_DEFAULTS: Record<string, string> = {
   [SETTINGS_KEYS.CONFIRM_ON_WORKSPACE_ACTIONS]: 'false',
   [SETTINGS_KEYS.FEATURES_PER_SESSION_MCP]: 'false',
   [SETTINGS_KEYS.FAVORITE_WORKFLOW]: '',
+  [SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS]: 'false',
   [SETTINGS_KEYS.MAINTENANCE_SNAPSHOT_STREAMS_MIGRATED]: 'false',
 }
 

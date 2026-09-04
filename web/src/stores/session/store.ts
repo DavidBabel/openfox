@@ -998,6 +998,23 @@ export const useSessionStore = create<SessionState>((set, get) => {
       set((s) => updatePane(s, sessionId, (p) => ({ ...p, autoLaunch: null })))
     },
 
+    cancelAutoAnswers: (sessionId) => {
+      const pane = paneFor(get(), sessionId)
+      if (!pane?.pendingQuestions.some((q) => q.autoAnswerDeadline !== undefined)) return
+      wsClient.send('chat.cancel_autoanswer', { sessionId })
+      set((s) =>
+        updatePane(s, sessionId, (p) => ({
+          ...p,
+          pendingQuestions: p.pendingQuestions.map((q) => {
+            if (q.autoAnswerDeadline === undefined) return q
+            const rest = { ...q }
+            delete rest.autoAnswerDeadline
+            return rest
+          }),
+        })),
+      )
+    },
+
     switchMode: async (sessionId, mode) => {
       if (!paneFor(get(), sessionId)?.session) return
       try {

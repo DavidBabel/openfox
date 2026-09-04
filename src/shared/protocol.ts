@@ -33,6 +33,7 @@ export type ClientMessageType =
   // Workflow
   | 'workflow.exit' // Exit/cancel a paused workflow
   | 'workflow.cancel_autolaunch' // Cancel the pending favorite-workflow auto-launch countdown
+  | 'chat.cancel_autoanswer' // Cancel the pending ask_user auto-answer countdown (first keystroke)
   // Chat
   | 'chat.retry' // Re-run the last turn after an LLM failure (no user message re-added)
   | 'chat.llm_retry_now' // Interrupt the current LLM-retry backoff wait and retry immediately
@@ -112,6 +113,7 @@ export type ServerMessageType =
   | 'chat.llm_retry_failed' // The LLM retry window was exhausted — definitive Retry available
   | 'chat.path_confirmation' // Request user confirmation for outside-workdir path access
   | 'chat.ask_user' // Request user answer to a question
+  | 'chat.autoanswer' // Ask-user auto-answer countdown started/cancelled
   // Mode events
   | 'mode.changed' // Mode was changed
   // Phase events
@@ -194,6 +196,19 @@ export interface PendingQuestionPayload {
   question: string
   type: 'text' | 'confirm' | 'choice'
   options: ChoiceOption[] | undefined
+  /** Epoch ms when the recommended answer is auto-applied (only while the countdown runs). */
+  autoAnswerDeadline?: number
+}
+
+// Ask-user auto-answer countdown (server → client)
+export interface ChatAutoAnswerPayload {
+  active: boolean
+  callId?: string
+  /** Epoch ms when the recommended answer is auto-applied (only while active). */
+  deadline?: number
+  /** Set on the cleared broadcast fired when the countdown expired: the
+   * question was auto-answered server-side, so clients drop it from pending. */
+  answered?: boolean
 }
 
 export interface SessionStatePayload {

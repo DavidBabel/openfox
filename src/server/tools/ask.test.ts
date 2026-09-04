@@ -1,13 +1,167 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ServerMessage } from '../../shared/protocol.js'
+import { loadConfig } from '../config.js'
+import { closeDatabase, initDatabase } from '../db/index.js'
+import { SETTINGS_KEYS, deleteSetting, setSetting } from '../db/settings.js'
 import {
   AskUserInterrupt,
+  AUTO_ANSWER_DELAY_MS,
+  awaitAnswer,
+  armAutoAnswer,
   askUserTool,
+  cancelAutoAnswer,
+  cancelAutoAnswersForSession,
   cancelQuestion,
   cancelQuestionsForSession,
+  clearAllAutoAnswers,
   hasPendingQuestion,
+  initAutoAnswer,
   provideAnswer,
   getPendingQuestionsForSession,
 } from './ask.js'
+
+function ctx(sessionId: string, toolCallId?: string) {
+  return {
+    workdir: '/tmp/project',
+    sessionId,
+    sessionManager: {} as never,
+    ...(toolCallId !== undefined ? { toolCallId } : {}),
+  }
+}
+
+describe('ask_user auto-answer countdown', () => {
+  let broadcasts: ServerMessage[]
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    const config = loadConfig()
+    config.database.path = ':memory:'
+    initDatabase(config)
+    broadcasts = []
+    initAutoAnswer({ broadcast: (_sessionId, msg) => broadcasts.push(msg) })
+  })
+
+  afterEach(() => {
+    clearAllAutoAnswers()
+    deleteSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS)
+    closeDatabase()
+    vi.useRealTimers()
+  })
+
+  async function ask(args: Record<string, unknown>, callId: string): Promise<AskUserInterrupt> {
+    try {
+      await askUserTool.execute(args, ctx('session-auto', callId))
+    } catch (error) {
+      return error as AskUserInterrupt
+    }
+    throw new Error('expected AskUserInterrupt')
+  }
+
+  it('auto-answers a choice question with the first option after 120s', async () => {
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const interrupt = await ask(
+      { question: 'Pick one:', type: 'choice', options: ['React', 'Vue'] },
+      'call-auto-choice',
+    )
+
+    armAutoAnswer({ callId: interrupt.callId, sessionId: 'session-auto', type: 'choice', options: interrupt.options })
+    const isActive = (b: ServerMessage): boolean => Boolean((b.payload as { active?: boolean }).active)
+    expect(broadcasts.filter((b) => b.type === 'chat.autoanswer' && isActive(b))).toHaveLength(1)
+
+    const answerPromise = awaitAnswer(interrupt.callId)!
+    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    expect(await answerPromise).toBe('React')
+    expect(hasPendingQuestion(interrupt.callId)).toBe(false)
+    // Cleared broadcast on expiry.
+    expect(broadcasts.at(-1)!.type).toBe('chat.autoanswer')
+    expect(isActive(broadcasts.at(-1)!)).toBe(false)
+  })
+
+  it('auto-answers a confirm question with yes after 120s', async () => {
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const interrupt = await ask({ question: 'Proceed?', type: 'confirm' }, 'call-auto-confirm')
+
+    armAutoAnswer({ callId: interrupt.callId, sessionId: 'session-auto', type: 'confirm' })
+    const answerPromise = awaitAnswer(interrupt.callId)!
+    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    expect(await answerPromise).toBe('yes')
+  })
+
+  it('never auto-answers free-text questions and does not arm while disabled', async () => {
+    // Free-text pending question (asked while the mode is off): arming it even
+    // after enabling must stay a no-op — only choice/confirm auto-answer.
+    const text = await ask({ question: 'What name?' }, 'call-auto-text')
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    armAutoAnswer({ callId: text.callId, sessionId: 'session-auto', type: 'text' })
+    expect(broadcasts).toHaveLength(0)
+
+    deleteSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS)
+    const choice = await ask({ question: 'Pick:', type: 'choice', options: ['A'] }, 'call-auto-off')
+    armAutoAnswer({ callId: choice.callId, sessionId: 'session-auto', type: 'choice', options: choice.options })
+    expect(broadcasts).toHaveLength(0)
+    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS + 1000)
+    expect(hasPendingQuestion(choice.callId)).toBe(true)
+
+    provideAnswer('call-auto-off', 'A')
+    provideAnswer('call-auto-text', 'Bob')
+  })
+
+  it('answering or skipping before expiry cancels the countdown; nothing fires', async () => {
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const interrupt = await ask({ question: 'Pick:', type: 'choice', options: ['A', 'B'] }, 'call-auto-cancel')
+    armAutoAnswer({ callId: interrupt.callId, sessionId: 'session-auto', type: 'choice', options: interrupt.options })
+
+    expect(provideAnswer(interrupt.callId, 'B')).toBe(true)
+    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS + 1000)
+    // The user's answer stands; the countdown never overwrote it nor fired a second time.
+    expect(broadcasts.filter((b) => b.type === 'chat.autoanswer')).toHaveLength(2) // active + cleared by provideAnswer
+    expect(Boolean((broadcasts.at(-1)!.payload as { active?: boolean }).active)).toBe(false)
+  })
+
+  it('cancelAutoAnswer and cancelAutoAnswersForSession drop pending countdowns', async () => {
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const a = await ask({ question: 'Pick A?', type: 'choice', options: ['A'] }, 'call-aa-a')
+    armAutoAnswer({ callId: a.callId, sessionId: 'session-auto', type: 'choice', options: a.options })
+    vi.advanceTimersByTime(1000)
+
+    cancelAutoAnswer(a.callId)
+    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    expect(hasPendingQuestion(a.callId)).toBe(true)
+    provideAnswer('call-aa-a', 'A')
+
+    const b = await ask({ question: 'Pick B?', type: 'choice', options: ['B'] }, 'call-aa-b')
+    armAutoAnswer({ callId: b.callId, sessionId: 'session-auto', type: 'choice', options: b.options })
+    cancelAutoAnswersForSession('session-auto')
+    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    expect(hasPendingQuestion(b.callId)).toBe(true)
+
+    // Cancelling an un-armed call is a no-op.
+    cancelAutoAnswer('nope')
+    provideAnswer('call-aa-b', 'B')
+  })
+
+  it('rejects free-text ask_user while auto-answer mode is on', async () => {
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const result = await askUserTool.execute({ question: 'What name?' }, ctx('session-auto', 'call-text-reject'))
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('choice')
+    expect(hasPendingQuestion('call-text-reject')).toBe(false)
+  })
+
+  it('exposes the countdown deadline on pending questions for reload sync', async () => {
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const interrupt = await ask({ question: 'Pick:', type: 'choice', options: ['A'] }, 'call-aa-pending')
+    armAutoAnswer({ callId: interrupt.callId, sessionId: 'session-auto', type: 'choice', options: interrupt.options })
+
+    const pending = getPendingQuestionsForSession('session-auto')
+    expect(pending[0]!.autoAnswerDeadline).toBeGreaterThan(Date.now())
+
+    cancelAutoAnswer(interrupt.callId)
+    expect(getPendingQuestionsForSession('session-auto')[0]!.autoAnswerDeadline).toBeUndefined()
+    provideAnswer('call-aa-pending', 'A')
+  })
+})
 
 describe('ask_user tool', () => {
   it('throws an AskUserInterrupt and tracks the pending question', async () => {

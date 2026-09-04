@@ -613,6 +613,7 @@ export const SETTINGS_KEYS = {
   PROXY_URL: 'network.proxyUrl',
   DEFAULT_AGENT: 'agent.defaultAgent',
   FAVORITE_WORKFLOW: 'workflow.favoriteWorkflow',
+  AUTO_ANSWER_QUESTIONS: 'agent.autoAnswerQuestions',
 } as const
 
 export const DISPLAY_SETTINGS_KEYS = [

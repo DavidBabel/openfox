@@ -31,6 +31,7 @@ import { resolveFavoriteWorkflow } from '../workflows/favorite.js'
 import { appendCompactionPrompt } from '../context/compactor.js'
 import { computeSessionHash, applyDynamicContext, computeUnifiedDiff } from '../chat/dynamic-context.js'
 import { provideAnswer } from '../tools/index.js'
+import { initAutoAnswer, cancelAutoAnswersForSession } from '../tools/index.js'
 import { logger } from '../utils/logger.js'
 import { devServerManager } from '../dev-server/manager.js'
 import { onProcessEvent } from '../tools/background-process/manager.js'
@@ -692,6 +693,8 @@ export function createWebSocketServer(
     broadcast: (sessionId, msg) => broadcastForSession(sessionId, msg),
     fire: fireAutoLaunch,
   })
+
+  initAutoAnswer({ broadcast: (sessionId, msg) => broadcastForSession(sessionId, msg) })
 
   // The session is idle at the post-planner "start building" choice point —
   // same shape the frontend gates its workflow buttons on.
@@ -1688,6 +1691,18 @@ async function handleClientMessage(
       const payload = message.payload as { sessionId?: string } | undefined
       const sessionId = payload?.sessionId ?? client.activeSessionId
       if (sessionId) cancelAutoLaunch(sessionId)
+      send({ type: 'ack', payload: {}, id: message.id })
+      break
+    }
+
+    // =========================================================================
+    // Ask-user auto-answer: cancel every pending countdown in the session
+    // (first keystroke in the chat input takes over for the user)
+    // =========================================================================
+    case 'chat.cancel_autoanswer': {
+      const payload = message.payload as { sessionId?: string } | undefined
+      const sessionId = payload?.sessionId ?? client.activeSessionId
+      if (sessionId) cancelAutoAnswersForSession(sessionId)
       send({ type: 'ack', payload: {}, id: message.id })
       break
     }

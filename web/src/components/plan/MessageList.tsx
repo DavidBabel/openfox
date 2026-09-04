@@ -446,6 +446,7 @@ export const MessageList = memo(function MessageList({
                       {isAutoLaunching && autoLaunch && (sessionId ?? scopeId) && (
                         <AutoLaunchCountdown
                           deadline={autoLaunch.deadline}
+                          color={c}
                           onCancel={() => cancelAutoLaunch(sessionId ?? scopeId!)}
                         />
                       )}

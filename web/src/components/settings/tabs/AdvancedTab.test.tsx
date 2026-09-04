@@ -28,10 +28,25 @@ vi.mock('../../../hooks/useAgents', () => ({
   useAgents: () => ({ agents: [], refresh: vi.fn() }),
 }))
 
+const { mockWorkflows } = vi.hoisted(() => ({
+  mockWorkflows: [] as Array<{ id: string; name: string; scope: 'builtin' | 'user' | 'project' }>,
+}))
+
+vi.mock('../../../hooks/useWorkflows', () => ({
+  useWorkflows: () => ({ workflows: mockWorkflows, refresh: vi.fn() }),
+}))
+
 describe('AdvancedTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     Object.keys(mockSettings).forEach((k) => delete mockSettings[k])
+    mockWorkflows.splice(
+      0,
+      mockWorkflows.length,
+      { id: 'build-verify', name: 'Build & Verify', scope: 'builtin' },
+      { id: 'autonomous-build', name: 'Autonomous build', scope: 'user' },
+      { id: 'local-flow', name: 'Local flow', scope: 'project' },
+    )
   })
 
   it('renders the Dynamic System Prompt toggle', () => {
@@ -73,6 +88,31 @@ describe('AdvancedTab', () => {
   it('renders the HTTP Proxy section', () => {
     const { container } = render(<AdvancedTab onClose={vi.fn()} />)
     expect(container.textContent).toContain('HTTP Proxy')
+  })
+
+  it('lists only global-scope workflows in the Favorite Workflow select', () => {
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    const select = container.querySelector('select#global-favorite-workflow') as HTMLSelectElement | null
+    const favoriteSelect =
+      select ??
+      Array.from(container.querySelectorAll('select')).find((s) =>
+        Array.from(s.options).some((o) => o.textContent?.includes('Build & Verify')),
+      )!
+    const optionTexts = Array.from(favoriteSelect.options).map((o) => o.textContent ?? '')
+    expect(optionTexts.some((t) => t.includes('Build & Verify'))).toBe(true)
+    expect(optionTexts.some((t) => t.includes('Autonomous build'))).toBe(true)
+    expect(optionTexts.some((t) => t.includes('Local flow'))).toBe(false)
+  })
+
+  it('renders the Auto-answer Questions toggle and writes the setting', async () => {
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    expect(container.textContent).toContain('Auto-answer questions')
+    const toggle = Array.from(container.querySelectorAll('label')).find((l) =>
+      l.textContent?.includes('Auto-answer questions'),
+    )
+    expect(toggle).toBeTruthy()
+    await userEvent.setup().click(toggle!)
+    expect(mockSetSetting).toHaveBeenCalledWith('agent.autoAnswerQuestions', 'true')
   })
 
   it('toggles Dynamic System Prompt on click', async () => {

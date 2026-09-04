@@ -75,10 +75,14 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   const [dangerLevel, setDangerLevel] = useState<DangerLevel | ''>(project.dangerLevel ?? '')
   const [defaultAgent, setDefaultAgent] = useState(project.defaultAgent ?? '')
   const [favoriteWorkflow, setFavoriteWorkflow] = useState(project.favoriteWorkflowId ?? '')
+  const [autoAnswer, setAutoAnswer] = useState<'inherit' | 'true' | 'false'>(
+    project.autoAnswerQuestions === undefined ? 'inherit' : project.autoAnswerQuestions ? 'true' : 'false',
+  )
   const [instructionsDirty, setInstructionsDirty] = useState(false)
   const [dangerLevelDirty, setDangerLevelDirty] = useState(false)
   const [defaultAgentDirty, setDefaultAgentDirty] = useState(false)
   const [favoriteWorkflowDirty, setFavoriteWorkflowDirty] = useState(false)
+  const [autoAnswerDirty, setAutoAnswerDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const currentAgentMissing = defaultAgent !== '' && !topLevelAgents.some((a) => a.id === defaultAgent)
@@ -104,6 +108,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     dangerLevelDirty ||
     defaultAgentDirty ||
     favoriteWorkflowDirty ||
+    autoAnswerDirty ||
     setupDirty ||
     rootDirDirty ||
     mcpDirty
@@ -113,10 +118,14 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     setDangerLevel(project.dangerLevel ?? '')
     setDefaultAgent(project.defaultAgent ?? '')
     setFavoriteWorkflow(project.favoriteWorkflowId ?? '')
+    setAutoAnswer(
+      project.autoAnswerQuestions === undefined ? 'inherit' : project.autoAnswerQuestions ? 'true' : 'false',
+    )
     setInstructionsDirty(false)
     setDangerLevelDirty(false)
     setDefaultAgentDirty(false)
     setFavoriteWorkflowDirty(false)
+    setAutoAnswerDirty(false)
     setSetupDirty(false)
     setRootDirDirty(false)
   }, [project])
@@ -213,6 +222,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       dangerLevel: DangerLevel | null
       defaultAgent?: string | null
       favoriteWorkflowId?: string | null
+      autoAnswerQuestions?: boolean | null
     } = {
       customInstructions: customInstructions || null,
       dangerLevel: dangerLevelValue,
@@ -222,6 +232,9 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     }
     if (favoriteWorkflowDirty) {
       projectUpdates.favoriteWorkflowId = favoriteWorkflow === '' ? null : favoriteWorkflow
+    }
+    if (autoAnswerDirty) {
+      projectUpdates.autoAnswerQuestions = autoAnswer === 'inherit' ? null : autoAnswer === 'true'
     }
     await updateProject(project.id, projectUpdates)
     if (setupDirty || rootDirDirty || mcpDirty) {
@@ -241,6 +254,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     setDangerLevelDirty(false)
     setDefaultAgentDirty(false)
     setFavoriteWorkflowDirty(false)
+    setAutoAnswerDirty(false)
     setSetupDirty(false)
     setRootDirDirty(false)
     setMcpDirty(false)
@@ -253,6 +267,8 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     defaultAgentDirty,
     favoriteWorkflow,
     favoriteWorkflowDirty,
+    autoAnswer,
+    autoAnswerDirty,
     setupCmd,
     rootDir,
     mcpOverrides,
@@ -603,6 +619,35 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
               )}
             </p>
           )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="project-auto-answer"
+            className="block text-sm font-medium text-text-primary mb-1 flex-shrink-0"
+          >
+            {t({ en: 'Auto-answer Questions', fr: 'Réponse automatique aux questions' })}
+          </label>
+          <p className="text-sm text-text-muted mb-3">
+            {t({
+              en: 'When the agent asks a choice or confirmation question, the recommended answer (the first option, or "Yes") is applied automatically after a 120s countdown. Choose "Use system default" to follow the global setting. Free-text questions are disabled while this mode is on. Applies from the next question onward, including in running sessions.',
+              fr: 'Quand l’agent pose une question à choix ou de confirmation, la réponse recommandée (la première option, ou « Oui ») est appliquée automatiquement après un compte à rebours de 120 s. Choisissez « Utiliser le défaut système » pour suivre le réglage global. Les questions texte libres sont désactivées quand ce mode est activé. S’applique dès la question suivante, y compris dans les sessions en cours.',
+            })}
+          </p>
+          <select
+            id="project-auto-answer"
+            value={autoAnswer}
+            onChange={(e) => {
+              setAutoAnswer(e.target.value as 'inherit' | 'true' | 'false')
+              setAutoAnswerDirty(true)
+            }}
+            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary"
+            disabled={saving}
+          >
+            <option value="inherit">{t({ en: 'Use system default', fr: 'Utiliser le défaut système' })}</option>
+            <option value="true">{t({ en: 'Enabled for this project', fr: 'Activé pour ce projet' })}</option>
+            <option value="false">{t({ en: 'Disabled for this project', fr: 'Désactivé pour ce projet' })}</option>
+          </select>
         </div>
 
         <div>

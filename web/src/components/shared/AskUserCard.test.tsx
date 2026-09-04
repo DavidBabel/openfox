@@ -371,3 +371,32 @@ describe('AskUserCard', () => {
     }
   })
 })
+
+describe('AskUserCard auto-answer countdown', () => {
+  it('renders the countdown and typing an answer cancels it', async () => {
+    const wsSend = vi.spyOn((await import('../../lib/ws')).wsClient, 'send').mockImplementation(() => 'id')
+    const deadline = Date.now() + 120_000
+    useSessionStore.setState({
+      pendingQuestions: [
+        {
+          callId: 'call-aa',
+          question: 'Pick:',
+          type: 'choice',
+          options: [{ value: 'A', label: 'A' }] as ChoiceOption[],
+          autoAnswerDeadline: deadline,
+        },
+      ],
+    })
+    const tc = makeToolCall({ id: 'call-aa', arguments: { question: 'Pick:', type: 'choice' } })
+    const container = render(<AskUserCard toolCall={tc} />)
+    expect(container.textContent).toContain('auto-answer')
+
+    const textarea = container.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'custom' } })
+
+    expect(wsSend).toHaveBeenCalledWith('chat.cancel_autoanswer', expect.objectContaining({}))
+    const question = useSessionStore.getState().pendingQuestions.find((q) => q.callId === 'call-aa')!
+    expect(question.autoAnswerDeadline).toBeUndefined()
+    wsSend.mockRestore()
+  })
+})

@@ -7,6 +7,7 @@ import type {
   SessionRunningPayload,
   WorkflowAutoLaunchPayload,
   ChatAskUserPayload,
+  ChatAutoAnswerPayload,
   ChatDeltaPayload,
   ChatThinkingPayload,
   ChatToolPreparingPayload,
@@ -886,6 +887,32 @@ export function handleServerMessage(
       ) {
         markBackgroundSessionUnread(set, message)
       }
+      break
+    }
+
+    case 'chat.autoanswer': {
+      const sessionId = message.sessionId
+      const payload = message.payload as ChatAutoAnswerPayload
+      if (!payload.callId) break
+      if (!payload.active && payload.answered) {
+        applyChat(set, get, sessionId, (pane) => ({
+          ...pane,
+          pendingQuestions: pane.pendingQuestions.filter((q) => q.callId !== payload.callId),
+        }))
+        break
+      }
+      applyChat(set, get, sessionId, (pane) => ({
+        ...pane,
+        pendingQuestions: pane.pendingQuestions.map((q) => {
+          if (q.callId !== payload.callId) return q
+          if (!payload.active || payload.deadline === undefined) {
+            const rest = { ...q }
+            delete rest.autoAnswerDeadline
+            return rest
+          }
+          return { ...q, autoAnswerDeadline: payload.deadline }
+        }),
+      }))
       break
     }
 

@@ -9,8 +9,13 @@
  */
 
 import type { WorkflowScope } from '../../shared/types.js'
-import { getProjectFavoriteWorkflowId } from '../db/projects.js'
-import { getSetting, SETTINGS_KEYS } from '../db/settings.js'
+import {
+  clearProjectFavoriteWorkflowId,
+  getProjectFavoriteWorkflowId,
+  getProjectByWorkdir,
+  listProjects,
+} from '../db/projects.js'
+import { getSetting, setSetting, SETTINGS_KEYS } from '../db/settings.js'
 import { logger } from '../utils/logger.js'
 import { listAvailableWorkflows } from './registry.js'
 
@@ -74,5 +79,60 @@ export async function resolveFavoriteWorkflow(
       error: err instanceof Error ? err.message : String(err),
     })
     return null
+  }
+}
+
+/**
+ * After a workflow delete, reset every favorite-workflow config that still
+ * points at the deleted id and no longer resolves anywhere: the global setting
+ * (checked against the builtin/user catalog only — project-scoped ids can never
+ * be configured globally) and each project override (checked against its own
+ * effective catalog). Keeps working copies intact: deleting a project override
+ * that shadows a same-id global workflow leaves favorites on that id alone.
+ */
+export async function sweepFavoritesAfterDelete(
+  deletedId: string,
+  configDir: string,
+  deletedProjectDir?: string,
+): Promise<void> {
+  if (!deletedId) return
+
+  const globalCatalog = await listAvailableWorkflows(configDir)
+  if (globalCatalog.some((w) => w.id === deletedId)) return
+
+  if (resolveFavoriteWorkflowId(undefined) === deletedId) {
+    try {
+      setSetting(SETTINGS_KEYS.FAVORITE_WORKFLOW, '')
+    } catch (err) {
+      logger.debug('Failed to clear global favorite workflow', { error: String(err) })
+    }
+  }
+
+  const projectDirs = new Set<string>()
+  if (deletedProjectDir) projectDirs.add(deletedProjectDir)
+  for (const workdir of projectWorkdirsReferencing(deletedId)) projectDirs.add(workdir)
+
+  for (const dir of projectDirs) {
+    try {
+      const catalog = await listAvailableWorkflows(configDir, dir)
+      if (catalog.some((w) => w.id === deletedId)) continue
+      const project = getProjectByWorkdir(dir)
+      if (project && resolveFavoriteWorkflowId(project.id) === deletedId) {
+        clearProjectFavoriteWorkflowId(project.id)
+      }
+    } catch (err) {
+      logger.debug('Failed to sweep project favorite workflow', { dir, error: String(err) })
+    }
+  }
+}
+
+function projectWorkdirsReferencing(deletedId: string): string[] {
+  try {
+    return listProjects()
+      .filter((p) => p.favoriteWorkflowId === deletedId)
+      .map((p) => p.workdir)
+  } catch (err) {
+    logger.debug('Failed to list projects for favorite sweep', { error: String(err) })
+    return []
   }
 }
