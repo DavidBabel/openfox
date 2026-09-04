@@ -1,7 +1,8 @@
 /**
  * Favorite-workflow auto-launch countdown.
  *
- * Server-owned 60s timer: when a session goes idle at the post-planner
+ * Server-owned countdown (duration from the auto-action timeout setting):
+ * when a session goes idle at the post-planner
  * "start building" choice point and a favorite workflow resolves, the backend
  * schedules a countdown and broadcasts a `workflow.autolaunch` message with
  * the deadline so any client (now or after a reload) can render it. On expiry
@@ -14,8 +15,6 @@ import type { WorkflowScope } from '../../shared/types.js'
 import type { ServerMessage, WorkflowAutoLaunchPayload } from '../../shared/protocol.js'
 import { createServerMessage } from '../../shared/protocol.js'
 import { logger } from '../utils/logger.js'
-
-export const AUTO_LAUNCH_DELAY_MS = 60_000
 
 export interface AutoLaunchFavorite {
   id: string
@@ -34,6 +33,8 @@ export interface AutoLaunchDeps {
   broadcast: (sessionId: string, msg: ServerMessage) => void
   /** Fire on expiry: launch the favorite workflow exactly like a user click. */
   fire: (sessionId: string, favorite: AutoLaunchFavorite) => void
+  /** Countdown duration for this scope, from the auto-action timeout setting. */
+  resolveDelayMs: (projectId?: string) => number
 }
 
 const pending = new Map<string, PendingAutoLaunch>()
@@ -56,9 +57,10 @@ function activeMessage(favorite: AutoLaunchFavorite, deadline: number): ServerMe
 const CLEARED_MESSAGE = createServerMessage<WorkflowAutoLaunchPayload>('workflow.autolaunch', { active: false })
 
 /** Schedule the countdown for a session. No-op when one is already pending. */
-export function scheduleAutoLaunch(sessionId: string, favorite: AutoLaunchFavorite): void {
+export function scheduleAutoLaunch(sessionId: string, favorite: AutoLaunchFavorite, projectId?: string): void {
   if (pending.has(sessionId) || !deps) return
-  const deadline = Date.now() + AUTO_LAUNCH_DELAY_MS
+  const delayMs = deps.resolveDelayMs(projectId)
+  const deadline = Date.now() + delayMs
   const timer = setTimeout(() => {
     pending.delete(sessionId)
     deps?.broadcast(sessionId, CLEARED_MESSAGE)
@@ -71,7 +73,7 @@ export function scheduleAutoLaunch(sessionId: string, favorite: AutoLaunchFavori
         error: err instanceof Error ? err.message : String(err),
       })
     }
-  }, AUTO_LAUNCH_DELAY_MS)
+  }, delayMs)
   timer.unref?.()
   pending.set(sessionId, { favorite, deadline, timer })
   deps.broadcast(sessionId, activeMessage(favorite, deadline))

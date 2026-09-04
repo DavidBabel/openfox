@@ -92,6 +92,7 @@ export function updateProject(
     defaultAgent?: string | null
     favoriteWorkflowId?: string | null
     autoAnswerQuestions?: boolean | null
+    autoActionTimeoutSeconds?: number | null
     workspaceRootDir?: string | null
     mcpOverrides?: Record<string, { disabled?: boolean; disabledTools?: string[] }> | null
   },
@@ -100,7 +101,7 @@ export function updateProject(
   const now = new Date().toISOString()
 
   const sets: string[] = ['updated_at = ?']
-  const values: (string | null)[] = [now]
+  const values: (string | number | null)[] = [now]
 
   if (updates.name !== undefined) {
     sets.push('name = ?')
@@ -130,6 +131,11 @@ export function updateProject(
   if (updates.autoAnswerQuestions !== undefined) {
     sets.push('auto_answer_questions = ?')
     values.push(updates.autoAnswerQuestions === null ? null : updates.autoAnswerQuestions ? 'true' : 'false')
+  }
+
+  if (updates.autoActionTimeoutSeconds !== undefined) {
+    sets.push('auto_action_timeout = ?')
+    values.push(updates.autoActionTimeoutSeconds)
   }
 
   if (updates.workspaceRootDir !== undefined) {
@@ -208,6 +214,18 @@ export function getProjectAutoAnswerQuestions(projectId: string): boolean | null
   }
 }
 
+/** Project auto-action timeout override in seconds; null inherits the global setting. */
+export function getProjectAutoActionTimeout(projectId: string): number | null {
+  try {
+    const db = getDatabase()
+    const row = db.prepare('SELECT auto_action_timeout FROM projects WHERE id = ?').get(projectId) as
+      { auto_action_timeout: number | null } | undefined
+    return row?.auto_action_timeout ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Point a project's favorite-workflow override back at the system default. */
 export function clearProjectFavoriteWorkflowId(projectId: string): void {
   try {
@@ -231,6 +249,7 @@ interface ProjectRow {
   default_agent: string | null
   favorite_workflow_id: string | null
   auto_answer_questions: string | null
+  auto_action_timeout: number | null
   is_starred: number
   workspace_root_dir: string | null
   mcp_overrides: string | null
@@ -249,6 +268,9 @@ function rowToProject(row: ProjectRow): Project {
     ...(row.favorite_workflow_id ? { favoriteWorkflowId: row.favorite_workflow_id } : {}),
     ...(row.auto_answer_questions === 'true' || row.auto_answer_questions === 'false'
       ? { autoAnswerQuestions: row.auto_answer_questions === 'true' }
+      : {}),
+    ...(row.auto_action_timeout !== null && row.auto_action_timeout !== undefined
+      ? { autoActionTimeoutSeconds: row.auto_action_timeout }
       : {}),
     isStarred: !!row.is_starred,
     ...(row.workspace_root_dir ? { workspaceRootDir: row.workspace_root_dir } : {}),

@@ -13,6 +13,8 @@ import {
   saveWorkspaceConfig,
   type WorkspaceConfigResponse,
 } from '../../lib/resources'
+import { SETTINGS_KEYS } from '../../lib/resources'
+import { useSetting } from '../../hooks/useSetting'
 import { mcpStatusColor, mcpStatusDot } from '../../lib/mcp-utils'
 import { wsClient } from '../../lib/ws'
 import { authFetch } from '../../lib/api'
@@ -31,6 +33,8 @@ interface ProjectSettingsModalProps {
 export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettingsModalProps) {
   const t = useT()
   const updateProject = useProjectStore((state) => state.updateProject)
+  const autoActionTimeoutSetting = useSetting(SETTINGS_KEYS.AUTO_ACTION_TIMEOUT, '90').value
+  const autoActionSeconds = /^\d+$/.test(autoActionTimeoutSetting) ? autoActionTimeoutSetting : '90'
   const { data: wsConfig, loading: wsLoading } = useResource(workspaceConfigResource, project.workdir)
   const { data } = useResource(agentsResource, project.workdir)
   const defaultAgents = data?.defaults ?? []
@@ -78,15 +82,20 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   const [autoAnswer, setAutoAnswer] = useState<'inherit' | 'true' | 'false'>(
     project.autoAnswerQuestions === undefined ? 'inherit' : project.autoAnswerQuestions ? 'true' : 'false',
   )
+  const [autoActionTimeout, setAutoActionTimeout] = useState(
+    project.autoActionTimeoutSeconds === undefined ? '' : String(project.autoActionTimeoutSeconds),
+  )
   const [instructionsDirty, setInstructionsDirty] = useState(false)
   const [dangerLevelDirty, setDangerLevelDirty] = useState(false)
   const [defaultAgentDirty, setDefaultAgentDirty] = useState(false)
   const [favoriteWorkflowDirty, setFavoriteWorkflowDirty] = useState(false)
   const [autoAnswerDirty, setAutoAnswerDirty] = useState(false)
+  const [autoActionTimeoutDirty, setAutoActionTimeoutDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const currentAgentMissing = defaultAgent !== '' && !topLevelAgents.some((a) => a.id === defaultAgent)
   const currentFavoriteMissing = favoriteWorkflow !== '' && !workflows.some((w) => w.id === favoriteWorkflow)
+  const showAutoActionTimeout = favoriteWorkflow !== '' || autoAnswer !== 'inherit'
 
   const [setupCmd, setSetupCmd] = useState('')
   const [setupDirty, setSetupDirty] = useState(false)
@@ -109,6 +118,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     defaultAgentDirty ||
     favoriteWorkflowDirty ||
     autoAnswerDirty ||
+    autoActionTimeoutDirty ||
     setupDirty ||
     rootDirDirty ||
     mcpDirty
@@ -121,11 +131,13 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     setAutoAnswer(
       project.autoAnswerQuestions === undefined ? 'inherit' : project.autoAnswerQuestions ? 'true' : 'false',
     )
+    setAutoActionTimeout(project.autoActionTimeoutSeconds === undefined ? '' : String(project.autoActionTimeoutSeconds))
     setInstructionsDirty(false)
     setDangerLevelDirty(false)
     setDefaultAgentDirty(false)
     setFavoriteWorkflowDirty(false)
     setAutoAnswerDirty(false)
+    setAutoActionTimeoutDirty(false)
     setSetupDirty(false)
     setRootDirDirty(false)
   }, [project])
@@ -223,6 +235,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
       defaultAgent?: string | null
       favoriteWorkflowId?: string | null
       autoAnswerQuestions?: boolean | null
+      autoActionTimeoutSeconds?: number | null
     } = {
       customInstructions: customInstructions || null,
       dangerLevel: dangerLevelValue,
@@ -235,6 +248,12 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     }
     if (autoAnswerDirty) {
       projectUpdates.autoAnswerQuestions = autoAnswer === 'inherit' ? null : autoAnswer === 'true'
+    }
+    if (autoActionTimeoutDirty) {
+      const trimmed = autoActionTimeout.trim()
+      const parsed = Number(trimmed)
+      projectUpdates.autoActionTimeoutSeconds =
+        trimmed === '' ? null : Number.isInteger(parsed) && parsed >= 1 ? parsed : null
     }
     await updateProject(project.id, projectUpdates)
     if (setupDirty || rootDirDirty || mcpDirty) {
@@ -255,6 +274,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     setDefaultAgentDirty(false)
     setFavoriteWorkflowDirty(false)
     setAutoAnswerDirty(false)
+    setAutoActionTimeoutDirty(false)
     setSetupDirty(false)
     setRootDirDirty(false)
     setMcpDirty(false)
@@ -269,6 +289,8 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
     favoriteWorkflowDirty,
     autoAnswer,
     autoAnswerDirty,
+    autoActionTimeout,
+    autoActionTimeoutDirty,
     setupCmd,
     rootDir,
     mcpOverrides,
@@ -581,10 +603,13 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
             {t({ en: 'Favorite Workflow', fr: 'Workflow favori' })}
           </label>
           <p className="text-sm text-text-muted mb-3">
-            {t({
-              en: 'When a task finishes planning, this workflow auto-launches after a 60s countdown instead of waiting for you to choose. Choose "Use system default" to follow the global favorite workflow; "No favorite" to always pick manually. Existing sessions are not affected.',
-              fr: 'Quand une tâche termine son plan, ce workflow se lance automatiquement après un compte à rebours de 60 s au lieu d’attendre votre choix. Choisissez « Utiliser le défaut système » pour suivre le workflow favori global ; « Aucun favori » pour choisir manuellement. Les sessions existantes ne sont pas affectées.',
-            })}
+            {t(
+              {
+                en: 'When a task finishes planning, this workflow auto-launches after a {{seconds}}s countdown instead of waiting for you to choose. Choose "Use system default" to follow the global favorite workflow; "No favorite" to always pick manually. Existing sessions are not affected.',
+                fr: 'Quand une tâche termine son plan, ce workflow se lance automatiquement après un compte à rebours de {{seconds}} s au lieu d’attendre votre choix. Choisissez « Utiliser le défaut système » pour suivre le workflow favori global ; « Aucun favori » pour choisir manuellement. Les sessions existantes ne sont pas affectées.',
+              },
+              { seconds: autoActionSeconds },
+            )}
           </p>
           <select
             id="project-favorite-workflow"
@@ -626,13 +651,16 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
             htmlFor="project-auto-answer"
             className="block text-sm font-medium text-text-primary mb-1 flex-shrink-0"
           >
-            {t({ en: 'Auto-answer Questions', fr: 'Réponse automatique aux questions' })}
+            {t({ en: 'Auto-answer Agent Questions', fr: 'Réponse automatique aux questions de l\u2019agent' })}
           </label>
           <p className="text-sm text-text-muted mb-3">
-            {t({
-              en: 'When the agent asks a choice or confirmation question, the recommended answer (the first option, or "Yes") is applied automatically after a 120s countdown. Choose "Use system default" to follow the global setting. Free-text questions are disabled while this mode is on. Applies from the next question onward, including in running sessions.',
-              fr: 'Quand l’agent pose une question à choix ou de confirmation, la réponse recommandée (la première option, ou « Oui ») est appliquée automatiquement après un compte à rebours de 120 s. Choisissez « Utiliser le défaut système » pour suivre le réglage global. Les questions texte libres sont désactivées quand ce mode est activé. S’applique dès la question suivante, y compris dans les sessions en cours.',
-            })}
+            {t(
+              {
+                en: 'When the agent asks a choice or confirmation question, the recommended answer (the first option, or "Yes") is applied automatically after a {{seconds}}s countdown. Choose "Use system default" to follow the global setting. Free-text questions are disabled while this mode is on. Applies from the next question onward, including in running sessions.',
+                fr: 'Quand l’agent pose une question à choix ou de confirmation, la réponse recommandée (la première option, ou « Oui ») est appliquée automatiquement après un compte à rebours de {{seconds}} s. Choisissez « Utiliser le défaut système » pour suivre le réglage global. Les questions texte libres sont désactivées quand ce mode est activé. S’applique dès la question suivante, y compris dans les sessions en cours.',
+              },
+              { seconds: autoActionSeconds },
+            )}
           </p>
           <select
             id="project-auto-answer"
@@ -649,6 +677,40 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
             <option value="false">{t({ en: 'Disabled for this project', fr: 'Désactivé pour ce projet' })}</option>
           </select>
         </div>
+
+        {showAutoActionTimeout && (
+          <div>
+            <label
+              htmlFor="project-auto-action-timeout"
+              className="block text-sm font-medium text-text-primary mb-1 flex-shrink-0"
+            >
+              {t({ en: 'Automatic Actions Timeout', fr: 'Timeout des actions automatiques' })}
+            </label>
+            <p className="text-sm text-text-muted mb-3">
+              {t({
+                en: 'Seconds before the automatic behaviors fire: favorite-workflow auto-launch and question auto-answer. Leave empty to follow the global setting (default 90).',
+                fr: 'Secondes avant le déclenchement des comportements automatiques : lancement automatique du workflow favori et réponse automatique aux questions. Laissez vide pour suivre le réglage global (par défaut 90).',
+              })}
+            </p>
+            <input
+              id="project-auto-action-timeout"
+              type="number"
+              min={1}
+              step={1}
+              value={autoActionTimeout}
+              onChange={(e) => {
+                setAutoActionTimeout(e.target.value)
+                setAutoActionTimeoutDirty(true)
+              }}
+              placeholder={t(
+                { en: 'Use system default ({{seconds}})', fr: 'Défaut système ({{seconds}})' },
+                { seconds: autoActionTimeoutSetting || '90' },
+              )}
+              className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary"
+              disabled={saving}
+            />
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-text-primary mb-1 flex-shrink-0">

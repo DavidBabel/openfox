@@ -179,6 +179,11 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE projects ADD COLUMN auto_answer_questions TEXT`)
   }
 
+  if (!projectColumnNames.includes('auto_action_timeout')) {
+    logger.info('Migrating projects table: adding auto_action_timeout column')
+    db.exec(`ALTER TABLE projects ADD COLUMN auto_action_timeout INTEGER`)
+  }
+
   // Migration: Add mcp_disabled_servers column to sessions table
   if (!columnNames.includes('mcp_disabled_servers')) {
     logger.info('Migrating sessions table: adding mcp_disabled_servers column')

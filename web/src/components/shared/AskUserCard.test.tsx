@@ -68,6 +68,21 @@ describe('AskUserCard', () => {
     expect(container.textContent).toContain('React')
   })
 
+  it('shows "Answered automatically" when the result metadata flags an auto-answer', () => {
+    const tc = makeToolCall({
+      result: {
+        success: true,
+        output: 'React',
+        durationMs: 100,
+        truncated: false,
+        metadata: { autoAnswered: true },
+      },
+    })
+    const container = render(<AskUserCard toolCall={tc} />)
+    expect(container.textContent).toContain('Answered automatically')
+    expect(container.textContent).toContain('React')
+  })
+
   it('shows skipped state when result is [user skipped]', () => {
     const tc = makeToolCall({
       result: { success: true, output: '[user skipped]', durationMs: 100, truncated: false },

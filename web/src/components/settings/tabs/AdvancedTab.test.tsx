@@ -104,15 +104,42 @@ describe('AdvancedTab', () => {
     expect(optionTexts.some((t) => t.includes('Local flow'))).toBe(false)
   })
 
-  it('renders the Auto-answer Questions toggle and writes the setting', async () => {
+  it('renders the Auto-answer agent questions toggle and writes the setting', async () => {
     const { container } = render(<AdvancedTab onClose={vi.fn()} />)
-    expect(container.textContent).toContain('Auto-answer questions')
+    expect(container.textContent).toContain('Auto-answer agent questions')
     const toggle = Array.from(container.querySelectorAll('label')).find((l) =>
-      l.textContent?.includes('Auto-answer questions'),
+      l.textContent?.includes('Auto-answer agent questions'),
     )
     expect(toggle).toBeTruthy()
     await userEvent.setup().click(toggle!)
     expect(mockSetSetting).toHaveBeenCalledWith('agent.autoAnswerQuestions', 'true')
+  })
+
+  it('hides the automatic actions timeout when neither auto behavior is configured', () => {
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    expect(container.textContent).not.toContain('Automatic actions timeout')
+  })
+
+  it('shows the automatic actions timeout once auto-answer is on and writes the setting', async () => {
+    mockSettings['agent.autoAnswerQuestions'] = 'true'
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    expect(container.textContent).toContain('Automatic actions timeout')
+    const input = container.querySelector('#auto-action-timeout') as HTMLInputElement
+    expect(input).toBeTruthy()
+    await userEvent.setup().clear(input)
+    await userEvent.setup().type(input, '45')
+    expect(mockSetSetting).toHaveBeenCalledWith('agent.autoActionTimeoutSeconds', '45')
+  })
+
+  it('shows the timeout when only a favorite workflow is set', () => {
+    mockSettings['workflow.favoriteWorkflow'] = 'build-verify'
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    expect(container.textContent).toContain('Automatic actions timeout')
+  })
+
+  it('mentions local workflows in the favorite workflow description', () => {
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    expect(container.textContent).toContain('Local workflows can only be picked at project level')
   })
 
   it('toggles Dynamic System Prompt on click', async () => {

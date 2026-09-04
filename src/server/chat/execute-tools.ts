@@ -145,7 +145,7 @@ export async function executeTools(
 
       // Arm the auto-answer countdown after the question event was appended,
       // so clients always receive chat.ask_user before its countdown.
-      const { armAutoAnswer, awaitAnswer } = await import('../tools/ask.js')
+      const { armAutoAnswer, awaitAnswer, consumeAutoAnswered } = await import('../tools/ask.js')
       armAutoAnswer({
         callId: error.callId,
         sessionId: ctx.sessionId,
@@ -171,6 +171,7 @@ export async function executeTools(
         output: answer,
         durationMs: Date.now() - startTime,
         truncated: false,
+        ...(consumeAutoAnswered(error.callId) ? { metadata: { autoAnswered: true } } : {}),
       }
     } else if (error instanceof Error && (error.message === 'Aborted' || error.name === 'AbortError')) {
       return createInterruptedResult(startTime)

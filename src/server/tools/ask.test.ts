@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServerMessage } from '../../shared/protocol.js'
 import { loadConfig } from '../config.js'
 import { closeDatabase, initDatabase } from '../db/index.js'
+import { createProject, updateProject } from '../db/projects.js'
 import { SETTINGS_KEYS, deleteSetting, setSetting } from '../db/settings.js'
 import {
   AskUserInterrupt,
-  AUTO_ANSWER_DELAY_MS,
   awaitAnswer,
   armAutoAnswer,
   askUserTool,
@@ -14,11 +14,15 @@ import {
   cancelQuestion,
   cancelQuestionsForSession,
   clearAllAutoAnswers,
+  consumeAutoAnswered,
   hasPendingQuestion,
   initAutoAnswer,
   provideAnswer,
   getPendingQuestionsForSession,
 } from './ask.js'
+import { resolveAutoActionTimeoutSeconds } from '../utils/auto-action-timeout.js'
+
+const TEST_TIMEOUT_MS = 90_000
 
 function ctx(sessionId: string, toolCallId?: string) {
   return {
@@ -38,12 +42,16 @@ describe('ask_user auto-answer countdown', () => {
     config.database.path = ':memory:'
     initDatabase(config)
     broadcasts = []
-    initAutoAnswer({ broadcast: (_sessionId, msg) => broadcasts.push(msg) })
+    initAutoAnswer({
+      broadcast: (_sessionId, msg) => broadcasts.push(msg),
+      resolveDelayMs: (projectId) => resolveAutoActionTimeoutSeconds(projectId) * 1000,
+    })
   })
 
   afterEach(() => {
     clearAllAutoAnswers()
     deleteSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS)
+    deleteSetting(SETTINGS_KEYS.AUTO_ACTION_TIMEOUT)
     closeDatabase()
     vi.useRealTimers()
   })
@@ -57,7 +65,7 @@ describe('ask_user auto-answer countdown', () => {
     throw new Error('expected AskUserInterrupt')
   }
 
-  it('auto-answers a choice question with the first option after 120s', async () => {
+  it('auto-answers a choice question with the first option after the timeout', async () => {
     setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
     const interrupt = await ask(
       { question: 'Pick one:', type: 'choice', options: ['React', 'Vue'] },
@@ -69,7 +77,7 @@ describe('ask_user auto-answer countdown', () => {
     expect(broadcasts.filter((b) => b.type === 'chat.autoanswer' && isActive(b))).toHaveLength(1)
 
     const answerPromise = awaitAnswer(interrupt.callId)!
-    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    vi.advanceTimersByTime(TEST_TIMEOUT_MS)
     expect(await answerPromise).toBe('React')
     expect(hasPendingQuestion(interrupt.callId)).toBe(false)
     // Cleared broadcast on expiry.
@@ -77,13 +85,13 @@ describe('ask_user auto-answer countdown', () => {
     expect(isActive(broadcasts.at(-1)!)).toBe(false)
   })
 
-  it('auto-answers a confirm question with yes after 120s', async () => {
+  it('auto-answers a confirm question with yes after the timeout', async () => {
     setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
     const interrupt = await ask({ question: 'Proceed?', type: 'confirm' }, 'call-auto-confirm')
 
     armAutoAnswer({ callId: interrupt.callId, sessionId: 'session-auto', type: 'confirm' })
     const answerPromise = awaitAnswer(interrupt.callId)!
-    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    vi.advanceTimersByTime(TEST_TIMEOUT_MS)
     expect(await answerPromise).toBe('yes')
   })
 
@@ -99,7 +107,7 @@ describe('ask_user auto-answer countdown', () => {
     const choice = await ask({ question: 'Pick:', type: 'choice', options: ['A'] }, 'call-auto-off')
     armAutoAnswer({ callId: choice.callId, sessionId: 'session-auto', type: 'choice', options: choice.options })
     expect(broadcasts).toHaveLength(0)
-    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS + 1000)
+    vi.advanceTimersByTime(TEST_TIMEOUT_MS + 1000)
     expect(hasPendingQuestion(choice.callId)).toBe(true)
 
     provideAnswer('call-auto-off', 'A')
@@ -112,7 +120,7 @@ describe('ask_user auto-answer countdown', () => {
     armAutoAnswer({ callId: interrupt.callId, sessionId: 'session-auto', type: 'choice', options: interrupt.options })
 
     expect(provideAnswer(interrupt.callId, 'B')).toBe(true)
-    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS + 1000)
+    vi.advanceTimersByTime(TEST_TIMEOUT_MS + 1000)
     // The user's answer stands; the countdown never overwrote it nor fired a second time.
     expect(broadcasts.filter((b) => b.type === 'chat.autoanswer')).toHaveLength(2) // active + cleared by provideAnswer
     expect(Boolean((broadcasts.at(-1)!.payload as { active?: boolean }).active)).toBe(false)
@@ -125,19 +133,51 @@ describe('ask_user auto-answer countdown', () => {
     vi.advanceTimersByTime(1000)
 
     cancelAutoAnswer(a.callId)
-    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    vi.advanceTimersByTime(TEST_TIMEOUT_MS)
     expect(hasPendingQuestion(a.callId)).toBe(true)
     provideAnswer('call-aa-a', 'A')
 
     const b = await ask({ question: 'Pick B?', type: 'choice', options: ['B'] }, 'call-aa-b')
     armAutoAnswer({ callId: b.callId, sessionId: 'session-auto', type: 'choice', options: b.options })
     cancelAutoAnswersForSession('session-auto')
-    vi.advanceTimersByTime(AUTO_ANSWER_DELAY_MS)
+    vi.advanceTimersByTime(TEST_TIMEOUT_MS)
     expect(hasPendingQuestion(b.callId)).toBe(true)
 
     // Cancelling an un-armed call is a no-op.
     cancelAutoAnswer('nope')
     provideAnswer('call-aa-b', 'B')
+  })
+
+  it('marks expired countdown answers as auto-answered, consumed once', async () => {
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const interrupt = await ask({ question: 'Pick:', type: 'choice', options: ['A'] }, 'call-aa-flag')
+    armAutoAnswer({ callId: interrupt.callId, sessionId: 'session-auto', type: 'choice', options: interrupt.options })
+
+    expect(consumeAutoAnswered(interrupt.callId)).toBe(false)
+    const answerPromise = awaitAnswer(interrupt.callId)!
+    vi.advanceTimersByTime(TEST_TIMEOUT_MS)
+    await answerPromise
+
+    expect(consumeAutoAnswered(interrupt.callId)).toBe(true)
+    expect(consumeAutoAnswered(interrupt.callId)).toBe(false)
+  })
+
+  it('uses the project override for the countdown duration', async () => {
+    const project = createProject('ask-timeout', '/tmp/ask-timeout-project')
+    updateProject(project.id, { autoActionTimeoutSeconds: 15 })
+    setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'true')
+    const interrupt = await ask({ question: 'Pick:', type: 'choice', options: ['A'] }, 'call-aa-proj-timeout')
+    armAutoAnswer({
+      callId: interrupt.callId,
+      sessionId: 'session-auto',
+      projectId: project.id,
+      type: 'choice',
+      options: interrupt.options,
+    })
+
+    const answerPromise = awaitAnswer(interrupt.callId)!
+    vi.advanceTimersByTime(15_000)
+    expect(await answerPromise).toBe('A')
   })
 
   it('rejects free-text ask_user while auto-answer mode is on', async () => {

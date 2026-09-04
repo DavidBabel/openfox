@@ -11,6 +11,7 @@ export interface Project {
   defaultAgent?: string // Project default agent for new sessions (overrides global)
   favoriteWorkflowId?: string // Project favorite workflow id (overrides global favorite workflow)
   autoAnswerQuestions?: boolean // Project auto-answer override (undefined inherits the global setting)
+  autoActionTimeoutSeconds?: number // Project auto-action countdown override in seconds (undefined inherits the global setting)
   isStarred?: boolean // Whether the project is starred for quick access
   workspaceRootDir?: string // Custom workspace root directory (user-specific, stored in DB)
   mcpOverrides?: Record<string, { disabled?: boolean; disabledTools?: string[] }> // Project-level MCP server overrides

@@ -28,12 +28,17 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const defaultAgentSetting = useSetting(SETTINGS_KEYS.DEFAULT_AGENT).value
   const favoriteWorkflowSetting = useSetting(SETTINGS_KEYS.FAVORITE_WORKFLOW).value
   const autoAnswerSetting = useSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, 'false').value
+  const autoActionTimeoutSetting = useSetting(SETTINGS_KEYS.AUTO_ACTION_TIMEOUT, '90').value
+  const autoActionSeconds = /^\d+$/.test(autoActionTimeoutSetting) ? autoActionTimeoutSetting : '90'
   const { workflows: allWorkflows } = useWorkflows()
   // Global favorite may only reference global scopes (builtin + user): a
   // project-scoped workflow must never be picked as the system-wide default.
   const globalWorkflows = allWorkflows.filter((w) => w.scope !== 'project')
   const currentFavoriteWorkflowMissing =
     !!favoriteWorkflowSetting && !globalWorkflows.some((w) => w.id === favoriteWorkflowSetting)
+  // The timeout only concerns the two automatic behaviors: show it once one of
+  // them is configured away from its default (off).
+  const showAutoActionTimeout = !!favoriteWorkflowSetting || autoAnswerSetting === 'true'
   const showChangelogSetting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE, 'true').value
 
   const [localToggles, setLocalToggles] = useState({
@@ -44,6 +49,7 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
 
   const [retryPatterns, setRetryPatterns] = useState<RetryPatternsValue>({ patterns: [], maxRetriesPerTurn: 10 })
   const [proxyUrl, setProxyUrl] = useState('')
+  const [autoActionTimeout, setAutoActionTimeout] = useState(autoActionTimeoutSetting)
   const [defaultAgent, setDefaultAgent] = useState('')
   const [defaultAgentLoaded, setDefaultAgentLoaded] = useState(false)
   const [proxyTestText, proxyTestError, proxyTestSuccess, testProxy] = useTestButton()
@@ -85,6 +91,12 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   }, [proxyUrlSetting])
 
   useEffect(() => {
+    if (autoActionTimeoutSetting !== '') {
+      setAutoActionTimeout(autoActionTimeoutSetting)
+    }
+  }, [autoActionTimeoutSetting])
+
+  useEffect(() => {
     if (defaultAgentSetting !== '') {
       setDefaultAgent(defaultAgentSetting)
       setDefaultAgentLoaded(true)
@@ -99,6 +111,13 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const handleProxyUrlChange = (value: string) => {
     setProxyUrl(value)
     void setSetting(SETTINGS_KEYS.PROXY_URL, value)
+  }
+
+  const handleAutoActionTimeoutChange = (value: string) => {
+    setAutoActionTimeout(value)
+    if (/^\d+$/.test(value) && Number(value) >= 1) {
+      void setSetting(SETTINGS_KEYS.AUTO_ACTION_TIMEOUT, value)
+    }
   }
 
   function handleTestProxy() {
@@ -248,10 +267,13 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
           {t({ en: 'Favorite Workflow', fr: 'Workflow favori' })}
         </h3>
         <p className="text-sm text-text-muted mb-3">
-          {t({
-            en: 'When a task finishes planning, the favorite workflow auto-launches after a 60s countdown instead of waiting for you to choose. Leave empty to always pick manually.',
-            fr: 'Quand une tâche termine son plan, le workflow favori se lance automatiquement après un compte à rebours de 60 s au lieu d’attendre votre choix. Laissez vide pour choisir manuellement.',
-          })}
+          {t(
+            {
+              en: 'When a task finishes planning, the favorite workflow auto-launches after a {{seconds}}s countdown instead of waiting for you to choose. Leave empty to always pick manually. Local workflows can only be picked at project level.',
+              fr: 'Quand une tâche termine son plan, le workflow favori se lance automatiquement après un compte à rebours de {{seconds}} s au lieu d’attendre votre choix. Laissez vide pour choisir manuellement. Les workflows locaux ne peuvent être choisis qu’au niveau du projet.',
+            },
+            { seconds: autoActionSeconds },
+          )}
         </p>
         <select
           value={favoriteWorkflowSetting ?? ''}
@@ -284,16 +306,44 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
       </div>
       <hr className="border-border" />
       <SettingsToggle
-        title={t({ en: 'Auto-answer questions', fr: 'Réponse automatique aux questions' })}
-        description={t({
-          en: 'When the agent asks a choice or confirmation question, the recommended answer (the first option, or "Yes") is applied automatically after a 120s countdown. Cancel it by answering, or by starting to type. Free-text questions are disabled while this mode is on.',
-          fr: 'Quand l’agent pose une question à choix ou de confirmation, la réponse recommandée (la première option, ou « Oui ») est appliquée automatiquement après un compte à rebours de 120 s. Annulez-la en répondant ou en commençant à saisir. Les questions texte libres sont désactivées quand ce mode est activé.',
-        })}
+        title={t({ en: 'Auto-answer agent questions', fr: 'Réponse automatique aux questions de l’agent' })}
+        description={t(
+          {
+            en: 'When the agent asks a choice or confirmation question, the recommended answer (the first option, or "Yes") is applied automatically after a {{seconds}}s countdown. Cancel it by answering, or by starting to type. Free-text questions are disabled while this mode is on.',
+            fr: 'Quand l’agent pose une question à choix ou de confirmation, la réponse recommandée (la première option, ou « Oui ») est appliquée automatiquement après un compte à rebours de {{seconds}} s. Annulez-la en répondant ou en commençant à saisir. Les questions texte libres sont désactivées quand ce mode est activé.',
+          },
+          { seconds: autoActionSeconds },
+        )}
         enabled={autoAnswerSetting === 'true'}
         onToggle={() =>
           void setSetting(SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS, autoAnswerSetting === 'true' ? 'false' : 'true')
         }
       />
+      {showAutoActionTimeout && (
+        <>
+          <hr className="border-border" />
+          <div>
+            <label htmlFor="auto-action-timeout" className="text-xs text-text-secondary block mb-1">
+              {t({ en: 'Automatic actions timeout (seconds)', fr: 'Timeout des actions automatiques (secondes)' })}
+            </label>
+            <p className="text-sm text-text-muted mb-2">
+              {t({
+                en: 'Duration of the favorite-workflow auto-launch and auto-answer countdowns. Default 90.',
+                fr: 'Durée des comptes à rebours de lancement automatique du workflow favori et de réponse automatique. Par défaut 90.',
+              })}
+            </p>
+            <Input
+              id="auto-action-timeout"
+              type="number"
+              min={1}
+              step={1}
+              value={autoActionTimeout}
+              onChange={(e) => handleAutoActionTimeoutChange(e.target.value)}
+              className="w-32"
+            />
+          </div>
+        </>
+      )}
       <hr className="border-border" />
       <div>
         <h3 className="text-sm font-medium text-text-primary mb-1">{t({ en: 'Onboarding', fr: 'Prise en main' })}</h3>

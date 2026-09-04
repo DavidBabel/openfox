@@ -27,6 +27,7 @@ interface ProjectState {
       defaultAgent?: string | null
       favoriteWorkflowId?: string | null
       autoAnswerQuestions?: boolean | null
+      autoActionTimeoutSeconds?: number | null
     },
   ) => Promise<Project | null>
   deleteProject: (projectId: string) => Promise<boolean>

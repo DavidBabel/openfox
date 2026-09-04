@@ -479,7 +479,15 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   app.put('/api/projects/:id', async (req, res) => {
     const { updateProject } = await import('./db/projects.js')
-    const { name, customInstructions, dangerLevel, defaultAgent, favoriteWorkflowId, autoAnswerQuestions } = req.body
+    const {
+      name,
+      customInstructions,
+      dangerLevel,
+      defaultAgent,
+      favoriteWorkflowId,
+      autoAnswerQuestions,
+      autoActionTimeoutSeconds,
+    } = req.body
     const updates: {
       name?: string
       customInstructions?: string | null
@@ -487,6 +495,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       defaultAgent?: string | null
       favoriteWorkflowId?: string | null
       autoAnswerQuestions?: boolean | null
+      autoActionTimeoutSeconds?: number | null
     } = {}
     if (name !== undefined) updates.name = name
     if (customInstructions !== undefined) updates.customInstructions = customInstructions
@@ -494,6 +503,13 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     if (defaultAgent !== undefined) updates.defaultAgent = defaultAgent as string | null
     if (favoriteWorkflowId !== undefined) updates.favoriteWorkflowId = favoriteWorkflowId as string | null
     if (autoAnswerQuestions !== undefined) updates.autoAnswerQuestions = autoAnswerQuestions as boolean | null
+    if (autoActionTimeoutSeconds !== undefined) {
+      const parsed = autoActionTimeoutSeconds === null ? null : Number(autoActionTimeoutSeconds)
+      if (parsed !== null && !(Number.isInteger(parsed) && parsed >= 1)) {
+        return res.status(400).json({ error: 'autoActionTimeoutSeconds must be an integer >= 1' })
+      }
+      updates.autoActionTimeoutSeconds = parsed
+    }
     const updated = updateProject(req.params.id, updates)
     if (!updated) {
       return res.status(404).json({ error: 'Project not found' })

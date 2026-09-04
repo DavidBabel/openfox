@@ -31,6 +31,7 @@ import { resolveFavoriteWorkflow } from '../workflows/favorite.js'
 import { appendCompactionPrompt } from '../context/compactor.js'
 import { computeSessionHash, applyDynamicContext, computeUnifiedDiff } from '../chat/dynamic-context.js'
 import { provideAnswer } from '../tools/index.js'
+import { resolveAutoActionTimeoutSeconds } from '../utils/auto-action-timeout.js'
 import { initAutoAnswer, cancelAutoAnswersForSession } from '../tools/index.js'
 import { logger } from '../utils/logger.js'
 import { devServerManager } from '../dev-server/manager.js'
@@ -681,7 +682,7 @@ export function createWebSocketServer(
         broadcastForSession: (sid, msg) => broadcastForSession(sid, msg),
         onFinished: () => cleanupAfterTurn(sessionId, controller, sendForSessionSink, true),
       },
-      { workflowId: favorite.id, scope: favorite.scope },
+      { workflowId: favorite.id, scope: favorite.scope, autoLaunched: true },
     )
   }
 
@@ -689,12 +690,18 @@ export function createWebSocketServer(
     broadcastForSession(sessionId, msg)
   }
 
+  const autoActionDelayMs = (projectId?: string): number => resolveAutoActionTimeoutSeconds(projectId) * 1000
+
   initAutoLaunch({
     broadcast: (sessionId, msg) => broadcastForSession(sessionId, msg),
     fire: fireAutoLaunch,
+    resolveDelayMs: autoActionDelayMs,
   })
 
-  initAutoAnswer({ broadcast: (sessionId, msg) => broadcastForSession(sessionId, msg) })
+  initAutoAnswer({
+    broadcast: (sessionId, msg) => broadcastForSession(sessionId, msg),
+    resolveDelayMs: autoActionDelayMs,
+  })
 
   // The session is idle at the post-planner "start building" choice point —
   // same shape the frontend gates its workflow buttons on.
@@ -736,7 +743,7 @@ export function createWebSocketServer(
             if (!favorite) return
             // Re-check after the async catalog read — the user may have acted.
             if (!isStartBuildingState(sessionId)) return
-            scheduleAutoLaunch(sessionId, favorite)
+            scheduleAutoLaunch(sessionId, favorite, session.projectId)
           } catch (err) {
             logger.debug('Auto-launch scheduling skipped', {
               sessionId,

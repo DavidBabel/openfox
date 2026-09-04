@@ -49,6 +49,7 @@ export const SETTINGS_KEYS = {
   DEFAULT_AGENT: 'agent.defaultAgent',
   FAVORITE_WORKFLOW: 'workflow.favoriteWorkflow',
   AUTO_ANSWER_QUESTIONS: 'agent.autoAnswerQuestions',
+  AUTO_ACTION_TIMEOUT: 'agent.autoActionTimeoutSeconds',
   AGENT_MODEL_OVERRIDES: 'agent.modelOverrides',
 } as const
 
@@ -97,6 +98,7 @@ export const SETTINGS_DEFAULTS: Record<string, string> = {
   [SETTINGS_KEYS.FEATURES_PER_SESSION_MCP]: 'false',
   [SETTINGS_KEYS.FAVORITE_WORKFLOW]: '',
   [SETTINGS_KEYS.AUTO_ANSWER_QUESTIONS]: 'false',
+  [SETTINGS_KEYS.AUTO_ACTION_TIMEOUT]: '90',
   [SETTINGS_KEYS.MAINTENANCE_SNAPSHOT_STREAMS_MIGRATED]: 'false',
 }
 

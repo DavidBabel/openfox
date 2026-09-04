@@ -39,6 +39,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
 
   const resultText = toolCall.result?.output ?? ''
   const isSkipped = resultText === '[user skipped]'
+  const wasAutoAnswered = toolCall.result?.metadata?.['autoAnswered'] === true
 
   useEffect(() => {
     if (isPending && shouldAutofocus() && inputRef.current) {
@@ -225,7 +226,12 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
           <span className={`text-xs ${isSkipped ? 'text-amber-400' : 'text-accent-success'}`}>
             {isSkipped
               ? t({ en: 'Skipped', fr: 'Passée' })
-              : t({ en: 'Answered: {{answer}}', fr: 'Réponse : {{answer}}' }, { answer: resultText })}
+              : wasAutoAnswered
+                ? t(
+                    { en: 'Answered automatically: {{answer}}', fr: 'Réponse automatique : {{answer}}' },
+                    { answer: resultText },
+                  )
+                : t({ en: 'Answered: {{answer}}', fr: 'Réponse : {{answer}}' }, { answer: resultText })}
           </span>
         </div>
       )}

@@ -11,9 +11,18 @@ import { normalizeAskOptions } from '../../shared/ask-options.js'
 import { createDeferred } from '../utils/async.js'
 import { getProjectAutoAnswerQuestions } from '../db/projects.js'
 import { getSetting, SETTINGS_KEYS } from '../db/settings.js'
+import { DEFAULT_AUTO_ACTION_TIMEOUT_SECONDS } from '../utils/auto-action-timeout.js'
 import { logger } from '../utils/logger.js'
 
-export const AUTO_ANSWER_DELAY_MS = 120_000
+/** Calls the countdown answered automatically; consumed once when the tool
+ *  result is recorded so the feed can say "Answered automatically". */
+const autoAnsweredCalls = new Set<string>()
+
+export function consumeAutoAnswered(callId: string): boolean {
+  if (!autoAnsweredCalls.has(callId)) return false
+  autoAnsweredCalls.delete(callId)
+  return true
+}
 
 // Store pending questions by call ID
 const pendingQuestions = new Map<
@@ -37,9 +46,15 @@ interface PendingAutoAnswer {
 
 const autoAnswers = new Map<string, PendingAutoAnswer>()
 
-let autoAnswerDeps: { broadcast: (sessionId: string, msg: ServerMessage) => void } | null = null
+let autoAnswerDeps: {
+  broadcast: (sessionId: string, msg: ServerMessage) => void
+  resolveDelayMs: (projectId?: string) => number
+} | null = null
 
-export function initAutoAnswer(deps: { broadcast: (sessionId: string, msg: ServerMessage) => void }): void {
+export function initAutoAnswer(deps: {
+  broadcast: (sessionId: string, msg: ServerMessage) => void
+  resolveDelayMs: (projectId?: string) => number
+}): void {
   autoAnswerDeps = deps
 }
 
@@ -86,9 +101,11 @@ export function armAutoAnswer(params: {
   const answer = autoAnswerFor(params.type, params.options)
   if (answer === null) return
 
-  const deadline = Date.now() + AUTO_ANSWER_DELAY_MS
+  const delayMs = autoAnswerDeps?.resolveDelayMs(params.projectId) ?? DEFAULT_AUTO_ACTION_TIMEOUT_SECONDS * 1000
+  const deadline = Date.now() + delayMs
   const timer = setTimeout(() => {
     if (!autoAnswers.delete(params.callId)) return
+    autoAnsweredCalls.add(params.callId)
     provideAnswer(params.callId, answer)
     autoAnswerDeps?.broadcast(
       params.sessionId,
@@ -99,7 +116,7 @@ export function armAutoAnswer(params: {
       }),
     )
     logger.info('Question auto-answered after countdown', { sessionId: params.sessionId, callId: params.callId })
-  }, AUTO_ANSWER_DELAY_MS)
+  }, delayMs)
   timer.unref?.()
 
   autoAnswers.set(params.callId, { sessionId: params.sessionId, deadline, timer })
@@ -133,6 +150,7 @@ export function cancelAutoAnswersForSession(sessionId: string): void {
 export function clearAllAutoAnswers(): void {
   for (const entry of autoAnswers.values()) clearTimeout(entry.timer)
   autoAnswers.clear()
+  autoAnsweredCalls.clear()
 }
 
 export const askUserTool: Tool = {
