@@ -10,6 +10,7 @@ import { useSessionWorkdir } from '../../hooks/useSessionWorkdir'
 import { SCOPE_LABELS } from '../../lib/workflow-scope'
 import { useDisplaySettings } from '../../hooks/useDisplaySettings'
 import { ChatFeedItems } from './ChatFeedItems'
+import { AutoLaunchCountdown } from './AutoLaunchCountdown'
 import { CloseButton } from '../shared/CloseButton'
 import { Modal } from '../shared/Modal'
 import { ChevronUpIcon, InfoIcon } from '../shared/icons'
@@ -147,6 +148,13 @@ export const MessageList = memo(function MessageList({
     null,
   )
   const continueWorkflow = useSessionStore((state) => state.continueWorkflow)
+  const autoLaunch = useScopedPaneState(
+    scopeId,
+    (pane) => pane.autoLaunch ?? null,
+    (state) => state.autoLaunch,
+    null,
+  )
+  const cancelAutoLaunch = useSessionStore((state) => state.cancelAutoLaunch)
   const llmRetry = useScopedPaneState(
     scopeId,
     (pane) => pane.llmRetry ?? null,
@@ -408,7 +416,7 @@ export const MessageList = memo(function MessageList({
             )}
 
             {showStartBuilding && (
-              <div className="flex justify-center gap-2 feed-item flex-wrap">
+              <div className="flex justify-center gap-2 feed-item flex-wrap items-start">
                 {workflows.map((w) => {
                   const c = w.color ?? '#3b82f6'
                   const r = parseInt(c.slice(1, 3), 16),
@@ -417,18 +425,32 @@ export const MessageList = memo(function MessageList({
                   const bg = `rgba(${r},${g},${b},0.12)`
                   const bgHover = `rgba(${r},${g},${b},0.22)`
                   const border = `rgba(${r},${g},${b},0.25)`
+                  const isAutoLaunching =
+                    autoLaunch?.workflowId === w.id &&
+                    (autoLaunch.scope === 'auto' || autoLaunch.scope === undefined || autoLaunch.scope === w.scope)
                   return (
-                    <WorkflowButton
-                      key={`${w.id}-${w.scope}`}
-                      workflowName={w.name}
-                      scope={w.scope}
-                      color={c}
-                      bg={bg}
-                      bgHover={bgHover}
-                      border={border}
-                      subGroups={w.subGroups}
-                      onLaunch={(subGroup?: string) => onLaunchWorkflow(w.id, subGroup, undefined, w.scope)}
-                    />
+                    <div key={`${w.id}-${w.scope}`} className="flex flex-col items-center gap-1">
+                      <WorkflowButton
+                        workflowName={w.name}
+                        scope={w.scope}
+                        color={c}
+                        bg={bg}
+                        bgHover={bgHover}
+                        border={border}
+                        subGroups={w.subGroups}
+                        onLaunch={(subGroup?: string) => {
+                          if (scopeId) cancelAutoLaunch(sessionId ?? scopeId)
+                          onLaunchWorkflow(w.id, subGroup, undefined, w.scope)
+                        }}
+                      />
+                      {isAutoLaunching && autoLaunch && (sessionId ?? scopeId) && (
+                        <AutoLaunchCountdown
+                          deadline={autoLaunch.deadline}
+                          color={c}
+                          onCancel={() => cancelAutoLaunch(sessionId ?? scopeId!)}
+                        />
+                      )}
+                    </div>
                   )
                 })}
               </div>

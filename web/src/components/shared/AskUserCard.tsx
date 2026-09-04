@@ -5,6 +5,7 @@ import { useSessionStore, usePendingQuestions, type PendingQuestion } from '../.
 import { shouldAutofocus } from '../../lib/device'
 import { useSessionScope } from '../../stores/session/session-scope'
 import { Markdown } from './Markdown'
+import { CountdownText } from './CountdownText'
 import { useT } from '../../hooks/useT'
 
 interface AskUserCardProps {
@@ -16,6 +17,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
   const sessionId = useSessionScope()
   const pendingQuestions = usePendingQuestions(sessionId)
   const answerQuestion = useSessionStore((state) => state.answerQuestion)
+  const cancelAutoAnswers = useSessionStore((state) => state.cancelAutoAnswers)
   const [answer, setAnswer] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -37,6 +39,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
 
   const resultText = toolCall.result?.output ?? ''
   const isSkipped = resultText === '[user skipped]'
+  const wasAutoAnswered = toolCall.result?.metadata?.['autoAnswered'] === true
 
   useEffect(() => {
     if (isPending && shouldAutofocus() && inputRef.current) {
@@ -59,6 +62,19 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
     if (!pendingQuestion || !sessionId) return
     answerQuestion(sessionId, pendingQuestion.callId, '', true)
   }, [pendingQuestion, answerQuestion, sessionId])
+
+  const cancelCountdown = useCallback(() => {
+    if (sessionId) cancelAutoAnswers(sessionId)
+  }, [sessionId, cancelAutoAnswers])
+
+  // Typing an answer inside the question card also takes over from the countdown.
+  const handleAnswerChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setAnswer(e.target.value)
+      if (pendingQuestion?.autoAnswerDeadline !== undefined && sessionId) cancelAutoAnswers(sessionId)
+    },
+    [pendingQuestion, sessionId, cancelAutoAnswers],
+  )
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -134,7 +150,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
                   <textarea
                     ref={inputRef}
                     value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
+                    onChange={handleAnswerChange}
                     onKeyDown={handleKeyDown}
                     placeholder={t({
                       en: 'Or type your own answer... (Enter to submit)',
@@ -163,7 +179,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
                 <textarea
                   ref={inputRef}
                   value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
+                  onChange={handleAnswerChange}
                   onKeyDown={handleKeyDown}
                   placeholder={t({
                     en: 'Type your answer here... (Enter to submit, Shift+Enter for new line)',
@@ -189,6 +205,18 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
                 </div>
               </>
             )}
+            {pendingQuestion?.autoAnswerDeadline !== undefined && sessionId && (
+              <div className="flex justify-end">
+                <CountdownText
+                  testId="autoanswer-countdown"
+                  deadline={pendingQuestion.autoAnswerDeadline}
+                  onCancel={cancelCountdown}
+                  format={(seconds) =>
+                    t({ en: '⌛ auto-answer {{seconds}}s', fr: '⌛ choix auto {{seconds}}s' }, { seconds })
+                  }
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -198,7 +226,12 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
           <span className={`text-xs ${isSkipped ? 'text-amber-400' : 'text-accent-success'}`}>
             {isSkipped
               ? t({ en: 'Skipped', fr: 'Passée' })
-              : t({ en: 'Answered: {{answer}}', fr: 'Réponse : {{answer}}' }, { answer: resultText })}
+              : wasAutoAnswered
+                ? t(
+                    { en: 'Answered automatically: {{answer}}', fr: 'Réponse automatique : {{answer}}' },
+                    { answer: resultText },
+                  )
+                : t({ en: 'Answered: {{answer}}', fr: 'Réponse : {{answer}}' }, { answer: resultText })}
           </span>
         </div>
       )}
