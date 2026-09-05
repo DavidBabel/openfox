@@ -50,6 +50,7 @@ interface TasksState {
     to: TaskStatus,
     options?: TaskMoveOptions,
   ) => Promise<TaskMoveResult | null>
+  startTaskPlan: (projectId: string, taskId: string) => Promise<TaskMoveResult | null>
   setGateValue: (projectId: string, taskId: string, gateId: string, value: string) => Promise<ProjectTask | null>
   setGateConfig: (projectId: string, gates: TaskGateConfig[]) => Promise<boolean>
   setSettings: (projectId: string, settings: Partial<ProjectTaskSettings>) => Promise<boolean>
@@ -176,6 +177,23 @@ export const useTasksStore = create<TasksState>((set) => ({
       return data as TaskMoveResult
     } catch {
       set({ lastError: 'Failed to move task' })
+      return null
+    }
+  },
+
+  startTaskPlan: async (projectId, taskId) => {
+    try {
+      const res = await authFetch(`/api/projects/${projectId}/tasks/${taskId}/start-plan`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        set({ lastError: data.error ?? 'Failed to start plan' })
+        return null
+      }
+      set({ lastError: null })
+      await refreshBoard(projectId)
+      return data as TaskMoveResult
+    } catch {
+      set({ lastError: 'Failed to start plan' })
       return null
     }
   },

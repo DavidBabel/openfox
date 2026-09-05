@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { useT } from '../../hooks/useT'
+import { useCountdownSeconds } from '../../hooks/useCountdownSeconds'
 import { CloseButton } from './CloseButton'
 
 export interface CountdownTextProps {
@@ -15,14 +15,7 @@ export interface CountdownTextProps {
 /** Plain-text countdown (no background/border), tiny font, themed color. */
 export function CountdownText({ deadline, onCancel, format, color, testId }: CountdownTextProps) {
   const t = useT()
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 250)
-    return () => clearInterval(timer)
-  }, [])
-
-  const seconds = Math.max(0, Math.ceil((deadline - now) / 1000))
+  const seconds = useCountdownSeconds(deadline)
 
   return (
     <div
