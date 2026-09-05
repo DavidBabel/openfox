@@ -1,29 +1,24 @@
 import { useState } from 'react'
 import { Link } from 'wouter'
 import { getLocale } from '@shared/i18n/index.js'
-import type { ProjectTask, TaskStatus } from '@shared/types.js'
+import type { ProjectTask } from '@shared/types.js'
 import type { AgentInfo } from '../../lib/agents-actions'
 import { getAgentColor } from '../../lib/agents-actions'
 import { useT } from '../../hooks/useT'
 import { useSetting } from '../../hooks/useSetting'
 import { useProject } from '../../hooks/useProject'
+import { useWorkflows } from '../../hooks/useWorkflows'
+import { useProjects } from '../../hooks/useProjects'
 import { SETTINGS_KEYS } from '../../lib/resources'
-import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
-import { COLUMN_META, COLUMN_ORDER } from './column-meta'
+import { useTasksStore } from '../../stores/tasks'
+import { DropdownMenu } from '../shared/DropdownMenu'
 import {
-  EllipsisIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  PlayIcon,
-  PauseIcon,
-  CopyIcon,
-  TrashIcon,
-  EditSmallIcon,
-  OpenExternalIcon,
-  InfoIcon,
-  MoveTargetLeftIcon,
-  MoveTargetRightIcon,
-} from '../shared/icons'
+  buildCardMenuItems,
+  buildCardMenuFooterItems,
+  type CardActionCallbacks,
+  type CardMenuDeps,
+} from './task-card-menu'
+import { EllipsisIcon, PlayIcon, PauseIcon, OpenExternalIcon } from '../shared/icons'
 
 type T = ReturnType<typeof useT>
 
@@ -43,13 +38,7 @@ export interface TaskDragHandlers {
 }
 
 /** Interaction callbacks shared by cards and columns (columns forward them to cards). */
-export interface TaskCallbacks {
-  onEdit: (task: ProjectTask) => void
-  onMove: (task: ProjectTask, to: TaskStatus) => void
-  onMoveUp: (task: ProjectTask) => void
-  onMoveDown: (task: ProjectTask) => void
-  onDuplicate: (task: ProjectTask) => void
-  onDelete: (task: ProjectTask) => void
+export interface TaskCallbacks extends CardActionCallbacks {
   onStartPlan: (task: ProjectTask) => void
   onDropOnCard: (task: ProjectTask) => void
   /** Invoked when a card's session link is opened (lets a host modal dismiss itself). */
@@ -88,80 +77,32 @@ export function TaskCard({
   const globalFavorite = useSetting(SETTINGS_KEYS.FAVORITE_WORKFLOW).value
   const hasFavoriteWorkflow = !!(project?.favoriteWorkflowId ?? globalFavorite)
 
+  const moveTask = useTasksStore((s) => s.moveTask)
+  const setWorkflowChoice = useTasksStore((s) => s.setWorkflowChoice)
+  const { projects } = useProjects()
+  const workdir = projects.find((p) => p.id === projectId)?.workdir
+  const { workflows } = useWorkflows(workdir)
+
   const agent = agents.find((a) => a.id === task.agentId)
   const agentColor = task.agentId ? getAgentColor(agents, task.agentId) : undefined
   const images = task.attachments.filter((a) => a.mimeType.startsWith('image/'))
   const sessionToOpen = task.activeSessionId ?? task.sessionIds[task.sessionIds.length - 1]
 
-  const menuItems: DropdownMenuItem[] = [
-    {
-      label: t({ en: 'Edit', fr: 'Modifier' }),
-      icon: <EditSmallIcon className="w-3.5 h-3.5" />,
-      onClick: () => onEdit(task),
-    },
-    {
-      label: t({ en: 'History & evidence', fr: 'Historique et preuves' }),
-      icon: <InfoIcon className="w-3.5 h-3.5" />,
-      onClick: () => setShowAudit((prev) => !prev),
-    },
-    ...COLUMN_META.flatMap((c) => {
-      const targetIndex = COLUMN_ORDER.indexOf(c.status)
-      const currentIndex = COLUMN_ORDER.indexOf(task.status)
-      if (c.status === task.status) {
-        // The card's own column: instead of a no-op move entry, intercalate a
-        // colored status bar when the task is actually running or queued.
-        if (task.status !== 'in_progress' || !task.runState) return []
-        return [
-          {
-            label: (
-              <span className="cursor-default text-xs font-semibold uppercase tracking-wide flex items-center gap-1">
-                {task.runState === 'running' ? <PlayIcon className="w-3 h-3" /> : <PauseIcon className="w-3 h-3" />}
-                {runStateLabel(t, task, queuePosition)}
-              </span>
-            ) as React.ReactNode,
-            stripeClass: task.runState === 'running' ? 'bg-emerald-500' : 'bg-amber-500',
-          },
-        ]
-      }
-      return [
-        {
-          label: t(c.title),
-          icon:
-            targetIndex < currentIndex ? (
-              <MoveTargetLeftIcon className="w-3.5 h-3.5" />
-            ) : (
-              <MoveTargetRightIcon className="w-3.5 h-3.5" />
-            ),
-          stripeClass: c.stripeClass,
-          onClick: () => onMove(task, c.status),
-        },
-      ]
-    }),
-    {
-      label: t({ en: 'Move up', fr: 'Monter' }),
-      icon: <ChevronUpIcon className="w-3.5 h-3.5" />,
-      onClick: () => onMoveUp(task),
-    },
-    {
-      label: t({ en: 'Move down', fr: 'Descendre' }),
-      icon: <ChevronDownIcon className="w-3.5 h-3.5" />,
-      onClick: () => onMoveDown(task),
-    },
-  ]
-
-  const menuFooterItems: DropdownMenuItem[] = [
-    {
-      label: t({ en: 'Duplicate', fr: 'Dupliquer' }),
-      icon: <CopyIcon className="w-3.5 h-3.5" />,
-      onClick: () => onDuplicate(task),
-    },
-    {
-      label: t({ en: 'Delete', fr: 'Supprimer' }),
-      icon: <TrashIcon className="w-3.5 h-3.5" />,
-      danger: true,
-      onClick: () => onDelete(task),
-    },
-  ]
+  const menuDeps: CardMenuDeps = {
+    t,
+    task,
+    projectId,
+    workflows,
+    onEdit,
+    onToggleAudit: () => setShowAudit((prev) => !prev),
+    onMove,
+    onMoveUp,
+    onMoveDown,
+    onDuplicate,
+    onDelete,
+    moveTask,
+    setWorkflowChoice,
+  }
 
   return (
     <div
@@ -200,8 +141,8 @@ export function TaskCard({
 
       <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu
-          items={menuItems}
-          footerItems={menuFooterItems}
+          items={buildCardMenuItems(menuDeps)}
+          footerItems={buildCardMenuFooterItems(menuDeps)}
           minWidth="176px"
           align="right"
           trigger={

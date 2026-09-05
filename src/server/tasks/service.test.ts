@@ -267,6 +267,18 @@ describe('project tasks service', () => {
       expect(sm.createdSessions).toHaveLength(1) // no new session for queued
     })
 
+    it('human move to In Progress parks in the queue when auto-launch is paused', async () => {
+      const task = create('Paused arrival')
+      service.setSettings(projectId, { queuePaused: true })
+      const result = await service.move(projectId, task.id, 'in_progress', { actor: 'human' })
+
+      expect(result.task.status).toBe('in_progress')
+      expect(result.task.runState).toBe('queued')
+      // Paused queue: the task parks without seeding or launching anything.
+      expect(sm.createdSessions).toHaveLength(0)
+      expect(launchSpy).not.toHaveBeenCalled()
+    })
+
     it('surfaces the FIFO queue position server-side (1-based)', async () => {
       const first = create('First')
       const second = create('Second')
@@ -674,6 +686,32 @@ describe('project tasks service', () => {
         await expect(service.startPlan(projectId, task.id)).rejects.toThrow(/already running/)
         // Still exactly one plan launch in that session.
         expect(launchSpy.mock.calls.filter((c) => c[0] === planner.id)).toHaveLength(1)
+      })
+
+      it('keeps sessions attached across In Progress ↔ To Do round-trips', async () => {
+        const task = create('Round tripper')
+        await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        const first = await service.startPlan(projectId, task.id)
+        const planner = sm.sessions.get(first.sessionId)!
+        ;(planner as { metadataEntries?: Record<string, unknown> }).metadataEntries = {
+          criteria: [{ id: 'c1', description: 'x', status: { type: 'pending' } }],
+        }
+        sm.executions.set(planner.id, { workflowId: 'plan', status: 'completed' })
+
+        const launched = await service.move(projectId, task.id, 'in_progress', { actor: 'human' })
+        expect(launched.task.activeSessionId).toBe(planner.id)
+
+        // Revert to To Do: the link is deactivated but kept — never orphaned.
+        await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        const parked = service.get(projectId, task.id)!
+        expect(parked.activeSessionId).toBeUndefined()
+        expect(parked.sessionIds).toEqual([planner.id])
+
+        // Back to In Progress: the same session resumes, no duplicate created.
+        const again = await service.move(projectId, task.id, 'in_progress', { actor: 'human' })
+        expect(again.task.activeSessionId).toBe(planner.id)
+        expect(again.task.sessionIds).toEqual([planner.id])
+        expect(sm.createdSessions).toHaveLength(1)
       })
 
       it('reuses the planner session across Backlog round-trips', async () => {

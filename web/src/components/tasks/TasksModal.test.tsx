@@ -11,6 +11,24 @@ vi.mock('../../lib/api', () => ({
   authFetch: vi.fn(),
 }))
 
+const navigateMock = vi.fn()
+vi.mock('wouter', () => ({
+  Link: ({
+    children,
+    href,
+    onClick,
+  }: {
+    children: React.ReactNode
+    href: string
+    onClick?: (e: React.MouseEvent) => void
+  }) => (
+    <a href={href} onClick={onClick}>
+      {children}
+    </a>
+  ),
+  useLocation: () => [undefined, navigateMock],
+}))
+
 const task = (overrides: Partial<ProjectTask>): ProjectTask => ({
   id: 'x',
   projectId: 'proj-1',
@@ -52,6 +70,7 @@ const board: { tasks: ProjectTask[]; settings: ProjectTaskSettings; counts: Proj
       position: 1,
     }),
     task({ id: 't4', prompt: 'Write docs', status: 'done' }),
+    task({ id: 't5', prompt: 'Plan twice ship once', planned: true }),
   ],
   settings: { slotLimit: 1, queuePaused: false },
   counts: { open: 3, backlog: 0, todo: 1, inProgress: 2, running: 1, queued: 1, review: 0, done: 1 },
@@ -279,6 +298,97 @@ describe('TasksModal', () => {
     // Columns are not collapsible anymore.
     expect(screen.queryByTitle(/Collapse column/)).toBeNull()
     expect(screen.queryByTitle(/Expand column/)).toBeNull()
+  })
+
+  it('renders a full-width position bar at the current column and no Running header in the card menu', async () => {
+    render(<TasksModal isOpen onClose={() => {}} projectId="proj-1" />)
+    fireEvent.click(screen.getByRole('button', { name: /actions for wire the kanban/i }))
+    const menu = await screen.findByTestId('session-dropdown-menu')
+    // t2 sits in In Progress (running): the no-op entry is a decorative bar.
+    const bar = within(menu).getByTestId('menu-decorative-bar')
+    expect(bar.className).toContain('bg-amber-500')
+    // Positional: the bar sits between the Backlog and Review move entries.
+    const bars = menu.querySelectorAll('[data-testid="menu-decorative-bar"]')
+    expect(bars.length).toBe(1)
+    // Running state stays on the card badge only — never a clickable menu row.
+    expect(within(menu).queryByText('Running')).toBeNull()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('session-dropdown-menu')).toBeNull())
+  })
+
+  it('shows post-plan launch entries for a planned To Do task and wires them to the API', async () => {
+    vi.mocked(authFetch).mockImplementation(async (url: string) => {
+      if (url.includes('/api/workflows')) {
+        return {
+          ok: true,
+          json: async () => ({
+            defaults: [],
+            userItems: [{ id: 'fixit', name: 'Fix it', description: '', version: '1.0.0', scope: 'user' }],
+            projectItems: [],
+            activeWorkflowId: 'default',
+          }),
+        } as unknown as Response
+      }
+      if (url.endsWith('/workflow-choice')) {
+        return { ok: true, json: async () => ({ task: task({ id: 't5', planned: true }) }) } as unknown as Response
+      }
+      if (url.endsWith('/tasks/gates')) {
+        return { ok: true, json: async () => ({ gates: [] }) } as unknown as Response
+      }
+      return { ok: true, json: async () => board } as unknown as Response
+    })
+    render(<TasksModal isOpen onClose={() => {}} projectId="proj-1" />)
+    fireEvent.click(screen.getByRole('button', { name: /actions for plan twice/i }))
+    const menu = await screen.findByTestId('session-dropdown-menu')
+
+    fireEvent.click(within(menu).getByText('Stay in To Do'))
+    await waitFor(() => {
+      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/t5/move',
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"todo"') }),
+      )
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /actions for plan twice/i }))
+    const menu2 = await screen.findByTestId('session-dropdown-menu')
+    fireEvent.click(within(menu2).getByText(/Fix it/))
+    await waitFor(() => {
+      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/t5/workflow-choice',
+        expect.objectContaining({ method: 'PUT', body: expect.stringContaining('fixit') }),
+      )
+      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/t5/move',
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"in_progress"') }),
+      )
+    })
+    fireEvent.keyDown(window, { key: 'Escape' })
+  })
+
+  it('navigates to the created session after clicking Start plan', async () => {
+    vi.mocked(authFetch).mockImplementation(async (url: string) => {
+      if (url.endsWith('/start-plan')) {
+        return {
+          ok: true,
+          json: async () => ({ task: task({ id: 't5', planned: false }), sessionId: 'sess-planner' }),
+        } as unknown as Response
+      }
+      if (url.endsWith('/tasks/gates')) {
+        return { ok: true, json: async () => ({ gates: [] }) } as unknown as Response
+      }
+      return { ok: true, json: async () => board } as unknown as Response
+    })
+    render(<TasksModal isOpen onClose={() => {}} projectId="proj-1" />)
+
+    const card = screen.getByText('Plan twice ship once').closest('div[draggable]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Start plan/ }))
+    await waitFor(() => {
+      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+        '/api/projects/proj-1/tasks/t5/start-plan',
+        expect.objectContaining({ method: 'POST' }),
+      )
+      expect(navigateMock).toHaveBeenCalledWith('/p/proj-1/s/sess-planner')
+    })
   })
 
   it('steps the slot limit on rapid clicks without waiting for the server', async () => {
