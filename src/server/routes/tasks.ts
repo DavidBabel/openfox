@@ -4,7 +4,7 @@ import { isTaskGateError, isTaskConflictError } from '../tasks/service.js'
 import type { TaskActor } from '../../shared/types.js'
 import { TASK_COLUMN_ORDER } from '../../shared/types.js'
 import { getProject } from '../db/projects.js'
-import { getGateConfig, getTaskSettings } from '../db/tasks.js'
+import { findTaskIdBySession, getGateConfig, getTaskSettings } from '../db/tasks.js'
 import { serverT } from '../i18n.js'
 
 const TASK_DESTINATIONS: string[] = TASK_COLUMN_ORDER
@@ -274,5 +274,34 @@ export function registerTaskRoutes(router: Router, tasksService: TasksService): 
       .startPlan(projectId, req.params['taskId'] as string)
       .then((result) => res.json(result))
       .catch((error) => handleError(res, error))
+  })
+
+  router.get('/projects/:projectId/tasks/from-session/:sessionId', (req: Request, res: Response) => {
+    const projectId = requireProject(req, res)
+    if (!projectId) return
+    const taskId = findTaskIdBySession(req.params['sessionId'] as string)
+    const task = taskId ? tasksService.get(projectId, taskId) : null
+    res.json({ task })
+  })
+
+  // Persist the workflow picked for a planned task (drives its In Progress
+  // launch and suppresses the favorite-workflow countdown). null clears it.
+  router.put('/projects/:projectId/tasks/:taskId/workflow-choice', (req: Request, res: Response) => {
+    const projectId = requireProject(req, res)
+    if (!projectId) return
+    const { workflowId } = req.body
+    if (workflowId !== null && typeof workflowId !== 'string') {
+      return res.status(400).json({
+        error: serverT({
+          en: 'workflowId (string or null) is required',
+          fr: 'workflowId (chaîne ou null) est requis',
+        }),
+      })
+    }
+    try {
+      res.json({ task: tasksService.setWorkflowChoice(projectId, req.params['taskId'] as string, workflowId) })
+    } catch (error) {
+      handleError(res, error)
+    }
   })
 }

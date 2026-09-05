@@ -394,6 +394,14 @@ function runMigrations(db: Database.Database): void {
   `)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id, status)`)
 
+  // Migration: Add workflow_choice column (workflow picked for the task after planning;
+  // its presence also marks "a choice was made", which suppresses the favorite auto-launch).
+  const taskColumns = db.prepare(`PRAGMA table_info(tasks)`).all() as { name: string }[]
+  if (!taskColumns.some((c) => c.name === 'workflow_choice')) {
+    logger.info('Migrating tasks table: adding workflow_choice column')
+    db.exec(`ALTER TABLE tasks ADD COLUMN workflow_choice TEXT`)
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS task_links (
       task_id TEXT NOT NULL,

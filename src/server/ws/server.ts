@@ -28,6 +28,11 @@ import {
 } from '../workflows/autolaunch.js'
 import type { AutoLaunchFavorite } from '../workflows/autolaunch.js'
 import { resolveFavoriteWorkflow } from '../workflows/favorite.js'
+import {
+  findTaskIdBySession,
+  getTask as dbGetTaskById,
+  setTaskWorkflowChoice as dbSetTaskWorkflowChoice,
+} from '../db/tasks.js'
 import { appendCompactionPrompt } from '../context/compactor.js'
 import { computeSessionHash, applyDynamicContext, computeUnifiedDiff } from '../chat/dynamic-context.js'
 import { provideAnswer } from '../tools/index.js'
@@ -740,6 +745,11 @@ export function createWebSocketServer(
             if (!isStartBuildingState(sessionId)) return
             const session = sessionManager.getSession(sessionId)
             if (!session) return
+            // A workflow already picked for the linked board task wins over the
+            // favorite: the user (or a pick button) explicitly decided.
+            const linkedTaskId = findTaskIdBySession(sessionId)
+            const linkedTask = linkedTaskId ? dbGetTaskById(linkedTaskId) : null
+            if (linkedTask?.workflowChoice) return
             // Auto-launch while no build has run yet in this session: a settled
             // plan run is exactly the choice point to chain into; any other
             // execution means the user already decided manually.
@@ -1477,6 +1487,31 @@ async function handleClientMessage(
 
       // A manual pick (or any explicit launch) kills the pending auto-launch.
       cancelAutoLaunch(sessionId)
+
+      // Persisting a manual workflow pick for the linked board task: at the
+      // post-plan choice point this is the user's explicit decision, so it
+      // replaces the default build on In Progress and suppresses the favorite
+      // countdown (schedule check below reads workflow_choice).
+      {
+        const pickedWorkflowId = (message.payload as { workflowId?: string } | undefined)?.workflowId
+        if (pickedWorkflowId) {
+          try {
+            const linkedTaskId = findTaskIdBySession(sessionId)
+            const linkedTask = linkedTaskId ? dbGetTaskById(linkedTaskId) : null
+            const latestExec = sessionManager.getLatestWorkflowExecution(sessionId)
+            const atPlanChoicePoint = !latestExec || latestExec.workflowId === 'plan'
+            if (linkedTask && linkedTask.status !== 'done' && atPlanChoicePoint) {
+              // The bar PUTs the choice before launching; only write when the
+              // value actually changed to avoid double version bumps.
+              if (linkedTask.workflowChoice !== pickedWorkflowId) {
+                dbSetTaskWorkflowChoice(linkedTask.id, pickedWorkflowId)
+              }
+            }
+          } catch {
+            // Board persistence must never block a launch.
+          }
+        }
+      }
 
       const session = sessionManager.requireSession(sessionId)
 

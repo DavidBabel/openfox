@@ -5,6 +5,9 @@ import type { ProjectTask, TaskStatus } from '@shared/types.js'
 import type { AgentInfo } from '../../lib/agents-actions'
 import { getAgentColor } from '../../lib/agents-actions'
 import { useT } from '../../hooks/useT'
+import { useSetting } from '../../hooks/useSetting'
+import { useProject } from '../../hooks/useProject'
+import { SETTINGS_KEYS } from '../../lib/resources'
 import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
 import { COLUMN_META, COLUMN_ORDER } from './column-meta'
 import {
@@ -21,6 +24,18 @@ import {
   MoveTargetLeftIcon,
   MoveTargetRightIcon,
 } from '../shared/icons'
+
+type T = ReturnType<typeof useT>
+
+/** Shared "Running / Queued · n" status label (card badge and edit-menu bar). */
+function runStateLabel(t: T, task: ProjectTask, queuePosition?: number): string {
+  return task.runState === 'running'
+    ? t({ en: 'Running', fr: 'En cours' })
+    : t(
+        { en: 'Queued{{pos}}', fr: 'En file{{pos}}' },
+        { pos: queuePosition !== undefined ? ` · ${queuePosition}` : '' },
+      )
+}
 
 /** Drag-and-drop callbacks shared by cards and columns. */
 export interface TaskDragHandlers {
@@ -67,6 +82,12 @@ export function TaskCard({
   const t = useT()
   const [showAudit, setShowAudit] = useState(false)
 
+  // A configured favorite workflow auto-picks the build after planning, so
+  // the manual "Start" entry point is hidden in that case.
+  const { project } = useProject(projectId)
+  const globalFavorite = useSetting(SETTINGS_KEYS.FAVORITE_WORKFLOW).value
+  const hasFavoriteWorkflow = !!(project?.favoriteWorkflowId ?? globalFavorite)
+
   const agent = agents.find((a) => a.id === task.agentId)
   const agentColor = task.agentId ? getAgentColor(agents, task.agentId) : undefined
   const images = task.attachments.filter((a) => a.mimeType.startsWith('image/'))
@@ -83,20 +104,38 @@ export function TaskCard({
       icon: <InfoIcon className="w-3.5 h-3.5" />,
       onClick: () => setShowAudit((prev) => !prev),
     },
-    ...COLUMN_META.filter((c) => c.status !== task.status).map((c) => {
+    ...COLUMN_META.flatMap((c) => {
       const targetIndex = COLUMN_ORDER.indexOf(c.status)
       const currentIndex = COLUMN_ORDER.indexOf(task.status)
-      return {
-        label: t(c.title),
-        icon:
-          targetIndex < currentIndex ? (
-            <MoveTargetLeftIcon className="w-3.5 h-3.5" />
-          ) : (
-            <MoveTargetRightIcon className="w-3.5 h-3.5" />
-          ),
-        stripeClass: c.stripeClass,
-        onClick: () => onMove(task, c.status),
+      if (c.status === task.status) {
+        // The card's own column: instead of a no-op move entry, intercalate a
+        // colored status bar when the task is actually running or queued.
+        if (task.status !== 'in_progress' || !task.runState) return []
+        return [
+          {
+            label: (
+              <span className="cursor-default text-xs font-semibold uppercase tracking-wide flex items-center gap-1">
+                {task.runState === 'running' ? <PlayIcon className="w-3 h-3" /> : <PauseIcon className="w-3 h-3" />}
+                {runStateLabel(t, task, queuePosition)}
+              </span>
+            ) as React.ReactNode,
+            stripeClass: task.runState === 'running' ? 'bg-emerald-500' : 'bg-amber-500',
+          },
+        ]
       }
+      return [
+        {
+          label: t(c.title),
+          icon:
+            targetIndex < currentIndex ? (
+              <MoveTargetLeftIcon className="w-3.5 h-3.5" />
+            ) : (
+              <MoveTargetRightIcon className="w-3.5 h-3.5" />
+            ),
+          stripeClass: c.stripeClass,
+          onClick: () => onMove(task, c.status),
+        },
+      ]
     }),
     {
       label: t({ en: 'Move up', fr: 'Monter' }),
@@ -151,12 +190,7 @@ export function TaskCard({
           }`}
         >
           {task.runState === 'running' ? <PlayIcon className="w-2.5 h-2.5" /> : <PauseIcon className="w-2.5 h-2.5" />}
-          {task.runState === 'running'
-            ? t({ en: 'Running', fr: 'En cours' })
-            : t(
-                { en: 'Queued{{pos}}', fr: 'En file{{pos}}' },
-                { pos: queuePosition !== undefined ? ` · ${queuePosition}` : '' },
-              )}
+          {runStateLabel(t, task, queuePosition)}
         </span>
       )}
 
@@ -195,6 +229,18 @@ export function TaskCard({
           >
             <PlayIcon className="w-2.5 h-2.5" /> {t({ en: 'Start plan', fr: 'Démarrer le plan' })}
           </button>
+        )}
+        {task.status === 'todo' && task.planned && !hasFavoriteWorkflow && sessionToOpen && (
+          <Link
+            href={`/p/${projectId}/s/${sessionToOpen}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenSession?.(sessionToOpen)
+            }}
+            className="text-xs px-1.5 py-1 rounded bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 flex items-center gap-1"
+          >
+            <PlayIcon className="w-2.5 h-2.5" /> {t({ en: 'Start', fr: 'Démarrer' })}
+          </Link>
         )}
         {task.attachments.length > 0 && (
           <span

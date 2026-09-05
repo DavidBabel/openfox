@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
+import { useLocation } from 'wouter'
 import { Modal } from '../shared/SelfContainedModal'
 import { Button } from '../shared/Button'
 import { Input } from '../shared/Input'
@@ -25,6 +26,7 @@ interface TasksModalProps {
 
 export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
   const t = useT()
+  const [, navigate] = useLocation()
   const { data: board } = useResource(boardResource, projectId)
   const tasks = board?.tasks ?? []
   const settings = board?.settings ?? { slotLimit: 1, queuePaused: false }
@@ -108,9 +110,14 @@ export function TasksModal({ isOpen, onClose, projectId }: TasksModalProps) {
 
   const handleStartPlan = useCallback(
     async (task: ProjectTask) => {
-      await startTaskPlan(projectId, task.id)
+      const result = await startTaskPlan(projectId, task.id)
+      // Start plan creates the session and jumps straight into it.
+      if (result?.sessionId) {
+        onClose()
+        navigate(`/p/${projectId}/s/${result.sessionId}`)
+      }
     },
-    [startTaskPlan, projectId],
+    [startTaskPlan, projectId, onClose, navigate],
   )
 
   const handleDropOnColumn = useCallback(

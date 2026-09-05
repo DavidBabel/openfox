@@ -388,8 +388,9 @@ describe('project tasks service', () => {
       expect(result.autoLaunched?.taskId).toBe(second.id)
       expect(result.autoLaunched?.projectId).toBe(projectId)
       expect(result.autoLaunched?.sessionId).toBeTruthy()
-      // The reverted task's link was removed (unbound)
-      expect(service.get(projectId, first.id)!.sessionIds).toEqual([])
+      // The reverted task keeps its session attached (link merely deactivated).
+      expect(service.get(projectId, first.id)!.activeSessionId).toBeUndefined()
+      expect(service.get(projectId, first.id)!.sessionIds).toHaveLength(1)
     })
 
     it('paused queue suppresses auto-launch', async () => {
@@ -568,20 +569,18 @@ describe('project tasks service', () => {
       expect(closed.task.status).toBe('done')
     })
 
-    it('moves Backlog to To Do with an idle planner session that never launches', async () => {
+    it('moves Backlog to To Do without creating a session until Start plan is clicked', async () => {
       const task = create('Plan me later')
       const result = await service.move(projectId, task.id, 'todo', { actor: 'human' })
 
       expect(result.task.status).toBe('todo')
-      expect(sm.createdSessions).toHaveLength(1)
-      const planner = sm.createdSessions[0]!
-      expect(result.sessionId).toBe(planner.id)
+      // No planner session is prepared on the move — only "Start plan" creates one.
+      expect(sm.createdSessions).toHaveLength(0)
+      expect(result.sessionId).toBeUndefined()
       expect(result.task.runState).toBeUndefined()
-      // Bound but idle: never started, slot-free, no queued prompt.
       expect(result.task.activeSessionId).toBeUndefined()
       expect(sm.queued).toHaveLength(0)
       expect(launchSpy).not.toHaveBeenCalled()
-      expect(sm.reminders.some((r) => r.sessionId === planner.id && r.content.includes('planning session'))).toBe(true)
     })
 
     describe('start plan', () => {
@@ -591,9 +590,9 @@ describe('project tasks service', () => {
 
         const task = create('Plan me now')
         await service.move(projectId, task.id, 'todo', { actor: 'human' })
-        const plannerSession = sm.createdSessions.at(-1)!.id
 
         const result = await service.startPlan(projectId, task.id)
+        const plannerSession = result.sessionId
 
         expect(result.sessionId).toBe(plannerSession)
         const planCalls = launchSpy.mock.calls.filter((c) => c[0] === plannerSession)
@@ -608,6 +607,7 @@ describe('project tasks service', () => {
       it('skips the plan when the linked session already carries criteria', async () => {
         const task = create('Already planned')
         await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        await service.startPlan(projectId, task.id)
         const plannerSession = sm.createdSessions.at(-1)!
         ;(plannerSession as { metadataEntries?: Record<string, unknown> }).metadataEntries = {
           criteria: [{ id: 'c1', description: 'x', status: { type: 'pending' } }],
@@ -621,14 +621,14 @@ describe('project tasks service', () => {
         expect(result.task.activeSessionId).toBe(plannerSession.id)
         // No extra session — the planner session is resumed into the build.
         expect(sm.createdSessions).toHaveLength(1)
-        expect(launchSpy).toHaveBeenCalledTimes(1)
-        expect(launchSpy.mock.calls[0]![0]).toBe(plannerSession.id)
-        expect(launchSpy.mock.calls[0]![1]).toMatchObject({ workflowId: 'default' })
+        const buildCalls = launchSpy.mock.calls.filter((c) => c[0] === plannerSession.id)
+        expect(buildCalls.at(-1)![1]).toMatchObject({ workflowId: 'default' })
       })
 
       it('does not resume a finished build session when re-opening — fresh attempt', async () => {
         const task = create('Reopened after build')
         await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        await service.startPlan(projectId, task.id)
         const plannerSession = sm.createdSessions.at(-1)!
         ;(plannerSession as { metadataEntries?: Record<string, unknown> }).metadataEntries = {
           criteria: [{ id: 'c1', description: 'x', status: { type: 'pending' } }],
@@ -646,12 +646,29 @@ describe('project tasks service', () => {
         expect(reopened.task.sessionIds).toContain(plannerSession.id)
       })
 
+      it('launches the picked workflow when resuming a planned session', async () => {
+        const task = create('Picked build')
+        await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        await service.startPlan(projectId, task.id)
+        const plannerSession = sm.createdSessions.at(-1)!
+        ;(plannerSession as { metadataEntries?: Record<string, unknown> }).metadataEntries = {
+          criteria: [{ id: 'c1', description: 'x', status: { type: 'pending' } }],
+        }
+        sm.executions.set(plannerSession.id, { workflowId: 'plan', status: 'completed' })
+
+        const picked = service.setWorkflowChoice(projectId, task.id, 'fixit')
+        expect(picked.workflowChoice).toBe('fixit')
+
+        await service.move(projectId, task.id, 'in_progress', { actor: 'human' })
+        const buildCalls = launchSpy.mock.calls.filter((c) => c[0] === plannerSession.id)
+        expect(buildCalls.at(-1)![1]).toMatchObject({ workflowId: 'fixit' })
+      })
+
       it('refuses to start a second plan while one is already running', async () => {
         const task = create('Double click')
         await service.move(projectId, task.id, 'todo', { actor: 'human' })
-        const planner = sm.createdSessions.at(-1)!
-
         await service.startPlan(projectId, task.id)
+        const planner = sm.createdSessions.at(-1)!
         planner.isRunning = true
 
         await expect(service.startPlan(projectId, task.id)).rejects.toThrow(/already running/)
@@ -659,13 +676,16 @@ describe('project tasks service', () => {
         expect(launchSpy.mock.calls.filter((c) => c[0] === planner.id)).toHaveLength(1)
       })
 
-      it('reuses the seeded planner session across Backlog round-trips', async () => {
+      it('reuses the planner session across Backlog round-trips', async () => {
         const task = create('Ping-ponger')
-        const first = await service.move(projectId, task.id, 'todo', { actor: 'human' })
-        const planner = first.sessionId!
+        await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        const first = await service.startPlan(projectId, task.id)
+        const planner = first.sessionId
 
         await service.move(projectId, task.id, 'backlog', { actor: 'human' })
-        const second = await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        await service.move(projectId, task.id, 'todo', { actor: 'human' })
+        // Start plan on the way back reuses the kept session instead of piling up orphans.
+        const second = await service.startPlan(projectId, task.id)
 
         expect(second.sessionId).toBe(planner)
         expect(sm.createdSessions).toHaveLength(1)

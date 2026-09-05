@@ -55,6 +55,8 @@ interface TasksState {
   setGateConfig: (projectId: string, gates: TaskGateConfig[]) => Promise<boolean>
   setSettings: (projectId: string, settings: Partial<ProjectTaskSettings>) => Promise<boolean>
   reorderTask: (projectId: string, taskId: string, status: TaskStatus, index: number) => Promise<boolean>
+  /** Persist the workflow picked for a planned task (drives its In Progress launch). */
+  setWorkflowChoice: (projectId: string, taskId: string, workflowId: string | null) => Promise<ProjectTask | null>
   clearAutoLaunch: () => void
   clearError: () => void
 }
@@ -267,6 +269,22 @@ export const useTasksStore = create<TasksState>((set) => ({
       return true
     } catch {
       return false
+    }
+  },
+
+  setWorkflowChoice: async (projectId, taskId, workflowId) => {
+    try {
+      const res = await authFetch(`/api/projects/${projectId}/tasks/${taskId}/workflow-choice`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflowId }),
+      })
+      const data = await res.json()
+      if (!res.ok) return null
+      await refreshBoard(projectId)
+      return data.task as ProjectTask
+    } catch {
+      return null
     }
   },
 

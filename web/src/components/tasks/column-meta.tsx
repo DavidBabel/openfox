@@ -11,6 +11,8 @@ export interface ColumnMeta {
   dotClass: string
   /** Solid fill class for the move-menu stripe. */
   stripeClass: string
+  /** Hex matching stripeClass, for inline styles (post-plan bar buttons). */
+  stripeHex: string
   /** Soft badge classes (bg + text + border) for status pills outside the board. */
   badgeClass: string
 }
@@ -22,6 +24,7 @@ export const COLUMN_META: ColumnMeta[] = [
     accentClass: 'border-t-2 border-t-zinc-500/70',
     dotClass: 'text-zinc-400',
     stripeClass: 'bg-zinc-500',
+    stripeHex: '#71717a',
     badgeClass: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30',
   },
   {
@@ -30,6 +33,7 @@ export const COLUMN_META: ColumnMeta[] = [
     accentClass: 'border-t-2 border-t-blue-500/60',
     dotClass: 'text-blue-400',
     stripeClass: 'bg-blue-500',
+    stripeHex: '#3b82f6',
     badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
   },
   {
@@ -38,6 +42,7 @@ export const COLUMN_META: ColumnMeta[] = [
     accentClass: 'border-t-2 border-t-amber-500/60',
     dotClass: 'text-amber-400',
     stripeClass: 'bg-amber-500',
+    stripeHex: '#f59e0b',
     badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
   },
   {
@@ -46,6 +51,7 @@ export const COLUMN_META: ColumnMeta[] = [
     accentClass: 'border-t-2 border-t-purple-500/70',
     dotClass: 'text-purple-400',
     stripeClass: 'bg-purple-500',
+    stripeHex: '#a855f7',
     badgeClass: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
   },
   {
@@ -54,6 +60,7 @@ export const COLUMN_META: ColumnMeta[] = [
     accentClass: 'border-t-2 border-t-emerald-500/60',
     dotClass: 'text-emerald-400',
     stripeClass: 'bg-emerald-500',
+    stripeHex: '#10b981',
     badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
   },
 ]

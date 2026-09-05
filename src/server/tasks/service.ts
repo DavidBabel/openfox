@@ -29,6 +29,7 @@ import type { Attachment, WorkflowLaunchScope } from '../../shared/types.js'
 import { parseDefaultModelSelection } from '../provider-manager.js'
 import { getProject } from '../db/projects.js'
 import { resolveSlashLaunch, type SlashLaunch } from './slash.js'
+import { resolveFavoriteWorkflow } from '../workflows/favorite.js'
 import {
   createTask as dbCreateTask,
   updateTask as dbUpdateTask,
@@ -39,9 +40,9 @@ import {
   reorderTask as dbReorderTask,
   setTaskStatus as dbSetTaskStatus,
   setTaskRunState as dbSetTaskRunState,
+  setTaskWorkflowChoice as dbSetTaskWorkflowChoice,
   addTaskLink as dbAddTaskLink,
   listTaskLinks as dbListTaskLinks,
-  removeTaskLinks as dbRemoveTaskLinks,
   clearActiveTaskLink as dbClearActiveTaskLink,
   appendToBottom as dbAppendToBottom,
   getGateConfig as dbGetGateConfig,
@@ -126,6 +127,8 @@ export interface TasksService {
   setSettings(projectId: string, settings: Partial<ProjectTaskSettings>): Promise<ProjectTaskSettings>
   reorder(projectId: string, taskId: string, status: TaskDestination, toIndex: number): ProjectTask
   startPlan(projectId: string, taskId: string): Promise<{ task: ProjectTask; sessionId: string }>
+  /** Record the workflow picked for a planned task (drives auto-launch + suppresses favorite countdown). */
+  setWorkflowChoice(projectId: string, taskId: string, workflowId: string | null): ProjectTask
   counts(projectId: string): ProjectTaskCounts
 }
 
@@ -196,11 +199,16 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
   const { sessionManager, config, broadcast, configDir, launchWorkflow } = deps
 
   function snapshot(projectId: string) {
-    const tasks = dbListTasks(projectId)
+    const tasks = listEnriched(projectId)
     const settings = dbGetTaskSettings(projectId)
     const counts = computeCounts(tasks)
     const gates = dbGetGateConfig(projectId)
     return { tasks, settings, counts, gates }
+  }
+
+  /** Board tasks enriched with the `planned` flag (a settled plan run carrying criteria). */
+  function listEnriched(projectId: string): ProjectTask[] {
+    return dbListTasks(projectId).map((t) => ({ ...t, planned: !!plannedSessionId(t) }))
   }
 
   function publish(projectId: string, changedTaskId?: string, autoLaunched?: TasksUpdatePayload['autoLaunched']) {
@@ -370,17 +378,29 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
           emitReminder(opts.sessionId, reminderForInProgress(task, opts.sessionId, from))
           sessionId = opts.sessionId
         } else {
+          // A session already running for this task (e.g. the user launched a
+          // workflow manually from the post-plan bar) simply claims its slot —
+          // reseeding would start a duplicate attempt.
+          const activeRunning = task.activeSessionId ? sessionManager.getSession(task.activeSessionId) : null
+          const alreadyRunning = !!activeRunning && activeRunning.projectId === projectId && activeRunning.isRunning
+
           // Human drag / Start task: allocate a slot or queue.
           const runningCount = activeCount(projectId)
-          const launched = runningCount < settings.slotLimit && !settings.queuePaused
+          const launched = alreadyRunning || (runningCount < settings.slotLimit && !settings.queuePaused)
           dbSetTaskRunState(taskId, launched ? 'running' : 'queued')
           if (launched) {
-            // Reuse the session the human is already in when it's still fresh
-            // (Up-next Start) — otherwise seed a new one.
-            const seeded = await seedSession(projectId, task, from, reusableTarget(projectId, opts.sessionId))
-            dbAddTaskLink(taskId, seeded.session.id, true)
-            dbAddAuditEntry(taskId, 'human', 'move', `Moved to In Progress (running)`, opts.actorName)
-            sessionId = seeded.session.id
+            if (alreadyRunning) {
+              dbAddTaskLink(taskId, task.activeSessionId!, true)
+              dbAddAuditEntry(taskId, 'human', 'move', `Moved to In Progress (running in its session)`, opts.actorName)
+              sessionId = task.activeSessionId!
+            } else {
+              // Reuse the session the human is already in when it's still fresh
+              // (Up-next Start) — otherwise seed a new one.
+              const seeded = await seedSession(projectId, task, from, reusableTarget(projectId, opts.sessionId))
+              dbAddTaskLink(taskId, seeded.session.id, true)
+              dbAddAuditEntry(taskId, 'human', 'move', `Moved to In Progress (running)`, opts.actorName)
+              sessionId = seeded.session.id
+            }
           } else {
             // Queued: append at the bottom of In Progress so FIFO order (oldest
             // first) matches the visible stacking and the per-task queue rank.
@@ -420,25 +440,18 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
           emitReminder(task.activeSessionId, reminderForDone(task))
         }
       } else if (to === 'todo' && from === 'backlog') {
-        // Backlog → To Do: bind a planner session but NEVER start it — the
-        // human kicks off the plan explicitly with "Start plan" from the card.
-        // A seeded idle session left over from a previous round-trip is reused.
+        // Backlog → To Do: only flip the column. No session is created here —
+        // the human explicitly kicks planning off with "Start plan" from the
+        // card, which creates and binds the planner session on demand.
         dbSetTaskStatus(taskId, 'todo')
-        const reusable = reusablePlanSession(task)
-        sessionId = reusable ?? (await preparePlanSession(projectId, task))
-        dbAddTaskLink(taskId, sessionId, false)
-        dbAddAuditEntry(taskId, opts.actor, 'move', `Moved to To Do (planner session prepared)`, opts.actorName)
+        dbAddAuditEntry(taskId, opts.actor, 'move', `Moved to To Do`, opts.actorName)
       } else {
-        // → backlog / todo reverts: unbind and let the next queued task launch.
+        // → backlog / todo reverts: deactivate the working link but KEEP the
+        // session attached to the task — reverting In Progress → To Do (or
+        // Backlog) must never orphan a session; it stays in the task history
+        // and round-trips don't pile up duplicates. Let the next queued task launch.
         dbSetTaskStatus(taskId, to)
-        if (from === 'todo') {
-          // Reverting a To Do card keeps its seeded planner session linked so
-          // round-trips don't pile up idle orphan sessions; it's re-armed when
-          // the task comes back to To Do.
-          dbClearActiveTaskLink(taskId)
-        } else {
-          dbRemoveTaskLinks(taskId)
-        }
+        dbClearActiveTaskLink(taskId)
         const detailParts = [`Moved back to ${prettyStatus(to)}`]
         if (opts.reason) detailParts.push(`Reason: ${opts.reason}`)
         dbAddAuditEntry(taskId, opts.actor, 'move', detailParts.join('. '), opts.actorName)
@@ -589,7 +602,14 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
 
   /** True when the session's latest workflow run was a completed `plan`. */
   function isPlannerSession(sessionId: string): boolean {
-    const latest = sessionManager.getLatestWorkflowExecution(sessionId)
+    const getLatest = sessionManager.getLatestWorkflowExecution
+    if (typeof getLatest !== 'function') return false
+    let latest: { workflowId?: string; status?: string } | null
+    try {
+      latest = getLatest.call(sessionManager, sessionId) ?? null
+    } catch {
+      return false
+    }
     return latest?.workflowId === PLAN_WORKFLOW_ID && latest.status === 'completed'
   }
 
@@ -630,8 +650,8 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
           }),
         )
       }
-      // Reuse the last linked idle session instead of piling up empty ones.
-      const sessionId = existing.at(-1)?.id ?? (await preparePlanSession(projectId, task))
+      // Reuse an idle planner-eligible session instead of piling up empty ones.
+      const sessionId = reusablePlanSession(task) ?? (await preparePlanSession(projectId, task))
 
       dbAddTaskLink(taskId, sessionId, true)
       // Planning deliberately skips the slot/queue system: a To Do plan runs
@@ -642,6 +662,25 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
       launchWorkflow?.(sessionId, { workflowId: PLAN_WORKFLOW_ID, scope: 'auto', content: task.prompt })
       return { task: fresh, sessionId }
     })
+  }
+
+  /**
+   * Persist the user's workflow pick for a planned task. The choice drives the
+   * In Progress launch (the picked workflow replaces the default build) and
+   * suppresses the favorite-workflow auto-launch countdown in its planner
+   * session, since a choice has been made explicitly.
+   */
+  function setWorkflowChoice(projectId: string, taskId: string, workflowId: string | null): ProjectTask {
+    assertOwned(projectId, taskId)
+    dbSetTaskWorkflowChoice(taskId, workflowId)
+    if (workflowId) {
+      dbAddAuditEntry(taskId, 'human', 'edit', `Workflow picked: ${workflowId}`, 'user')
+    } else {
+      dbAddAuditEntry(taskId, 'human', 'edit', `Workflow pick cleared`, 'user')
+    }
+    const fresh = dbGetTask(taskId)!
+    publish(projectId, fresh.id)
+    return fresh
   }
 
   /** Create a session primed for planning this task; returns its id. */
@@ -655,10 +694,10 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
   }
 
   /**
-   * Backlog → To Do: reuse a linked, idle session that was only ever used for
-   * planning (never run, or last run was the plan workflow), so parking a card
-   * back and forth never piles up orphan planner sessions. Build-attempt
-   * sessions stay out of it — they are history, not a fresh planning ground.
+   * Reuse a linked, idle session that was only ever used for planning (never
+   * run, or last run was the plan workflow), so parking a card back and forth
+   * never piles up orphan planner sessions. Build-attempt sessions stay out of
+   * it — they are history, not a fresh planning ground.
    */
   function reusablePlanSession(task: ProjectTask): string | undefined {
     return [...task.sessionIds].reverse().find((id) => {
@@ -672,8 +711,10 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
   /**
    * Resume a task's planner session straight into the build workflow: the
    * plan already produced criteria and context, so no new session is seeded.
+   * The launch workflow is the task's explicit pick first, then the project/
+   * global favorite, then the default build.
    */
-  function resumePlannedSession(projectId: string, task: ProjectTask, sessionId: string) {
+  async function resumePlannedSession(projectId: string, task: ProjectTask, sessionId: string) {
     const session = sessionManager.getSession(sessionId)
     if (!session || session.projectId !== projectId || session.isRunning) return null
     emitReminder(
@@ -684,7 +725,12 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
         'When all criteria are complete, move the task to Review (never to Done) using the project_tasks tool.',
       ].join('\n'),
     )
-    launchWorkflow?.(sessionId, { workflowId: BUILD_WORKFLOW_ID, scope: 'auto' })
+    let workflowId = task.workflowChoice ?? null
+    if (!workflowId) {
+      const favorite = await resolveFavoriteWorkflow(configDir, projectId, getProject(projectId)?.workdir)
+      workflowId = favorite?.id ?? BUILD_WORKFLOW_ID
+    }
+    launchWorkflow?.(sessionId, { workflowId, scope: 'auto' })
     return { session }
   }
 
@@ -706,7 +752,7 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
   ) {
     const planned = plannedSessionId(task)
     if (planned) {
-      const resumed = resumePlannedSession(projectId, task, planned)
+      const resumed = await resumePlannedSession(projectId, task, planned)
       if (resumed) return resumed
     }
 
@@ -911,6 +957,7 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
     setSettings,
     reorder,
     startPlan,
+    setWorkflowChoice,
     counts,
   }
 }

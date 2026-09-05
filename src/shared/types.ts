@@ -499,6 +499,10 @@ export interface ProjectTask {
   agentId?: string
   providerId?: string
   model?: string
+  /** Workflow picked for the task after planning; presence suppresses favorite auto-launch. */
+  workflowChoice?: string
+  /** True when a linked session carries a completed plan with acceptance criteria. */
+  planned?: boolean
   /** Linked sessions, active working session first, then historical attempts. */
   sessionIds: string[]
   activeSessionId?: string

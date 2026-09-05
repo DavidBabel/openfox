@@ -478,6 +478,21 @@ export function readBoard(projectId: string): BoardData | undefined {
   return snapshot<BoardData>(boardResource.keyOf(projectId)).data
 }
 
+export async function fetchTaskFromSession(projectId: string, sessionId: string): Promise<ProjectTask | null> {
+  if (!projectId || !sessionId) return null
+  const res = await authFetch(`/api/projects/${projectId}/tasks/from-session/${sessionId}`)
+  if (!res.ok) return null
+  const data = (await res.json()) as { task?: ProjectTask | null }
+  return data.task ?? null
+}
+
+/** Board task linked to a session (post-plan decision bar). Fresh on mount. */
+export const taskFromSessionResource = resource<ProjectTask | null, [string, string]>({
+  key: (projectId, sessionId) => `tasks:from-session:${projectId}:${sessionId}`,
+  fetch: fetchTaskFromSession,
+  maxAgeMs: 0,
+})
+
 export interface TaskCountsData {
   counts: ProjectTaskCounts
 }
