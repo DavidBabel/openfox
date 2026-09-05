@@ -7,6 +7,8 @@ export interface DropdownMenuItem {
   label: string | React.ReactNode
   icon?: React.ReactNode
   labelAction?: React.ReactNode
+  /** Full-height color stripe pinned to the item's left edge. */
+  stripeClass?: string
   onClick?: (event?: React.MouseEvent) => void
   href?: string
   danger?: boolean
@@ -261,7 +263,8 @@ export function DropdownMenu({
     }
 
     return (
-      <div key={baseIndex} className={borderClass}>
+      <div key={baseIndex} className={`relative ${borderClass}`}>
+        {item.stripeClass && <span aria-hidden className={`absolute left-0 top-0 bottom-0 w-1 ${item.stripeClass}`} />}
         {linkOrButton}
       </div>
     )

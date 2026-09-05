@@ -6,6 +6,7 @@ import type { AgentInfo } from '../../lib/agents-actions'
 import { getAgentColor } from '../../lib/agents-actions'
 import { useT } from '../../hooks/useT'
 import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
+import { COLUMN_META, COLUMN_ORDER } from './column-meta'
 import {
   EllipsisIcon,
   ChevronDownIcon,
@@ -17,6 +18,8 @@ import {
   EditSmallIcon,
   OpenExternalIcon,
   InfoIcon,
+  MoveTargetLeftIcon,
+  MoveTargetRightIcon,
 } from '../shared/icons'
 
 /** Drag-and-drop callbacks shared by cards and columns. */
@@ -32,6 +35,7 @@ export interface TaskCallbacks {
   onMoveDown: (task: ProjectTask) => void
   onDuplicate: (task: ProjectTask) => void
   onDelete: (task: ProjectTask) => void
+  onStartPlan: (task: ProjectTask) => void
   onDropOnCard: (task: ProjectTask) => void
   /** Invoked when a card's session link is opened (lets a host modal dismiss itself). */
   onOpenSession?: (sessionId: string) => void
@@ -55,6 +59,7 @@ export function TaskCard({
   onMoveDown,
   onDuplicate,
   onDelete,
+  onStartPlan,
   onDragStart,
   onDropOnCard,
   onOpenSession,
@@ -78,17 +83,21 @@ export function TaskCard({
       icon: <InfoIcon className="w-3.5 h-3.5" />,
       onClick: () => setShowAudit((prev) => !prev),
     },
-    {
-      label: (
-        <div className="px-3 py-2 text-text-muted text-xs font-medium cursor-default">
-          {t({ en: 'Move to…', fr: 'Déplacer vers…' })}
-        </div>
-      ),
-      onClick: () => {},
-    },
-    { label: t({ en: 'To Do', fr: 'À faire' }), onClick: () => onMove(task, 'todo') },
-    { label: t({ en: 'In Progress', fr: 'En cours' }), onClick: () => onMove(task, 'in_progress') },
-    { label: t({ en: 'Done', fr: 'Terminé' }), onClick: () => onMove(task, 'done') },
+    ...COLUMN_META.filter((c) => c.status !== task.status).map((c) => {
+      const targetIndex = COLUMN_ORDER.indexOf(c.status)
+      const currentIndex = COLUMN_ORDER.indexOf(task.status)
+      return {
+        label: t(c.title),
+        icon:
+          targetIndex < currentIndex ? (
+            <MoveTargetLeftIcon className="w-3.5 h-3.5" />
+          ) : (
+            <MoveTargetRightIcon className="w-3.5 h-3.5" />
+          ),
+        stripeClass: c.stripeClass,
+        onClick: () => onMove(task, c.status),
+      }
+    }),
     {
       label: t({ en: 'Move up', fr: 'Monter' }),
       icon: <ChevronUpIcon className="w-3.5 h-3.5" />,
@@ -175,6 +184,18 @@ export function TaskCard({
       </div>
 
       <div className="mt-2 flex items-center gap-2 flex-wrap">
+        {task.status === 'todo' && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onStartPlan(task)
+            }}
+            className="text-xs px-1.5 py-1 rounded bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 flex items-center gap-1"
+          >
+            <PlayIcon className="w-2.5 h-2.5" /> {t({ en: 'Start plan', fr: 'Démarrer le plan' })}
+          </button>
+        )}
         {task.attachments.length > 0 && (
           <span
             className="text-xs text-text-muted flex items-center gap-1"

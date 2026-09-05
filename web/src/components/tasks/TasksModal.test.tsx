@@ -54,7 +54,7 @@ const board: { tasks: ProjectTask[]; settings: ProjectTaskSettings; counts: Proj
     task({ id: 't4', prompt: 'Write docs', status: 'done' }),
   ],
   settings: { slotLimit: 1, queuePaused: false },
-  counts: { open: 3, todo: 1, inProgress: 2, running: 1, queued: 1, done: 1 },
+  counts: { open: 3, backlog: 0, todo: 1, inProgress: 2, running: 1, queued: 1, review: 0, done: 1 },
 }
 
 describe('TasksModal', () => {
@@ -114,17 +114,19 @@ describe('TasksModal', () => {
     expect(screen.queryByText('Wire the kanban')).toBeNull()
   })
 
-  it('lists move destinations directly in the card menu (no nested fly-out)', async () => {
+  it('lists move destinations directly in the card menu with column stripes', async () => {
     render(<TasksModal isOpen onClose={() => {}} projectId="proj-1" />)
     fireEvent.click(screen.getByRole('button', { name: /actions for investigate/i }))
-    await screen.findByText('Move to…')
-    // Destinations render inline in the menu — the column headers contribute the second match.
-    expect(screen.getAllByText('To Do').length).toBeGreaterThanOrEqual(2)
+    await screen.findByText('History & evidence')
+    // Every other column shows as a direct move entry (column header + menu item);
+    // the card itself sits in To Do, so "To Do" only appears as the header.
+    expect(screen.getAllByText('Backlog').length).toBeGreaterThanOrEqual(2)
     expect(screen.getAllByText('In Progress').length).toBeGreaterThanOrEqual(2)
     expect(screen.getAllByText('Done').length).toBeGreaterThanOrEqual(2)
+    expect(document.querySelectorAll('.w-1.bg-zinc-500, .w-1.bg-purple-500').length).toBeGreaterThanOrEqual(2)
     // Close the menu so no portal'd menu outlives the test.
     fireEvent.keyDown(window, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByText('Move to…')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('History & evidence')).toBeNull())
   })
 
   it('runs Delete from the card menu with confirmation', async () => {
@@ -150,10 +152,10 @@ describe('TasksModal', () => {
   it('does not open the editor when clicking the card menu', async () => {
     render(<TasksModal isOpen onClose={() => {}} projectId="proj-1" />)
     fireEvent.click(screen.getByRole('button', { name: /actions for investigate/i }))
-    await screen.findByText('Move to…')
+    await screen.findByText('History & evidence')
     expect(screen.queryByText('Edit task')).toBeNull()
     fireEvent.keyDown(window, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByText('Move to…')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('History & evidence')).toBeNull())
   })
 
   it('shows an Open session link on Done cards that keep session history', async () => {
@@ -171,14 +173,14 @@ describe('TasksModal', () => {
       json: async () => ({
         tasks: customTasks,
         settings: { slotLimit: 1, queuePaused: false },
-        counts: { open: 1, todo: 1, inProgress: 0, running: 0, queued: 0, done: 1 },
+        counts: { open: 1, backlog: 0, todo: 1, inProgress: 0, running: 0, queued: 0, review: 0, done: 1 },
       }),
     } as unknown as Response)
     boardResource.write(
       {
         tasks: customTasks,
         settings: { slotLimit: 1, queuePaused: false },
-        counts: { open: 1, todo: 1, inProgress: 0, running: 0, queued: 0, done: 1 },
+        counts: { open: 1, backlog: 0, todo: 1, inProgress: 0, running: 0, queued: 0, review: 0, done: 1 },
         gates: [],
       },
       'proj-1',

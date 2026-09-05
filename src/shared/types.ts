@@ -444,7 +444,9 @@ export type ToolName =
 // Project Tasks
 // ============================================================================
 
-export type TaskStatus = 'todo' | 'in_progress' | 'done'
+export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done'
+/** Column order on the board, left to right. */
+export const TASK_COLUMN_ORDER: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'review', 'done']
 /** Active state of an in-progress task: launched (occupies a slot) or queued (waiting for a slot). */
 export type TaskRunState = 'running' | 'queued'
 export type TaskActor = 'human' | 'agent' | 'system'
@@ -455,9 +457,9 @@ export interface TaskGateConfig {
   name: string
   /** Description of acceptable proof, e.g. "all green — every criterion passes with evidence". */
   description: string
-  /** Whether the gate blocks Done until satisfied. */
+  /** Whether the gate blocks Review until satisfied. */
   required: boolean
-  /** 'done' = definition of done (blocks entering Done). 'ready' = definition of ready (off by default). */
+  /** 'done' = definition of done (blocks entering Review). 'ready' = definition of ready (off by default). */
   variant: 'done' | 'ready'
 }
 
@@ -513,12 +515,14 @@ export interface ProjectTaskSettings {
 
 export interface ProjectTaskCounts {
   open: number
+  backlog: number
   todo: number
   inProgress: number
   /** Actively running (occupying a slot). */
   running: number
   /** Waiting for a slot to free. */
   queued: number
+  review: number
   done: number
 }
 

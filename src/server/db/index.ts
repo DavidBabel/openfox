@@ -380,7 +380,7 @@ function runMigrations(db: Database.Database): void {
       project_id TEXT NOT NULL,
       prompt TEXT NOT NULL DEFAULT '',
       attachments TEXT NOT NULL DEFAULT '[]',
-      status TEXT NOT NULL DEFAULT 'todo',
+      status TEXT NOT NULL DEFAULT 'backlog',
       run_state TEXT,
       position INTEGER NOT NULL DEFAULT 0,
       version INTEGER NOT NULL DEFAULT 0,

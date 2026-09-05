@@ -5,7 +5,7 @@ import { useSessionStore, usePendingQuestions, type PendingQuestion } from '../.
 import { shouldAutofocus } from '../../lib/device'
 import { useSessionScope } from '../../stores/session/session-scope'
 import { Markdown } from './Markdown'
-import { CountdownText } from './CountdownText'
+import { RECOMMENDED_CLASS, RecommendedCountdown } from './RecommendedCountdown'
 import { useT } from '../../hooks/useT'
 
 interface AskUserCardProps {
@@ -99,6 +99,7 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
   )
 
   const btnBase = 'px-3 py-1.5 text-xs font-medium rounded transition-colors'
+  const hasAutoAnswer = pendingQuestion?.autoAnswerDeadline !== undefined
 
   return (
     <div ref={containerRef} className="my-1">
@@ -110,22 +111,43 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
         <div className="mt-2 border border-border rounded overflow-hidden">
           <div className="p-3 bg-primary space-y-2">
             {type === 'confirm' ? (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleOptionSelect('yes')}
-                  className={`${btnBase} flex-1 bg-accent-success/20 hover:bg-accent-success/30 text-accent-success border border-accent-success/30`}
-                >
-                  {t({ en: 'Yes', fr: 'Oui' })}
-                </button>
-                <button
-                  onClick={() => handleOptionSelect('no')}
-                  className={`${btnBase} flex-1 bg-accent-error/20 hover:bg-accent-error/30 text-accent-error border border-accent-error/30`}
-                >
-                  {t({ en: 'No', fr: 'Non' })}
-                </button>
+              <div className="flex flex-col gap-2 @md:flex-row">
+                {[
+                  {
+                    key: 'yes',
+                    answer: 'yes',
+                    label: t({ en: 'Yes', fr: 'Oui' }),
+                    variant:
+                      'bg-accent-success/20 hover:bg-accent-success/30 text-accent-success border-accent-success/30',
+                  },
+                  {
+                    key: 'no',
+                    answer: 'no',
+                    label: t({ en: 'No', fr: 'Non' }),
+                    variant: 'bg-accent-error/20 hover:bg-accent-error/30 text-accent-error border-accent-error/30',
+                  },
+                ].map((opt, index) => {
+                  const isRecommended = hasAutoAnswer && index === 0
+                  return (
+                    <div key={opt.key} className="relative flex-1">
+                      <button
+                        onClick={() => handleOptionSelect(opt.answer)}
+                        className={`${btnBase} w-full border ${isRecommended ? RECOMMENDED_CLASS : ''} ${opt.variant}`}
+                      >
+                        {opt.label}
+                      </button>
+                      {isRecommended && pendingQuestion?.autoAnswerDeadline !== undefined && sessionId && (
+                        <RecommendedCountdown
+                          deadline={pendingQuestion.autoAnswerDeadline}
+                          onCancel={cancelCountdown}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
                 <button
                   onClick={handleSkip}
-                  className={`${btnBase} bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-secondary border border-border`}
+                  className={`${btnBase} flex-1 bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-secondary border border-border`}
                 >
                   {t({ en: 'Skip', fr: 'Passer' })}
                 </button>
@@ -133,18 +155,31 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
             ) : type === 'choice' && choiceOptions !== undefined && choiceOptions.length > 0 ? (
               <>
                 <div className="flex flex-col gap-1.5">
-                  {choiceOptions.map((opt, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleOptionSelect(opt.value)}
-                      className={`${btnBase} text-left w-full bg-bg-tertiary hover:bg-accent-primary/20 text-text-primary border border-border hover:border-accent-primary/50`}
-                    >
-                      <span className="block font-medium">{opt.label}</span>
-                      {opt.description !== undefined && (
-                        <span className="block text-xs text-text-muted mt-0.5">{opt.description}</span>
-                      )}
-                    </button>
-                  ))}
+                  {choiceOptions.map((opt, index) => {
+                    const isRecommended = hasAutoAnswer && index === 0
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => handleOptionSelect(opt.value)}
+                        className={`${btnBase} relative text-left w-full bg-bg-tertiary hover:bg-accent-primary/20 text-text-primary border ${
+                          isRecommended
+                            ? `${RECOMMENDED_CLASS} hover:border-accent-primary`
+                            : 'border-border hover:border-accent-primary/50'
+                        }`}
+                      >
+                        {opt.label !== undefined && <span className="block font-medium @md:pr-14">{opt.label}</span>}
+                        {isRecommended && pendingQuestion?.autoAnswerDeadline !== undefined && sessionId && (
+                          <RecommendedCountdown
+                            deadline={pendingQuestion.autoAnswerDeadline}
+                            onCancel={cancelCountdown}
+                          />
+                        )}
+                        {opt.description !== undefined && (
+                          <span className="block text-xs text-text-muted mt-0.5">{opt.description}</span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
                 <div className="flex gap-2">
                   <textarea
@@ -204,18 +239,6 @@ export function AskUserCard({ toolCall }: AskUserCardProps) {
                   </button>
                 </div>
               </>
-            )}
-            {pendingQuestion?.autoAnswerDeadline !== undefined && sessionId && (
-              <div className="flex justify-end">
-                <CountdownText
-                  testId="autoanswer-countdown"
-                  deadline={pendingQuestion.autoAnswerDeadline}
-                  onCancel={cancelCountdown}
-                  format={(seconds) =>
-                    t({ en: '⌛ auto-answer {{seconds}}s', fr: '⌛ choix auto {{seconds}}s' }, { seconds })
-                  }
-                />
-              </div>
             )}
           </div>
         </div>

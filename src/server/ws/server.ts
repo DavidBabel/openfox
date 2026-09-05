@@ -707,7 +707,12 @@ export function createWebSocketServer(
   // same shape the frontend gates its workflow buttons on.
   const isStartBuildingState = (sessionId: string): boolean => {
     const session = sessionManager.getSession(sessionId)
-    if (!session || session.isRunning || session.phase === 'done') return false
+    if (!session || session.isRunning) return false
+    // A settled `plan` run leaves the phase done — that's exactly the chained
+    // start-building point; any other done session is not a choice point.
+    const latest = sessionManager.getLatestWorkflowExecution(sessionId)
+    const planSettled = latest?.workflowId === 'plan' && latest.status === 'completed'
+    if (session.phase === 'done' && !planSettled) return false
     const eventStore = getEventStore()
     const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(sessionId)
     const events = combineEventsWithSnapshot(sessionId, snapshot, eventsSinceSnapshot)
@@ -735,9 +740,11 @@ export function createWebSocketServer(
             if (!isStartBuildingState(sessionId)) return
             const session = sessionManager.getSession(sessionId)
             if (!session) return
-            // Auto-launch only the first time a session reaches the choice
-            // point — after a run has happened, the user decides manually.
-            if (sessionManager.getLatestWorkflowExecution(sessionId)) return
+            // Auto-launch while no build has run yet in this session: a settled
+            // plan run is exactly the choice point to chain into; any other
+            // execution means the user already decided manually.
+            const latest = sessionManager.getLatestWorkflowExecution(sessionId)
+            if (latest && latest.workflowId !== 'plan') return
             const configDir = getGlobalConfigDir(_config.mode ?? 'production')
             const favorite = await resolveFavoriteWorkflow(configDir, session.projectId, session.workdir)
             if (!favorite) return

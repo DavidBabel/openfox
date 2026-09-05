@@ -317,6 +317,44 @@ describe('AskUserCard', () => {
     expect(container.textContent).not.toContain('[object Object]')
   })
 
+  it('renders the countdown inside the recommended option only, ringed with the accent', () => {
+    useSessionStore.setState({
+      pendingQuestions: [
+        {
+          callId: 'call-rec',
+          question: 'Pick:',
+          type: 'choice',
+          options: [
+            { value: 'A', label: 'Recommended way' },
+            { value: 'B', label: 'Other way' },
+          ] as ChoiceOption[],
+          autoAnswerDeadline: Date.now() + 5000,
+        },
+      ],
+    })
+    const tc = makeToolCall({
+      id: 'call-rec',
+      arguments: {
+        question: 'Pick:',
+        type: 'choice',
+        options: [
+          { value: 'A', label: 'Recommended way' },
+          { value: 'B', label: 'Other way' },
+        ],
+      },
+    })
+    const container = render(<AskUserCard toolCall={tc} />)
+    const countdown = container.querySelector('[data-testid="autoanswer-countdown"]')!
+    const recommended = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Recommended way'),
+    )!
+    const other = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Other way'))!
+    expect(recommended).toBeTruthy()
+    expect(recommended.className).toContain('shadow-[0_0')
+    expect(recommended.contains(countdown)).toBe(true)
+    expect(other.className).not.toMatch(/(^|\s)border-accent-primary(\s|$)/)
+    expect(other.contains(countdown)).toBe(false)
+  })
   it('submits answer on Enter', () => {
     const answerQuestion = vi.fn()
     useSessionStore.setState({

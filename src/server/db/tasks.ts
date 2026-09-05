@@ -101,12 +101,12 @@ export function createTask(projectId: string, input: CreateTaskInput): ProjectTa
   const id = randomBytes(8).toString('hex')
 
   const position = db
-    .prepare(`SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM tasks WHERE project_id = ? AND status = 'todo'`)
+    .prepare(`SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM tasks WHERE project_id = ? AND status = 'backlog'`)
     .get(projectId) as { pos: number }
 
   db.prepare(
     `INSERT INTO tasks (id, project_id, prompt, attachments, status, run_state, position, version, agent_id, provider_id, model, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'todo', NULL, ?, 1, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, 'backlog', NULL, ?, 1, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     projectId,

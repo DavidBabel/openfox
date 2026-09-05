@@ -432,10 +432,12 @@ export function readConfig(): ConfigData | undefined {
 
 export const EMPTY_TASK_COUNTS: ProjectTaskCounts = {
   open: 0,
+  backlog: 0,
   todo: 0,
   inProgress: 0,
   running: 0,
   queued: 0,
+  review: 0,
   done: 0,
 }
 
