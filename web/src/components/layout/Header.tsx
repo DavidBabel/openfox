@@ -182,10 +182,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
           </button>
         ) : null}
 
-        <Link
-          href="/"
-          className="text-accent-primary font-semibold text-sm hover:underline flex-shrink-0 hidden md:inline"
-        >
+        <Link href="/" className="text-red-500 font-semibold text-sm hover:underline flex-shrink-0 hidden md:inline">
           OpenFox
         </Link>
 
